@@ -1,0 +1,3 @@
+## 2023-11-20 - Forms & Modals Accessibility Improvements
+**Learning:** Found multiple modals and input forms missing ARIA labels, `role="dialog"`, `aria-modal="true"` and appropriate `<label htmlFor={id}>` connections. While adding accessible `<label>` links programmatically can be cumbersome across components, React’s `useId()` Hook is highly efficient at guaranteeing globally unique ID namespaces for `id` / `htmlFor` properties without ID clashes on multi-instantiated components like ShareButton.
+**Action:** When adding accessible forms to any UI Component, preferentially use React 18 `useId()` to generate a consistent component-level prefix instead of generic static IDs or manual random strings.
