@@ -13,7 +13,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
+
 import { buildAtomRuleGraph } from '../../services/visualization/arGraphBuilder';
+
 import type { ReactionRule } from '../../types';
 
 const mkRule = (

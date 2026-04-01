@@ -6,9 +6,10 @@
  * where ∂rate_r/∂y_j = (stoich_j / y_j) × rate_r if j is a reactant of r
  */
 
-import type { Rxn } from '../graph/core/Rxn';
-import { ExpressionTranslator } from '../graph/core/ExpressionTranslator';
 import { getExpressionDependencies } from '../../parser/ExpressionDependencies';
+import { ExpressionTranslator } from '../graph/core/ExpressionTranslator';
+
+import type { Rxn } from '../graph/core/Rxn';
 
 /**
  * CSR format sparse matrix info

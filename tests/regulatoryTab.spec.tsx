@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import React from 'react';
 import { render } from '@testing-library/react';
+import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 
 // we need to spy on the builder used by RegulatoryTab to ensure it passes the
@@ -13,6 +13,7 @@ const mockBuilder = vi.hoisted(() => ({
 vi.mock('../services/visualization/arGraphBuilder', () => mockBuilder);
 
 import { RegulatoryTab } from '../components/tabs/RegulatoryTab';
+
 import type { BNGLModel } from '../types';
 
 const dummyModel: BNGLModel = {

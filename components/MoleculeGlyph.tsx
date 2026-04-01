@@ -1,6 +1,8 @@
 import React from 'react';
-import type { VisualizationMolecule } from '../types/visualization';
+
 import { foregroundForBackground } from '../services/visualization/colorUtils';
+
+import type { VisualizationMolecule } from '../types/visualization';
 
 interface MoleculeGlyphProps {
   molecule: VisualizationMolecule;

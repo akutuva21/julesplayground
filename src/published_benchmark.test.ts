@@ -5,12 +5,14 @@
  * Compares network generation time and success status
  * DIAGNOSTICS: Flags models taking >2min or >3x slower than BNG2.pl
  */
-import { describe, it, expect, beforeAll } from 'vitest';
+import { execSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync, spawnSync } from 'child_process';
+
+import { describe, it, expect, beforeAll } from 'vitest';
 
 import { parseBNGLStrict, NetworkGenerator, NautyService, BNGLParser, BNGXMLWriter } from '@bngplayground/engine';
+
 import { resolveBNG2Paths, hasBNG2 as checkHasBNG2 } from '../tools/bng2-paths';
 
 const bngPaths = resolveBNG2Paths();

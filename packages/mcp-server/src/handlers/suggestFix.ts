@@ -1,8 +1,8 @@
-import { ToolArgs, ToolResult } from '../types/index.js';
 import { suggestFixArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs } from '../services/engine.js';
-import { suggestModelFixes } from '../services/intelligence.js';
 import { structureError } from '../services/errors.js';
+import { suggestModelFixes } from '../services/intelligence.js';
+import { ToolArgs, ToolResult } from '../types/index.js';
 
 export async function handleSuggestFix(args: ToolArgs): Promise<ToolResult<any>> {
     try {

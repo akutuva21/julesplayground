@@ -1,9 +1,10 @@
 import { describe, it, expect, afterEach } from 'vitest';
 
-import type { BNGLModel } from '../types';
 import { runNFsimSimulation } from '@bngplayground/engine';
 import { NFsimValidator, ValidationErrorType } from '@bngplayground/engine';
 import { NFsimResultAdapter } from '@bngplayground/engine';
+
+import type { BNGLModel } from '../types';
 
 const minimalModel = (overrides: Partial<BNGLModel> = {}): BNGLModel => ({
   name: 'minimal',

@@ -1,6 +1,8 @@
 import React from 'react';
-import type { ExpansionEvent } from '@bngplayground/engine';
+
 import { Card } from '../ui/Card';
+
+import type { ExpansionEvent } from '@bngplayground/engine';
 
 interface MatchVisualizerGlyphProps {
   event: ExpansionEvent;

@@ -1,17 +1,19 @@
 // graph/NetworkGenerator.ts
-import { SpeciesGraph } from './core/SpeciesGraph';
-import { Species } from './core/Species';
-import { RxnRule } from './core/RxnRule';
-import { Rxn } from './core/Rxn';
-import { GraphCanonicalizer } from './core/Canonical';
-import { GraphMatcher, clearMatchCache } from './core/Matcher';
-import type { MatchMap } from './core/Matcher';
-import { countEmbeddingDegeneracy } from './core/degeneracy';
-import { Component } from './core/Component';
-import { EnergyService } from './core/EnergyService';
-import type { BNGLEnergyPattern } from '../../types';
-import { Molecule } from './core/Molecule';
 import { BNGLParser } from './core/BNGLParser';
+import { GraphCanonicalizer } from './core/Canonical';
+import { Component } from './core/Component';
+import { countEmbeddingDegeneracy } from './core/degeneracy';
+import { EnergyService } from './core/EnergyService';
+import { GraphMatcher, clearMatchCache } from './core/Matcher';
+import { Molecule } from './core/Molecule';
+import { Rxn } from './core/Rxn';
+import { RxnRule } from './core/RxnRule';
+import { Species } from './core/Species';
+import { SpeciesGraph } from './core/SpeciesGraph';
+
+import type { MatchMap } from './core/Matcher';
+import type { BNGLEnergyPattern } from '../../types';
+
 
 export class NetworkGenerationLimitError extends Error {
   constructor(

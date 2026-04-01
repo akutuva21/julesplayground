@@ -1,8 +1,9 @@
 
 import fs from 'fs';
 import path from 'path';
-import { parseBNGL } from '../../services/parseBNGL';
+
 import { NetworkGenerator } from '../../packages/engine/src/services/graph/NetworkGenerator';
+import { parseBNGL } from '../../services/parseBNGL';
 import { findRuleHubModelPath } from '../../tools/rulehubLocal';
 
 const PROJECT_ROOT = process.cwd();

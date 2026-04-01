@@ -1,8 +1,10 @@
 import { profileLikelihood, simulate, loadEvaluator } from '@bngplayground/engine';
-import type { ToolArgs, ToolResult } from '../types/index.js';
+
 import { identifiabilityArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, applyNetworkOptions, parseModelOrThrow, expandModel, buildSimulationOptions, cloneExpandedModel, updateMassActionRates } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+
+import type { ToolArgs, ToolResult } from '../types/index.js';
 
 export async function handleIdentifiability(args: ToolArgs): Promise<ToolResult<any>> {
     try {

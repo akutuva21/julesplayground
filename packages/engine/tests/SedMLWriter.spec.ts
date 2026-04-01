@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+
 import { generateSedML } from '../src/services/export/SedMLWriter';
+
 import type { BNGLModel } from '../src/types';
 
 const mockModel: BNGLModel = {

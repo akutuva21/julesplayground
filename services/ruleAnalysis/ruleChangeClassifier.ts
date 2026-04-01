@@ -1,10 +1,9 @@
-import type { ReactionRule } from '../../types';
 import {
   extractBonds,
   parseSpeciesGraphs,
   detectStateChanges as detectStateChangesUtil,
 } from '../visualization/speciesGraphUtils';
-import type { BondInfo } from '../visualization/speciesGraphUtils';
+
 import {
   RuleChangeSummary,
   RuleKind,
@@ -14,6 +13,10 @@ import {
   ComplexChangeType,
   SynthDegChange,
 } from './ruleChangeTypes';
+
+import type { ReactionRule } from '../../types';
+import type { BondInfo } from '../visualization/speciesGraphUtils';
+
 
 interface ClassifierOptions {
   ruleId?: string;

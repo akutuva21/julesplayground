@@ -1,13 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import { BNGLModel, SimulationOptions } from '../../types';
-import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
-import { LoadingSpinner } from '../ui/LoadingSpinner';
-import { EmptyState } from '../ui/EmptyState';
-import { StatusMessage } from '../ui/StatusMessage';
-import { sobolSensitivity, SobolResult } from '@bngplayground/engine';
-import { bnglService } from '../../services/bnglService';
-import { formatValue } from '../../src/utils/formatValue';
 import {
   BarChart,
   Bar,
@@ -20,6 +11,18 @@ import {
   Cell,
   ErrorBar
 } from 'recharts';
+
+import { sobolSensitivity, SobolResult } from '@bngplayground/engine';
+
+import { bnglService } from '../../services/bnglService';
+import { formatValue } from '../../src/utils/formatValue';
+import { BNGLModel, SimulationOptions } from '../../types';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { EmptyState } from '../ui/EmptyState';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
+import { StatusMessage } from '../ui/StatusMessage';
+
 
 interface SobolSensitivityTabProps {
   model: BNGLModel | null;

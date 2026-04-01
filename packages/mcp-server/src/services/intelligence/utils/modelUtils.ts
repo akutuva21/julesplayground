@@ -1,4 +1,5 @@
 import { insertIntoBlock } from './codeUtils.js';
+
 import type { ComposeSeedSpecies } from '../types.js';
 
 export function gatherMoleculeTypesFromRules(rules: Array<{ rule: string }>): string[] {

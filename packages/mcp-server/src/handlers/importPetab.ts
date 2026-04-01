@@ -1,8 +1,10 @@
 import { parsePEtab, fitParameters, simulate, loadEvaluator } from '@bngplayground/engine';
-import type { ToolArgs, ToolResult } from '../types/index.js';
+
 import { importPetabArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, parseModelOrThrow, expandModel, cloneExpandedModel, updateMassActionRates } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+
+import type { ToolArgs, ToolResult } from '../types/index.js';
 
 export async function handleImportPetab(args: ToolArgs): Promise<ToolResult<any>> {
     try {

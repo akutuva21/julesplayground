@@ -17,11 +17,12 @@
  *   - BNG_CONCURRENCY: number of concurrent BNG2 workers (default: 4)
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import { spawn } from 'child_process';
 import { once } from 'events';
+import * as fs from 'fs';
+import * as path from 'path';
 import { fileURLToPath } from 'url';
+
 import { collectBnglFilesRecursive, listAllRuleHubModelFiles } from '../../tools/rulehubLocal';
 
 const THIS_DIR = path.dirname(fileURLToPath(import.meta.url));

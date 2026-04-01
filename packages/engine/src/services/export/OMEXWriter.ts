@@ -5,9 +5,11 @@
  * conforming to the COMBINE archive specification.
  */
 
-import type { BNGLModel } from '../../types';
-import { generateSedML, SedMLExportOptions } from './SedMLWriter';
 import { createZip, ZipEntry } from '../../utils/miniZip';
+
+import { generateSedML, SedMLExportOptions } from './SedMLWriter';
+
+import type { BNGLModel } from '../../types';
 
 // ── Types ────────────────────────────────────────────────────────────
 

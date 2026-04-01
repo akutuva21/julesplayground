@@ -6,6 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+
 import { getRuleHubManifestBnglPaths } from '../rulehubLocal';
 
 const __filename = fileURLToPath(import.meta.url);

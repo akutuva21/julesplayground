@@ -1,10 +1,12 @@
 import React from 'react';
-import { Tooltip } from './ui/Tooltip';
+
 import {
   RuleChangeSummary,
   RuleKind,
   ComplexChangeType,
 } from '../services/ruleAnalysis/ruleChangeTypes';
+
+import { Tooltip } from './ui/Tooltip';
 
 const badgeBase = 'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold';
 const sizeClasses = {

@@ -1,9 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { generateExpandedNetwork, simulate } from '@bngplayground/engine';
+
 import { parseBNGL } from '../services/parseBNGL';
+
 import { findRuleHubModelPath } from './helpers/rulehub';
 
 const hasCvode = existsSync(join(process.cwd(), 'public', 'cvode.wasm'));

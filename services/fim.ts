@@ -1,7 +1,9 @@
-import type { BNGLModel, SimulationOptions } from '../types';
-import { bnglService } from './bnglService';
 import { EigenvalueDecomposition, Matrix } from 'ml-matrix';
+
+import { bnglService } from './bnglService';
 import { jacobiEigenDecomposition, normInv, chi2Quantile } from './math/fimUtils';
+
+import type { BNGLModel, SimulationOptions } from '../types';
 
 type FIMResult = {
   eigenvalues: number[];

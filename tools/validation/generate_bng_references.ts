@@ -3,11 +3,12 @@
  * Usage: npx tsx scripts/generate_bng_references.ts
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import { spawn } from 'child_process';
-import { fileURLToPath } from 'url';
+import * as fs from 'fs';
 import * as os from 'os';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+
 import { resolveBNG2Paths } from '../bng2-paths';
 
 const __filename = fileURLToPath(import.meta.url);

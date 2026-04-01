@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { resolveSimulationControlDefaults, sanitizeSimulationControlOptions } from '../../components/SimulationControls';
 
 describe('SimulationControls helpers', () => {

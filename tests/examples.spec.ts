@@ -1,10 +1,12 @@
 // @ts-nocheck
 import { describe, it, expect } from 'vitest';
-import { EXAMPLES } from '../src/constants';
-import { parseBNGL } from '../services/parseBNGL';
+
 import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser';
-import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator';
 import { GraphCanonicalizer } from '../packages/engine/src/services/graph/core/Canonical';
+import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator';
+import { parseBNGL } from '../services/parseBNGL';
+import { EXAMPLES } from '../src/constants';
+
 import type { BNGLModel } from '../types';
 
 const MAX_SPECIES = 1500;

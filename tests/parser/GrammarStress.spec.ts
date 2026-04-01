@@ -1,5 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
+
 import { parseBNGLStrict } from '@bngplayground/engine';
 
 // Helper to generate variations

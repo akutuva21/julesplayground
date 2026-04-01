@@ -1,12 +1,17 @@
 
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Button } from './ui/Button';
-import { SettingsIcon } from './icons/SettingsIcon';
-import { ChevronDownIcon } from './icons/ChevronDownIcon';
-import { LoadingSpinner } from './ui/LoadingSpinner';
-import { SimulationOptions } from '../types';
+
 import { getSimulationOptionsFromParsedModel } from '@bngplayground/engine';
+
+import { SimulationOptions } from '../types';
+
+import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { SettingsIcon } from './icons/SettingsIcon';
+import { Button } from './ui/Button';
+import { LoadingSpinner } from './ui/LoadingSpinner';
+
+
 
 interface SimulationControlsProps {
   onRun: (options: SimulationOptions) => void;

@@ -1,9 +1,13 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
-import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser';
+import { readFileSync, writeFileSync } from 'fs';
+
+import { describe, it, expect } from 'vitest';
+
 import { BNGXMLWriter } from '@bngplayground/engine';
+
+import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser';
 import { resolveBNG2Paths } from '../tools/bng2-paths';
+
 import { findRuleHubModelPath } from './helpers/rulehub';
 
 const DEFAULT_BNG2_PATH = resolveBNG2Paths().bng2pl ?? '';

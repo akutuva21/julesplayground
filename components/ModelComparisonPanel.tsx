@@ -1,8 +1,10 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import type { BNGLModel } from '../types';
+
+import { bnglService } from '../services/bnglService';
 import { buildContactMap } from '../services/visualization/contactMapBuilder';
 import { buildAdjacencyMatrix, compareModels, ModelComparisonResult } from '../services/visualization/modelComparison';
-import { bnglService } from '../services/bnglService';
+
+import type { BNGLModel } from '../types';
 
 interface ModelComparisonPanelProps {
   currentModel: BNGLModel | null;

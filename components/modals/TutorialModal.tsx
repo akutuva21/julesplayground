@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { BNGLModel } from '../../types';
-import { Button } from '../ui/Button';
-import { Modal } from '../ui/Modal';
+
+import { TUTORIALS, type Tutorial, type TutorialProgressState } from '../../src/data/tutorials';
 import { CheckCircleIcon } from '../icons/CheckCircleIcon';
 import { ExclamationCircleIcon } from '../icons/ExclamationCircleIcon';
 import { InfoIcon } from '../icons/InfoIcon';
-import { TUTORIALS, type Tutorial, type TutorialProgressState } from '../../src/data/tutorials';
+import { Button } from '../ui/Button';
+import { Modal } from '../ui/Modal';
+
+import type { BNGLModel } from '../../types';
 
 interface TutorialModalProps {
   isOpen: boolean;

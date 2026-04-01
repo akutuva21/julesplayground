@@ -1,5 +1,7 @@
 import React from 'react';
+
 import { RuleChangeBadges, renderHumanSummary } from './RuleChangeBadges';
+
 import type { RuleChangeSummary } from '../services/ruleAnalysis/ruleChangeTypes';
 import type { CompactRule, RuleOperation, VisualizationComponent } from '../types/visualization';
 

@@ -5,11 +5,14 @@
  * Evaluates expressions with arbitrary precision using decimal.js.
  */
 
-import Decimal from 'decimal.js';
 import { CharStreams, CommonTokenStream } from 'antlr4ts';
+import { AbstractParseTreeVisitor } from 'antlr4ts/tree/AbstractParseTreeVisitor.js';
+import Decimal from 'decimal.js';
+
 import { BNGLexer } from './../../../parser/generated/BNGLexer.ts';
 import { BNGParser, ExpressionContext, Function_callContext, Conditional_exprContext, Or_exprContext, And_exprContext, Equality_exprContext, Relational_exprContext, Additive_exprContext, Multiplicative_exprContext, Power_exprContext, Unary_exprContext, Primary_exprContext } from './../../../parser/generated/BNGParser.ts';
-import { AbstractParseTreeVisitor } from 'antlr4ts/tree/AbstractParseTreeVisitor.js';
+
+
 import type { BNGParserVisitor } from './../../../parser/generated/BNGParserVisitor.ts';
 
 // Configure decimal.js

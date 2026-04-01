@@ -1,8 +1,9 @@
 import { NetworkGenerationLimitError } from '@bngplayground/engine';
-import { ToolArgs, ToolResult } from '../types/index.js';
+
 import { generateNetworkArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, applyNetworkOptions, parseModelOrThrow, expandModel } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+import { ToolArgs, ToolResult } from '../types/index.js';
 
 export async function handleGenerateNetwork(args: ToolArgs): Promise<ToolResult<any>> {
     const parsedArgs = parseArgs('generate_network', generateNetworkArgsSchema, args);

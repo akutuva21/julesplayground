@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
 import { writeFileSync } from 'fs';
 import { resolve } from 'path';
+
+import { describe, it, expect } from 'vitest';
 
 const OUTPUT_PATH = resolve(process.cwd(), 'test_compartment_transport_analytical.csv');
 

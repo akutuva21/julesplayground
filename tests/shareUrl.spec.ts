@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect } from 'vitest';
+
 import { encodeModelForUrl, getModelFromUrl, getSharedModelFromUrl } from '../src/utils/shareUrl';
 
 describe('shareUrl utils', () => {

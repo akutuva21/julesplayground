@@ -1,14 +1,18 @@
 import React from 'react';
-import type { BNGLModel } from '../../types';
-import type { DebuggerNetwork, ExpansionEvent, NetworkTrace } from '@bngplayground/engine';
+
 import { RuleBlocker } from '@bngplayground/engine';
-import { DebuggerContext } from './DebuggerContext';
-import { TimelineViewer } from './TimelineViewer';
-import { MatchVisualizerGlyph } from './MatchVisualizerGlyph';
-import { RuleBlockerBanner } from './RuleBlockerBanner';
+
 import { Card } from '../ui/Card';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { Tabs, TabList, Tab, TabPanels, TabPanel } from '../ui/Tabs';
+
+import { DebuggerContext } from './DebuggerContext';
+import { MatchVisualizerGlyph } from './MatchVisualizerGlyph';
+import { RuleBlockerBanner } from './RuleBlockerBanner';
+import { TimelineViewer } from './TimelineViewer';
+
+import type { BNGLModel } from '../../types';
+import type { DebuggerNetwork, ExpansionEvent, NetworkTrace } from '@bngplayground/engine';
 
 interface DebuggerPanelProps {
   trace: NetworkTrace | null;

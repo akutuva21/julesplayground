@@ -1,10 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { SimulationResults } from '../../types';
-import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
-import { Card } from '../ui/Card';
+
 import { CHART_COLORS } from '../../src/utils/chartColors';
+import { SimulationResults } from '../../types';
 import {
   ExternalLegend,
   InlineLegend,
@@ -12,6 +10,9 @@ import {
   formatTooltipNumber,
   formatYAxisTick,
 } from '../charts/InteractiveLegend';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { Input } from '../ui/Input';
 
 interface ExpressionEvaluatorTabProps {
   results: SimulationResults | null;

@@ -1,8 +1,10 @@
-import { ToolArgs, ToolResult } from '../types/index.js';
 import { z } from 'zod';
-import { createToolResult, parseArgs, parseModelOrThrow, expandModel, buildSimulationOptions, cloneExpandedModel, updateMassActionRates } from '../services/engine.js';
+
 import { simulate, loadEvaluator, computeFIM } from '@bngplayground/engine';
+
+import { createToolResult, parseArgs, parseModelOrThrow, expandModel, buildSimulationOptions, cloneExpandedModel, updateMassActionRates } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+import { ToolArgs, ToolResult } from '../types/index.js';
 
 const optimalExperimentArgsSchema = z.object({
     code: z.string().describe('BNGL model code'),

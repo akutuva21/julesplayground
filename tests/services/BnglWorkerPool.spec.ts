@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+
+import { mergeSimulationOptionsWithModelActionDefaults } from '../../services/bnglWorker';
 import {
     createSharedEnsembleResults,
     getSharedEnsembleFeatureVector,
     materializeSharedSimulationResult,
     writeSimulationResultsToShared,
 } from '../../services/BnglWorkerPool';
-import { mergeSimulationOptionsWithModelActionDefaults } from '../../services/bnglWorker';
 
 describe('BnglWorkerPool shared ensemble helpers', () => {
     it('writes and materializes shared ensemble runs without copying per-read', () => {

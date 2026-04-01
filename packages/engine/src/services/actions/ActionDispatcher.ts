@@ -12,12 +12,13 @@
  * Reference: BNG2/bng2/Perl2/BNGAction.pm, BNGModel.pm, BNGOutput.pm
  */
 
-import type { BNGLModel, BNGLAction } from '../../types';
+import { SBMLWriter } from '../export/SBMLWriter';
 import { writeBNGL } from '../graph/BNGLWriter';
+import { parseNetFile } from '../graph/NetParser';
 import { NetworkExporter } from '../graph/NetworkExporter';
 import { BNGXMLWriter } from '../simulation/BNGXMLWriter';
-import { SBMLWriter } from '../export/SBMLWriter';
-import { parseNetFile } from '../graph/NetParser';
+
+import type { BNGLModel, BNGLAction } from '../../types';
 
 export interface ActionContext {
   model: BNGLModel;

@@ -1,13 +1,14 @@
 
 import React, { useMemo, useState } from 'react';
-import { BNGLModel } from '../../types';
-import { useRobustness } from '../../src/hooks/useRobustness';
 import { ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
-import { SettingsIcon } from '../icons/SettingsIcon';
+
+import { useRobustness } from '../../src/hooks/useRobustness';
 import { CHART_COLORS } from '../../src/utils/chartColors';
+import { BNGLModel } from '../../types';
 import { ExternalLegend, formatTooltipNumber, formatYAxisTick } from '../charts/InteractiveLegend';
+import { SettingsIcon } from '../icons/SettingsIcon';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
 
 interface RobustnessTabProps {
     model: BNGLModel | null;

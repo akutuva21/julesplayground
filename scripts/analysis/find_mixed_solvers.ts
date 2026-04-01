@@ -1,6 +1,7 @@
 
 import fs from 'fs';
 import path from 'path';
+
 import { listAllRuleHubModelFiles } from '../../tools/rulehubLocal';
 
 const PROJECT_ROOT = process.cwd();

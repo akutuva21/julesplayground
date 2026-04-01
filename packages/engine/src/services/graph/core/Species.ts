@@ -1,6 +1,6 @@
 // graph/core/Species.ts
-import { SpeciesGraph } from './SpeciesGraph.ts';
 import { GraphCanonicalizer } from './Canonical.ts';
+import { SpeciesGraph } from './SpeciesGraph.ts';
 
 export class Species {
   graph: SpeciesGraph;

@@ -1,11 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { useTheme } from '../hooks/useTheme';
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import fcose from 'cytoscape-fcose';
-import type { RegulatoryGraph } from '../types/visualization';
+import React, { useEffect, useRef, useState } from 'react';
+
+import { useTheme } from '../hooks/useTheme';
+
+
 import { Button } from './ui/Button';
 import { LoadingSpinner } from './ui/LoadingSpinner';
+
+import type { RegulatoryGraph } from '../types/visualization';
 
 cytoscape.use(dagre);
 cytoscape.use(fcose);

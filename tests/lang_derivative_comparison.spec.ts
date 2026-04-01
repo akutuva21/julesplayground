@@ -5,9 +5,11 @@
  * If initial derivatives match, divergence is pure numerical integration.
  * If they differ, there's a remaining logic bug.
  */
-import { describe, it } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+
+import { describe, it } from 'vitest';
+
 import { findRuleHubModelPath } from './helpers/rulehub';
 
 // Mock browser environment - must be done before dynamic imports

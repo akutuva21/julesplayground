@@ -4,10 +4,10 @@
  * This wrapper provides compatibility polyfills for running the CVODE WASM module
  * in Node.js ES module context where `require()` is not available.
  */
-import { createRequire } from 'module';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import { readFileSync } from 'fs';
+import { createRequire } from 'module';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

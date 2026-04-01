@@ -11,10 +11,13 @@
  * - ~2-5x speedup for RHS evaluation
  */
 
-import type { Rxn } from '../graph/core/Rxn';
+import jsep from 'jsep';
+
 import { ExpressionTranslator } from '../graph/core/ExpressionTranslator';
 import { OpCode } from '../simulation/ExpressionCompiler';
-import jsep from 'jsep';
+
+import type { Rxn } from '../graph/core/Rxn';
+
 
 const OP_STOP = 0xFF;
 const OP_PUSH_CONST = OpCode.PUSH_CONST;

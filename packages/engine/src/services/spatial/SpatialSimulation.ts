@@ -12,7 +12,10 @@
  */
 
 import { parseBNGLWithANTLR } from '../../parser/BNGLParserWrapper';
-import type { BNGLModel, BNGLCompartment } from '../../types';
+
+import { DEFAULT_SPATIAL_CONFIG } from './SpatialConfig';
+import { autoGenerateGeometry } from './SpatialGeometry';
+
 import type {
   SpatialSimulationConfig,
   SpatialSimulationResult,
@@ -20,9 +23,8 @@ import type {
   SpatialMoleculeType,
   CompartmentGeometry,
 } from './SpatialConfig';
-import { DEFAULT_SPATIAL_CONFIG } from './SpatialConfig';
-import { autoGenerateGeometry } from './SpatialGeometry';
 import type { ParsedCompartment } from './SpatialGeometry';
+import type { BNGLModel, BNGLCompartment } from '../../types';
 
 interface SpatialReaction {
   reactants: string[];

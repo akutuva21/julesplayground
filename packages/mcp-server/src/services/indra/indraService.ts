@@ -1,5 +1,6 @@
-import type { INDRADBQueryParams, INDRAStatement } from './types.js';
 import { parseBNGLWithANTLR } from '@bngplayground/engine';
+
+import type { INDRADBQueryParams, INDRAStatement } from './types.js';
 
 const INDRA_API_BASE = (process.env.INDRA_API_BASE ?? 'http://api.indra.bio:8000').replace(/\/$/, '');
 const INDRA_DB_BASE = (process.env.INDRA_DB_BASE ?? 'https://db.indra.bio').replace(/\/$/, '');

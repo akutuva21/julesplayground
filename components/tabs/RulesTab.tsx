@@ -1,11 +1,13 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
+
+import { classifyRuleChanges } from '../../services/ruleAnalysis/ruleChangeClassifier';
+import { buildRegulatoryInsights } from '../../services/visualization/regulatoryInsights';
 import { BNGLModel, SimulationResults } from '../../types';
 import { ResultsChart } from '../ResultsChart';
-import { buildRegulatoryInsights } from '../../services/visualization/regulatoryInsights';
-import { classifyRuleChanges } from '../../services/ruleAnalysis/ruleChangeClassifier';
-import type { RuleChangeSummary } from '../../services/ruleAnalysis/ruleChangeTypes';
 import { RuleChangeBadges, renderHumanSummary } from '../RuleChangeBadges';
+
+import type { RuleChangeSummary } from '../../services/ruleAnalysis/ruleChangeTypes';
 
 interface RulesTabProps {
   model: BNGLModel | null;

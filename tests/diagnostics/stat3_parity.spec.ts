@@ -1,10 +1,13 @@
 import { readFileSync } from 'fs';
 import path from 'path';
-import { parseBNGL } from '../../services/parseBNGL';
+
 import { describe, it, expect } from 'vitest';
+
 import { BNGLParser } from '@bngplayground/engine';
 import { NetworkGenerator } from '@bngplayground/engine';
 import { countPatternMatches } from '@bngplayground/engine';
+
+import { parseBNGL } from '../../services/parseBNGL';
 import { findRuleHubModelPath } from '../helpers/rulehub';
 
 describe('stat3-mediated-transcription parity diagnostic', () => {

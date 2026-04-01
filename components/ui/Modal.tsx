@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+
 import { XIcon } from '../icons/XIcon';
 
 interface ModalProps {

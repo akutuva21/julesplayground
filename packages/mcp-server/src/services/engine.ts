@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import {
     BNGLModel,
     BNGLMoleculeType,
@@ -10,7 +12,7 @@ import {
     validateModelForNFsim,
     MassBalance,
 } from '@bngplayground/engine';
-import { z } from 'zod';
+
 import {
     ToolArgs,
     ToolResult,

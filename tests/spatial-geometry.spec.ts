@@ -10,10 +10,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
+
 import {
   autoGenerateGeometry,
   generateIcosphere,
 } from '../packages/engine/src/services/spatial/SpatialGeometry';
+
 import type { ParsedCompartment } from '../packages/engine/src/services/spatial/SpatialGeometry';
 
 describe('SpatialGeometry', () => {

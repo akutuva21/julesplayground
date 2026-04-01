@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
+
+import { CHART_COLORS } from '../../src/utils/chartColors';
 import { BNGLModel, SimulationResults } from '../../types';
 import { Card } from '../ui/Card';
 import { Select } from '../ui/Select';
-import { CHART_COLORS } from '../../src/utils/chartColors';
 
 interface FluxAnalysisTabProps {
   model: BNGLModel | null;

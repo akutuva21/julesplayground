@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { differentialEvolution } from '../src/services/optimization/differentialEvolution';
 
 describe('differentialEvolution', () => {

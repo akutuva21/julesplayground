@@ -1,5 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
+
 import { jacobiEigenDecomposition, normInv, chi2Quantile } from '../../services/math/fimUtils';
 
 describe('FIM Math Services', () => {

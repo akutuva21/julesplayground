@@ -9,7 +9,6 @@
  * - Molecular structure inference
  */
 
-import { Species, Molecule, Component, Databases, readFromString } from '../core/structures';
 import {
   SBMLModel,
   SBMLReaction,
@@ -23,6 +22,8 @@ import {
   BiologicalQualifier,
   SeedSpeciesEntry,
 } from '../config/types';
+import { Species, Molecule, Component, Databases, readFromString } from '../core/structures';
+import { getAnnotationsByQualifier, extractUniProtIds } from '../parser/sbmlParser';
 import {
   levenshtein,
   similarity,
@@ -36,7 +37,6 @@ import {
   CycleError,
   BindingException,
 } from '../utils/helpers';
-import { getAnnotationsByQualifier, extractUniProtIds } from '../parser/sbmlParser';
 
 const DEP_CYCLE_LOG_LIMIT = Number(
   (typeof process !== 'undefined' && process.env?.ATOMIZER_DEP_CYCLE_LOG_LIMIT) || '20'

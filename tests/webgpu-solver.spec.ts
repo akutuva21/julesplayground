@@ -11,16 +11,18 @@
  */
 
 import { describe, it, expect } from 'vitest';
+
+import {
+  isWebGPUSupported,
+  isWebGPUReady
+} from '../src/services/WebGPUContext';
 import {
   WebGPUODESolver,
   convertToGPUReactions,
   isWebGPUODESolverAvailable
 } from '../src/services/WebGPUODESolver';
+
 import type { GPUReaction } from '../src/services/WebGPUODESolver';
-import {
-  isWebGPUSupported,
-  isWebGPUReady
-} from '../src/services/WebGPUContext';
 
 describe('WebGPU ODE Solver', () => {
   describe('Availability Detection', () => {

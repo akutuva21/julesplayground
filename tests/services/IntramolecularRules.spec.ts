@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+
 import { BNGXMLWriter } from '@bngplayground/engine';
+
 import { parseBNGL } from '../../services/parseBNGL';
 
 describe('Intramolecular Rule Processing', () => {

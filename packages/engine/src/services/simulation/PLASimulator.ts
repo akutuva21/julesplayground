@@ -1,3 +1,4 @@
+import { SeededRandom } from '../../utils/random';
 import { countPatternMatches } from '../parity/PatternMatcher';
 /**
  * PLASimulator.ts - Partitioned Leaping Algorithm (PLA)
@@ -21,7 +22,6 @@ import { countPatternMatches } from '../parity/PatternMatcher';
  * classification enum values match the C++ RxnClassifier constants.
  */
 
-import { SeededRandom } from '../../utils/random';
 import type { BNGLReaction, SimulationOptions, SimulationResults, BNGLModel } from '../../types';
 
 // ────────────────────────────────────────────────────────────────────

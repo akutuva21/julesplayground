@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { Molecule, Species } from '../src/lib/atomizer/core/structures';
 import { writeFunctions, writeSeedSpecies } from '../src/lib/atomizer/writer/bnglWriter';
 

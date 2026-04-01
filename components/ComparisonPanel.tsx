@@ -4,13 +4,15 @@
  */
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { BNGLModel, SimulationResults } from '../types';
-import { Card } from './ui/Card';
-import { Button } from './ui/Button';
-import { LoadingSpinner } from './ui/LoadingSpinner';
+
 import { bnglService } from '../services/bnglService';
 import { CHART_COLORS } from '../src/utils/chartColors';
+import { BNGLModel, SimulationResults } from '../types';
+
 import { TimeSeriesChart, TimeSeriesSeries } from './charts/TimeSeriesChart';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
+import { LoadingSpinner } from './ui/LoadingSpinner';
 
 interface ComparisonPanelProps {
   model: BNGLModel | null;

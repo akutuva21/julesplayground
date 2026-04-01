@@ -12,6 +12,7 @@
  */
 
 import cytoscape from 'cytoscape';
+
 import type { RuleOverlay } from './ruleOverlay';
 
 /**

@@ -1,9 +1,10 @@
-import type { ReactionRule, BNGLMoleculeType } from '../../types';
-import type { ContactMap, ContactEdge } from '../../types/visualization';
 import {
   extractBonds,
   parseSpeciesGraphs,
 } from './speciesGraphUtils';
+
+import type { ReactionRule, BNGLMoleculeType } from '../../types';
+import type { ContactMap, ContactEdge } from '../../types/visualization';
 
 interface ContactMapOptions {
   getRuleId?: (rule: ReactionRule, index: number) => string;

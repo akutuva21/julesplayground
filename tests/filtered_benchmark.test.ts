@@ -3,13 +3,15 @@
  * Benchmark: Test web simulator network generation on all example models
  * These are AI-generated models that should all work
  */
-import { describe, it, expect, beforeAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { parseBNGL } from '../services/parseBNGL';
-import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator';
+import { describe, it, expect, beforeAll } from 'vitest';
+
 import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser';
+import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator';
+import { parseBNGL } from '../services/parseBNGL';
+
 import { collectBnglFiles, resolveRuleHubRoot } from './helpers/rulehub';
 
 interface BenchmarkResult {

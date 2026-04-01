@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { runSingleBatchItem } from '../src/utils/batchRunner';
+
 import type { BNGLModel, SimulationResults } from '../src/types';
 import type { BatchReporter, BatchSimulator } from '../src/utils/batchRunner';
-import { runSingleBatchItem } from '../src/utils/batchRunner';
 
 function createBaseModel(): BNGLModel {
     return {

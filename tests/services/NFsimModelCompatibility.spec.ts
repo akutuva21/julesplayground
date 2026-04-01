@@ -8,12 +8,15 @@
  * **Validates: Requirements 2.1, 2.2, 2.3**
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fc from 'fast-check';
-import { BNGLModel, ReactionRule, MoleculeType } from '../../types';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+
 import { runNFsimSimulation, validateModelForNFsim } from '@bngplayground/engine';
 import { getComplexModelHandler, resetComplexModelHandler } from '@bngplayground/engine';
 import { BNGXMLWriter } from '@bngplayground/engine';
+
+import { BNGLModel, ReactionRule, MoleculeType } from '../../types';
 
 // Mock NFsim WASM loader for testing (avoid actual WASM execution in tests)
 vi.mock('../../services/simulation/NFsimLoader', () => ({

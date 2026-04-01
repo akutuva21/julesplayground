@@ -8,10 +8,11 @@
  * 4. Compares the .gdat outputs
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+
+import { describe, it, expect, beforeAll } from 'vitest';
 
 const TEST_DIR = path.join(process.cwd(), 'temp_nfsim_parity');
 const SEED = 12345;

@@ -1,6 +1,8 @@
 import React from 'react';
-import { Modal } from './ui/Modal';
+
 import { MoleculeGlyph } from './MoleculeGlyph';
+import { Modal } from './ui/Modal';
+
 import type { VisualizationMolecule } from '../types/visualization';
 
 interface VisualizationConventionsModalProps {

@@ -1,17 +1,25 @@
-import { describe, it, expect } from 'vitest';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join, resolve, dirname, basename } from 'node:path';
-import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseBNGL } from '../services/parseBNGL';
+
+import { describe, it, expect } from 'vitest';
+
+
 import { createSolver } from '@bngplayground/engine';
+
 import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser';
-import { NetworkGenerator, GeneratorProgress } from '../packages/engine/src/services/graph/NetworkGenerator';
 import { GraphCanonicalizer } from '../packages/engine/src/services/graph/core/Canonical';
-import type { BNGLModel } from '../types';
+import { NetworkGenerator, GeneratorProgress } from '../packages/engine/src/services/graph/NetworkGenerator';
+import { parseBNGL } from '../services/parseBNGL';
 import { hasBNG2, resolveBNG2Paths } from '../tools/bng2-paths';
+
 import { collectBnglFiles, resolveRuleHubRoot } from './helpers/rulehub';
+
+import type { BNGLModel } from '../types';
+
+
 
 const paths = resolveBNG2Paths();
 

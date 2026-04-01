@@ -1,13 +1,17 @@
 
-import { describe, it, expect, beforeAll } from 'vitest';
-import fs from 'fs';
-import path from 'path';
 import { exec } from 'child_process';
-import util from 'util';
+import fs from 'fs';
 import { createRequire } from 'module';
+import path from 'path';
+import util from 'util';
+
+import { describe, it, expect, beforeAll } from 'vitest';
+
 import { findRuleHubModelPath } from './helpers/rulehub';
+
 const require = createRequire(import.meta.url);
 const createNFsimModule = require('../public/nfsim.js');
+
 import { hasBNG2, resolveBNG2Paths } from '../tools/bng2-paths';
 
 const paths = resolveBNG2Paths();

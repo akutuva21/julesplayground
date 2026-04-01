@@ -1,5 +1,6 @@
-import type { BNGLModel } from '../../types';
 import { BNGLParser } from '../graph/core/BNGLParser';
+
+import type { BNGLModel } from '../../types';
 import type { SpeciesGraph } from '../graph/core/SpeciesGraph';
 
 export interface BNGXMLValidationIssue {

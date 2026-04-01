@@ -1,5 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { cosineSimilarity, semanticSearch, isSemanticSearchReady, resetSemanticSearchState } from '../../services/semanticSearch';
 
 // Mock fetching the index

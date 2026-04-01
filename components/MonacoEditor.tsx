@@ -1,6 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 import React, { useRef, useEffect } from 'react';
+
 import { EditorMarker } from '../types';
 
 interface MonacoEditorProps {

@@ -5,17 +5,20 @@
  * Reads gdat_models.json and runs benchmark against BNG2.pl output
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+
+import { describe, it, expect, beforeAll } from 'vitest';
 
 // Use ANTLR parser wrapper
 import { parseBNGLWithANTLR, NetworkGenerator, BNGLParser, GraphCanonicalizer, NautyService } from '@bngplayground/engine';
 import { createSolver } from '@bngplayground/engine';
 import { findConservationLaws, createReducedSystem } from '@bngplayground/engine';
-import type { BNGLModel, SimulationResults, SimulationPhase, ConcentrationChange } from '../types';
+
 
 import modelsList from './gdat_models.json';
+
+import type { BNGLModel, SimulationResults, SimulationPhase, ConcentrationChange } from '../types';
 
 const GDAT_REFERENCE_DIR = path.resolve(__dirname, '..', 'gdat_comparison_output');
 const HAS_GDAT_REFERENCE_DATA = fs.existsSync(GDAT_REFERENCE_DIR);

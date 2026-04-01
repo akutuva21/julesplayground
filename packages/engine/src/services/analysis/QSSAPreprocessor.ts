@@ -5,8 +5,9 @@
  * treated as quasi-steady-state (QSS) to reduce model complexity.
  */
 
-import type { BNGLModel } from '../../types';
 import { BNGLParser } from '../graph/core/BNGLParser';
+
+import type { BNGLModel } from '../../types';
 
 function extractSpeciesName(pattern: string): string {
     const graph = BNGLParser.parseSpeciesGraph(pattern, false);

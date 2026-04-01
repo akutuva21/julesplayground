@@ -1,11 +1,13 @@
-import type { BNGLModel, SimulationOptions, SimulationResults } from '../../../types';
-import { generateExpandedNetwork } from '../NetworkExpansion';
-import { loadEvaluator } from '../ExpressionEvaluator';
-import { simulate } from '../SimulationLoop';
 import { BNGXMLWriter } from '../BNGXMLWriter';
+import { loadEvaluator } from '../ExpressionEvaluator';
+import { generateExpandedNetwork } from '../NetworkExpansion';
+import { simulate } from '../SimulationLoop';
+
 import { runNFsim } from './NFsimLoader';
 import { NFsimResultAdapter } from './NFsimResultAdapter';
 import { NFsimValidator, type ValidationResult } from './NFsimValidator';
+
+import type { BNGLModel, SimulationOptions, SimulationResults } from '../../../types';
 
 export interface NFsimSimulationOptions {
   t_end: number;

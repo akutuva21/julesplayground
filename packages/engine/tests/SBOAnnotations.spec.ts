@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { inferReactionSBO, inferRateLawSBO, SBO } from '../src/services/export/SBOAnnotations';
 
 describe('inferReactionSBO', () => {

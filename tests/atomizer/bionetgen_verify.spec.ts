@@ -1,8 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, copyFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
-import { spawnSync } from 'node:child_process';
+
+import { describe, it, expect } from 'vitest';
+
 import { resolveBNG2Paths, resolveBNGValidateDir } from '../../tools/bng2-paths';
 
 const bng2Paths = resolveBNG2Paths();

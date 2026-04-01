@@ -6,7 +6,14 @@
  * with optional structure inference (atomization).
  */
 
-import { Species, Molecule, Component, Databases } from './core/structures';
+import {
+  buildSpeciesCompositionTable,
+  getMoleculeTypes,
+  getSeedSpecies,
+  analyzeReactions,
+  analyzeNamingConventions,
+  reconcileSCT,
+} from './atomization/core';
 import {
   AtomizerOptions,
   DEFAULT_ATOMIZER_OPTIONS,
@@ -19,15 +26,13 @@ import {
   SeedSpeciesEntry,
   SpeciesCompositionTable,
 } from './config/types';
+import { Species, Molecule, Component, Databases } from './core/structures';
 import { SBMLParser } from './parser/sbmlParser';
 import {
-  buildSpeciesCompositionTable,
-  getMoleculeTypes,
-  getSeedSpecies,
-  analyzeReactions,
-  analyzeNamingConventions,
-  reconcileSCT,
-} from './atomization/core';
+  logger,
+  standardizeName,
+  LogLevel,
+} from './utils/helpers';
 import {
   generateBNGL,
   writeParameters,
@@ -37,11 +42,6 @@ import {
   writeObservables,
   writeReactionRulesFlat,
 } from './writer/bnglWriter';
-import {
-  logger,
-  standardizeName,
-  LogLevel,
-} from './utils/helpers';
 
 // =============================================================================
 // Main Atomizer Class

@@ -1,7 +1,9 @@
 import React, { useRef, useState } from 'react';
-import { Input } from './ui/Input';
-import { Button } from './ui/Button';
+
 import { getBioModelsApiBase } from '../services/bioModelsImport';
+
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
 
 interface BioModelsSearchProps {
   onImportById: (id: string) => void;

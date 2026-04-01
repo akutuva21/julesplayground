@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { UMAP } from 'umap-js';
 import {
     ScatterChart,
     Scatter,
@@ -10,7 +9,8 @@ import {
     ResponsiveContainer,
     CartesianGrid
 } from 'recharts';
-import { BNGLModel, SimulationResults, SimulationOptions } from '../../types';
+import { UMAP } from 'umap-js';
+
 import {
     bnglWorkerPool,
     getSharedEnsembleFeatureVector,
@@ -19,9 +19,10 @@ import {
     type SharedEnsembleResultsHandle,
 } from '../../services/BnglWorkerPool';
 import { CHART_COLORS } from '../../src/utils/chartColors';
-import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
+import { BNGLModel, SimulationResults, SimulationOptions } from '../../types';
 import { TimeSeriesChart, TimeSeriesSeries } from '../charts/TimeSeriesChart';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
 
 interface TrajectoryExplorerTabProps {
     model: BNGLModel | null;

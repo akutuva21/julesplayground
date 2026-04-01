@@ -1,5 +1,5 @@
-import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,9 +8,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { generateExpandedNetwork, simulate } from '@bngplayground/engine';
 
-import { parseBNGL } from '../services/parseBNGL.ts';
 import { getSimulationOptionsFromParsedModel } from '../packages/engine/src/utils/simulationOptions.ts';
+import { parseBNGL } from '../services/parseBNGL.ts';
 import { hasBNG2, resolveBNG2Paths } from '../tools/bng2-paths';
+
 import { findRuleHubModelPath } from './helpers/rulehub.ts';
 
 const thisDir = dirname(fileURLToPath(import.meta.url));

@@ -12,9 +12,10 @@
 // It is now dynamically imported in init() based on environment.
 
 
-import { ExpressionTranslator } from '../graph/core/ExpressionTranslator';
-import type { NetworkByteCode } from '../analysis/JITCompiler';
 import { SparseODESolver } from '../analysis/SparseODESolver';
+import { ExpressionTranslator } from '../graph/core/ExpressionTranslator';
+
+import type { NetworkByteCode } from '../analysis/JITCompiler';
 import type { Rxn } from '../graph/core/Rxn';
 
 

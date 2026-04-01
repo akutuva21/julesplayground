@@ -1,8 +1,10 @@
-import { ToolArgs, ToolResult } from '../types/index.js';
 import { z } from 'zod';
-import { createToolResult, parseArgs, parseModelOrThrow, expandModel, cloneExpandedModel, updateMassActionRates } from '../services/engine.js';
+
 import { simulate, loadEvaluator } from '@bngplayground/engine';
+
+import { createToolResult, parseArgs, parseModelOrThrow, expandModel, cloneExpandedModel, updateMassActionRates } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+import { ToolArgs, ToolResult } from '../types/index.js';
 
 const checkHysteresisArgsSchema = z.object({
     code: z.string().describe('BNGL model code'),

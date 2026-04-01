@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { formatValue } from '../../src/utils/formatValue';
 
 export type LegendEntry = {

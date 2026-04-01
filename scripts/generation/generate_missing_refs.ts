@@ -1,7 +1,8 @@
 
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+
 import { resolveBNG2Paths } from '../../tools/bng2-paths';
 import { findRuleHubModelPath, resolveRuleHubRoot } from '../../tools/rulehubLocal';
 

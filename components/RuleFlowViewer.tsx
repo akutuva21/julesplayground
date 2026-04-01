@@ -1,7 +1,9 @@
-import React, { useEffect, useRef } from 'react';
-import { useTheme } from '../hooks/useTheme';
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
+import React, { useEffect, useRef } from 'react';
+
+import { useTheme } from '../hooks/useTheme';
+
 import type { RuleFlowGraph } from '../types/visualization';
 
 cytoscape.use(dagre);

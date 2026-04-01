@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { InfoIcon } from './icons/InfoIcon';
+
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { InfoIcon } from './icons/InfoIcon';
 
 interface HelpSectionProps {
   title: string;

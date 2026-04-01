@@ -1,11 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Card } from '../ui/Card';
-import { Select } from '../ui/Select';
-import { Button } from '../ui/Button';
+
 // LoadingSpinner not required in the FIMTab header - analysis uses custom progress UI
-import { BNGLModel } from '../../types';
-import { bnglService } from '../../services/bnglService';
-import { computeFIM, exportFIM, type FIMResult } from '../../services/fim';
 import {
   ResponsiveContainer,
   LineChart,
@@ -16,10 +11,16 @@ import {
   Tooltip,
   ReferenceArea,
 } from 'recharts';
-import { FIMHeatmap } from '../../components/FIMHeatmap';
-import { formatValue } from '../../src/utils/formatValue';
 
+import { FIMHeatmap } from '../../components/FIMHeatmap';
+import { bnglService } from '../../services/bnglService';
+import { computeFIM, exportFIM, type FIMResult } from '../../services/fim';
+import { formatValue } from '../../src/utils/formatValue';
+import { BNGLModel } from '../../types';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
+import { Select } from '../ui/Select';
 
 interface FIMTabProps {
   model: BNGLModel | null;

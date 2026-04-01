@@ -1,19 +1,21 @@
 import React from 'react';
+
 import { useTheme } from '../hooks/useTheme';
-import { MoonIcon } from './icons/MoonIcon';
-import { SunIcon } from './icons/SunIcon';
-import { EmailIcon } from './icons/EmailIcon';
-import { Button } from './ui/Button';
-import { ShareButton } from './ShareButton';
-import { Dropdown, DropdownItem } from './ui/Dropdown';
-import { QuestionMarkCircleIcon } from './icons/QuestionMarkCircleIcon';
+
+import { BioModelsImportModal } from './BioModelsImportModal';
 import { BookOpenIcon } from './icons/BookOpenIcon';
+import { DownloadIcon } from './icons/DownloadIcon';
+import { EmailIcon } from './icons/EmailIcon';
 import { EyeIcon } from './icons/EyeIcon';
 import { InfoIcon } from './icons/InfoIcon';
-import { VSCodeAnalysisPayload, VSCodeExportModal } from './VSCodeExportModal';
-import { DownloadIcon } from './icons/DownloadIcon';
+import { MoonIcon } from './icons/MoonIcon';
+import { QuestionMarkCircleIcon } from './icons/QuestionMarkCircleIcon';
+import { SunIcon } from './icons/SunIcon';
 import { UploadIcon } from './icons/UploadIcon';
-import { BioModelsImportModal } from './BioModelsImportModal';
+import { ShareButton } from './ShareButton';
+import { Button } from './ui/Button';
+import { Dropdown, DropdownItem } from './ui/Dropdown';
+import { VSCodeAnalysisPayload, VSCodeExportModal } from './VSCodeExportModal';
 
 interface HeaderProps {
   onAboutClick: (focus?: string) => void;

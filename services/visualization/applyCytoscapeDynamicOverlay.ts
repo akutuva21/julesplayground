@@ -10,6 +10,7 @@
  */
 
 import cytoscape from 'cytoscape';
+
 import type { ContactMapSnapshot } from './dynamicContactMap';
 
 export function applyCytoscapeDynamicOverlay(

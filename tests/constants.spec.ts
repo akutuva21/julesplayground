@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { describe, it, expect } from 'vitest';
+
 import { CHART_COLORS, EXAMPLES, INITIAL_BNGL_CODE } from '../src/constants';
 
 const getBlockContent = (blockName: string, code: string): string => {

@@ -1,7 +1,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { computeFIM } from '../../services/fim';
+
 import { bnglService } from '../../services/bnglService';
+import { computeFIM } from '../../services/fim';
 
 // Mock dependencies
 vi.mock('../../services/bnglService', () => ({

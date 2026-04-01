@@ -3,8 +3,8 @@
  * Contains reaction definitions, naming conventions, and atomizer options
  */
 
-import { LogLevel } from '../utils/helpers';
 import { Species } from '../core/structures';
+import { LogLevel } from '../utils/helpers';
 
 // =============================================================================
 // BNGL Model Types (Internal copy for SBML Writer)

@@ -6,8 +6,9 @@
  * The ANTLR parser provides more accurate parsing and better error handling.
  */
 
-import type { BNGLModel } from '../../../types.ts';
 import { BNGLParser } from '../../../src/services/graph/core/BNGLParser.ts';
+
+import type { BNGLModel } from '../../../types.ts';
 
 const speciesPattern = /^[A-Za-z0-9_]+(?:\([^)]*\))?(?:\.[A-Za-z0-9_]+(?:\([^)]*\))?)*$/;
 

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { describe, it, expect } from 'vitest';
+
 import { SafeExpressionEvaluator } from '@bngplayground/engine';
 
 const compile = SafeExpressionEvaluator.compile;

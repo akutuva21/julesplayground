@@ -1,12 +1,14 @@
 import React, { useMemo } from 'react';
-import { BNGLModel } from '../../types';
-import { RuleCartoon } from '../RuleCartoon';
-import { CompactRuleVisualization } from '../CompactRuleVisualization';
-import { parseRuleForVisualization } from '../../services/visualization/ruleParser';
-import { buildCompactRule } from '../../services/visualization/compactRuleBuilder';
+
 import { classifyRuleChanges } from '../../services/ruleAnalysis/ruleChangeClassifier';
-import type { RuleChangeSummary } from '../../services/ruleAnalysis/ruleChangeTypes';
+import { buildCompactRule } from '../../services/visualization/compactRuleBuilder';
+import { parseRuleForVisualization } from '../../services/visualization/ruleParser';
+import { BNGLModel } from '../../types';
+import { CompactRuleVisualization } from '../CompactRuleVisualization';
+import { RuleCartoon } from '../RuleCartoon';
 import { Tabs, TabList, Tab, TabPanels, TabPanel } from '../ui/Tabs';
+
+import type { RuleChangeSummary } from '../../services/ruleAnalysis/ruleChangeTypes';
 
 interface CartoonTabProps {
   model: BNGLModel | null;

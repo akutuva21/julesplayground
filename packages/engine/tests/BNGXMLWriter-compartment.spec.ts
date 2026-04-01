@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+
 import { BNGXMLWriter, parseBNGLStrict as parseBNGL } from '../src/index';
+
 import type { BNGLModel } from '../src/types';
 
 describe('BNGXMLWriter - Compartment Transport', () => {

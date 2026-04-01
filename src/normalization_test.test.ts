@@ -1,9 +1,12 @@
 // @ts-nocheck
-import { describe, it, expect, beforeAll } from 'vitest';
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+
+import { describe, it, expect, beforeAll } from 'vitest';
+
 import { BNGLParser, NetworkGenerator, GraphCanonicalizer } from '@bngplayground/engine';
+
 import { parseBNGL } from '../services/parseBNGL';
 
 /**

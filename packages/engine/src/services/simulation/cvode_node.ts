@@ -1,5 +1,5 @@
-import { createRequire } from 'node:module';
 import { readFileSync, existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';

@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
 import JSZip from 'jszip';
+import { describe, it, expect, vi } from 'vitest';
+
 import { fetchBioModelsSbml, normalizeBioModelsId } from '../services/bioModelsImport';
 
 const MINIMAL_SBML = `<?xml version="1.0" encoding="UTF-8"?>

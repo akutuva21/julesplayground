@@ -10,17 +10,19 @@
  * same LAYOUT_CONFIGS, Button toolbar, forceViewport fade-in, ResizeObserver, PNG export.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import fcose from 'cytoscape-fcose';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import type { BNGLModel, IgraphAnalysisResult, NetworkAnalysisPayload } from '../../types';
+
+import { bnglService } from '../../services/bnglService';
 import { buildGraphPayload } from '../../services/igraphNetworkAnalysis';
 import { tsAnalyseGraph } from '../../services/tsNetworkAnalysis';
-import { bnglService } from '../../services/bnglService';
 import { Button } from '../ui/Button';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
+
+import type { BNGLModel, IgraphAnalysisResult, NetworkAnalysisPayload } from '../../types';
 
 // Register layout plugins (idempotent — same pattern as ARGraphViewer)
 cytoscape.use(dagre);

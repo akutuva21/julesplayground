@@ -4,21 +4,23 @@
  * Automated validation of the TS atomizer against BioModels.
  */
 
-import fs from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { createReadStream } from 'node:fs';
+import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 
-import { Atomizer } from '../../src/lib/atomizer/index';
 import { parseBNGLStrict } from '@bngplayground/engine';
 import { generateExpandedNetwork } from '@bngplayground/engine';
 import { loadEvaluator } from '@bngplayground/engine';
 import { requiresCompartmentResolution, resolveCompartmentVolumes } from '@bngplayground/engine';
 import { parseGdat } from '@bngplayground/engine';
+
 import { exportToSBML } from '../../services/exportSBML';
+import { Atomizer } from '../../src/lib/atomizer/index';
 import { resolveBNG2Paths } from '../../tools/bng2-paths';
+
 import type { BNGLModel } from '../../types';
 
 const bng2Paths = resolveBNG2Paths();

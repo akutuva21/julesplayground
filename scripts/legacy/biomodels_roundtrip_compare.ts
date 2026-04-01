@@ -1,17 +1,19 @@
+import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import crypto from 'node:crypto';
-import { spawn } from 'node:child_process';
 
-import { fetchBioModelsSbml } from '../../services/bioModelsImport';
-import { Atomizer, SBMLParser } from '../../src/lib/atomizer';
-import { parseBNGLStrict } from '../../packages/engine/src/parser/BNGLParserWrapper';
-import { parseBNGLRegexDeprecated } from '../../services/parseBNGL';
 import { generateExpandedNetwork } from '@bngplayground/engine';
 import { loadEvaluator } from '@bngplayground/engine';
 import { requiresCompartmentResolution, resolveCompartmentVolumes } from '@bngplayground/engine';
 import { simulate } from '@bngplayground/engine';
+
+import { parseBNGLStrict } from '../../packages/engine/src/parser/BNGLParserWrapper';
+import { fetchBioModelsSbml } from '../../services/bioModelsImport';
 import { exportToSBML } from '../../services/exportSBML';
+import { parseBNGLRegexDeprecated } from '../../services/parseBNGL';
+import { Atomizer, SBMLParser } from '../../src/lib/atomizer';
+
 import type { BNGLModel, SimulationOptions, SimulationResults } from '../../types';
 
 type RoundtripResult = {

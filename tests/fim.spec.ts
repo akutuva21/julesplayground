@@ -1,7 +1,9 @@
 // @ts-nocheck
 import { describe, it, expect, vi } from 'vitest';
-import type { BNGLModel, SimulationOptions } from '../types';
+
 import * as fimModule from '../services/fim';
+
+import type { BNGLModel, SimulationOptions } from '../types';
 
 // Mock bnglService
 vi.mock('../services/bnglService', async () => {

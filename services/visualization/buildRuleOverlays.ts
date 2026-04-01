@@ -13,14 +13,15 @@
  *   - detectStateChanges() from speciesGraphUtils.ts
  */
 
-import type { ReactionRule, BNGLMoleculeType } from '../../types';
-import type { BondInfo } from './speciesGraphUtils';
 import {
   parseSpeciesGraphs,
   extractBonds,
   detectStateChanges,
 } from './speciesGraphUtils';
+
 import type { RuleOverlay } from './ruleOverlay';
+import type { BondInfo } from './speciesGraphUtils';
+import type { ReactionRule, BNGLMoleculeType } from '../../types';
 
 /**
  * For each reaction rule, determine which contact map elements are in the

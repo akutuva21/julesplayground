@@ -14,8 +14,11 @@
  *   'bobyqa'       – uses SBPLX until synchronous solver bridge enables NLopt-js
  */
 
+import { fitParameters as engineFitParameters } from '@bngplayground/engine';
+
 import { BNGLModel } from '../../types';
 import { bnglService } from '../bnglService';
+
 import type {
     FitAlgorithm,
     FitConfig as EngineFitConfig,
@@ -25,7 +28,6 @@ import type {
     ExperimentalDataPoint,
     RegularizationConfig,
 } from '@bngplayground/engine';
-import { fitParameters as engineFitParameters } from '@bngplayground/engine';
 
 // Re-export engine types so consumers of this file don't need two import paths.
 export type { FitAlgorithm, FitProgress, FitResult, ParamBounds, ExperimentalDataPoint };

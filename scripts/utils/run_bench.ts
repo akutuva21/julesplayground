@@ -1,10 +1,11 @@
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
-import { parseBNGL } from '../../services/parseBNGL';
-import { NetworkGenerator } from '../../packages/engine/src/services/graph/NetworkGenerator';
-import { NautyService } from '../../packages/engine/src/services/graph/core/NautyService';
+
 import { BNGLParser } from '../../packages/engine/src/services/graph/core/BNGLParser';
+import { NautyService } from '../../packages/engine/src/services/graph/core/NautyService';
+import { NetworkGenerator } from '../../packages/engine/src/services/graph/NetworkGenerator';
+import { parseBNGL } from '../../services/parseBNGL';
 import { listAllRuleHubModelFiles } from '../../tools/rulehubLocal';
 
 interface BenchmarkResult {

@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+
 import {
   DEFAULT_SPATIAL_CONFIG,
   extractDiffusionConstants,

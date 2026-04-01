@@ -1,10 +1,10 @@
-import { BioSentence, InteractionSentence, DefinitionSentence, InitializationSentence, SimulationSentence } from './types';
 import {
   ACTION_SITE_CONFIG,
   DEFAULT_PARAMETER_VALUES,
   defaultForwardRate,
   defaultReverseRate,
 } from './ontology';
+import { BioSentence, InteractionSentence, DefinitionSentence, InitializationSentence, SimulationSentence } from './types';
 
 const isNumericToken = (value: string): boolean => /^[0-9.e-]+$/i.test(value);
 

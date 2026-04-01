@@ -7,11 +7,12 @@
  * 3. Compares the .gdat outputs
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import { execSync } from 'child_process';
+import * as fs from 'fs';
 import { createRequire } from 'module';
+import * as path from 'path';
 import { fileURLToPath } from 'url';
+
 import { resolveBNG2Paths } from '../bng2-paths';
 
 const require = createRequire(import.meta.url);

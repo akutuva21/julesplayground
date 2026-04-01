@@ -1,25 +1,28 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CartesianGrid, ReferenceArea } from 'recharts';
-import { BNGLModel } from '../../types';
-import { Button } from '../ui/Button';
-import { Select } from '../ui/Select';
-import { Input } from '../ui/Input';
-import { LoadingSpinner } from '../ui/LoadingSpinner';
-import { Card } from '../ui/Card';
-import { DataTable } from '../ui/DataTable';
-import { bnglService } from '../../services/bnglService';
-import { CHART_COLORS } from '../../src/utils/chartColors';
-import HeatmapChart from '../HeatmapChart';
 
-
-// reusable helpers for parameter scanning logic and formatting
 import {
   roundForInput,
   computeDefaultBounds,
   generateRange,
   formatNumber,
 } from '@bngplayground/engine';
+
+import { bnglService } from '../../services/bnglService';
+import { CHART_COLORS } from '../../src/utils/chartColors';
+import { BNGLModel } from '../../types';
 import { TimeSeriesChart, TimeSeriesSeries } from '../charts/TimeSeriesChart';
+import HeatmapChart from '../HeatmapChart';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { DataTable } from '../ui/DataTable';
+import { Input } from '../ui/Input';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
+import { Select } from '../ui/Select';
+
+
+// reusable helpers for parameter scanning logic and formatting
+
 
 interface ParameterScanTabProps {
   model: BNGLModel | null;

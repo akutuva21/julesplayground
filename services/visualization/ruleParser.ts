@@ -1,6 +1,7 @@
+import { convertSpeciesGraph, parseSpeciesGraphs } from './speciesGraphUtils';
+
 import type { ReactionRule } from '../../types';
 import type { VisualizationRule } from '../../types/visualization';
-import { convertSpeciesGraph, parseSpeciesGraphs } from './speciesGraphUtils';
 
 export const parseRuleForVisualization = (rule: ReactionRule, index: number): VisualizationRule => {
   const reactantGraphs = parseSpeciesGraphs(rule.reactants);

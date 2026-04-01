@@ -1,4 +1,5 @@
 import { z } from 'zod';
+
 import { simulationMethods, finiteNumber, positiveInt } from './core.js';
 
 const composeSeedSpeciesSchema = z.object({

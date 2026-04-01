@@ -1,14 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import { BNGLModel } from '../../types';
-import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
-import { LoadingSpinner } from '../ui/LoadingSpinner';
-import { EmptyState } from '../ui/EmptyState';
-import { StatusMessage } from '../ui/StatusMessage';
-import { profileLikelihood, ProfileLikelihoodResult } from '@bngplayground/engine';
-import { bnglService } from '../../services/bnglService';
-import { parseExperimentalData, ExperimentalDataPoint } from '../../src/services/data/experimentalData';
-import { formatValue } from '../../src/utils/formatValue';
 import {
   LineChart,
   Line,
@@ -22,6 +12,19 @@ import {
   ReferenceLine,
   Scatter
 } from 'recharts';
+
+import { profileLikelihood, ProfileLikelihoodResult } from '@bngplayground/engine';
+
+import { bnglService } from '../../services/bnglService';
+import { parseExperimentalData, ExperimentalDataPoint } from '../../src/services/data/experimentalData';
+import { formatValue } from '../../src/utils/formatValue';
+import { BNGLModel } from '../../types';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { EmptyState } from '../ui/EmptyState';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
+import { StatusMessage } from '../ui/StatusMessage';
+
 
 interface ProfileLikelihoodTabProps {
   model: BNGLModel | null;

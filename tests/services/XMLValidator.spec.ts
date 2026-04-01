@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { XMLValidator, XMLErrorType } from '../../services/simulation/XMLValidator';
 
 describe('XMLValidator', () => {

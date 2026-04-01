@@ -4,6 +4,7 @@
  * Tests for BNGL syntax parsing edge cases and bng2.pl parity
  */
 import { describe, it, expect } from 'vitest';
+
 import { parseBNGLStrict as parseBNGL } from '../src/parser/BNGLParserWrapper';
 
 describe('parseBNGL - Parameter Resolution', () => {

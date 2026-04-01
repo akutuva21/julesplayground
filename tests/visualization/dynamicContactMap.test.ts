@@ -3,7 +3,9 @@
  * concentrations are correctly aggregated to contact map elements.
  */
 import { describe, it, expect } from 'vitest';
+
 import { buildContactMapSnapshots } from '../../services/visualization/dynamicContactMap';
+
 import type { SimulationResults } from '../../types';
 
 describe('buildContactMapSnapshots', () => {

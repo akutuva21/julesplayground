@@ -1,11 +1,12 @@
-import type { ReactionRule } from '../../types';
-import type { RuleFlowEdge, RuleFlowGraph, RuleFlowNode } from '../../types/visualization';
+import { colorFromName } from './colorUtils';
 import {
   extractBonds,
   parseSpeciesGraphs,
   detectStateChanges as detectStateChangesUtil,
 } from './speciesGraphUtils';
-import { colorFromName } from './colorUtils';
+
+import type { ReactionRule } from '../../types';
+import type { RuleFlowEdge, RuleFlowGraph, RuleFlowNode } from '../../types/visualization';
 
 interface RuleFlowBuilderOptions {
   getRuleColor?: (rule: ReactionRule, index: number) => string;

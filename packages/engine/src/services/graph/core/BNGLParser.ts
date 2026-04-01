@@ -1,10 +1,9 @@
 import { Component } from './Component';
-import { Molecule } from './Molecule';
-import { SpeciesGraph } from './SpeciesGraph';
 import { ExpressionTranslator } from './ExpressionTranslator';
-
 import { evaluateExpressionHighPrecision, needsHighPrecision } from './highPrecisionEvaluator';
+import { Molecule } from './Molecule';
 import { RxnRule } from './RxnRule';
+import { SpeciesGraph } from './SpeciesGraph';
 
 const shouldLogParser = false;
 

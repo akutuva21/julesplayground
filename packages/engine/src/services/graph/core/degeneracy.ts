@@ -1,5 +1,6 @@
 import { Component } from './Component.ts';
 import { SpeciesGraph } from './SpeciesGraph.ts';
+
 import type { MatchMap } from './Matcher.ts';
 
 type PatternEndpoint = {

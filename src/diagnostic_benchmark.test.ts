@@ -3,13 +3,15 @@
  * Diagnostic Benchmark: Kozer_2014 Analysis
  * Deep dive into why this model is slow compared to BNG2.pl
  */
-import { describe, it, expect } from 'vitest';
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+
+import { describe, it, expect } from 'vitest';
+
+import { NetworkGenerator, BNGLParser } from '@bngplayground/engine';
 
 import { parseBNGL } from '../services/parseBNGL';
-import { NetworkGenerator, BNGLParser } from '@bngplayground/engine';
 
 describe('Diagnostic Benchmark: Kozer_2014', () => {
     const projectRoot = path.resolve(__dirname, '..');

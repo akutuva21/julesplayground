@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { resolveCompartmentVolumes, requiresCompartmentResolution } from '../src/services/simulation/CompartmentResolver';
 import { BNGLModel } from '../src/types';
 

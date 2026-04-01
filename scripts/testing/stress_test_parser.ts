@@ -2,8 +2,10 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { parseBNGL } from '../services/parseBNGL';
+
 import { glob } from 'glob';
+
+import { parseBNGL } from '../services/parseBNGL';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

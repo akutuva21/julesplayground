@@ -1,9 +1,12 @@
 import { readFileSync } from 'fs';
 import path from 'path';
-import { parseBNGL } from '../../services/parseBNGL';
-import { simulate } from '@bngplayground/engine';
-import { SimulationOptions } from '../../types';
+
 import { describe, it, expect } from 'vitest';
+
+import { simulate } from '@bngplayground/engine';
+
+import { parseBNGL } from '../../services/parseBNGL';
+import { SimulationOptions } from '../../types';
 import { findRuleHubModelPath } from '../helpers/rulehub';
 
 describe('stat3-mediated-transcription simulation parity', () => {

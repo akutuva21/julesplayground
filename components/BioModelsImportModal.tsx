@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { Modal } from './ui/Modal';
+
+import { fetchBioModelsSbml } from '../services/bioModelsImport';
+
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
-import { fetchBioModelsSbml } from '../services/bioModelsImport';
+import { Modal } from './ui/Modal';
+
 
 // Note: BioModels provides a REST API (https://www.ebi.ac.uk/biomodels/docs/)
 // We use the public download endpoint under `/model/download/{modelId}` and

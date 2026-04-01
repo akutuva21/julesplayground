@@ -4,10 +4,12 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { parseBNGLStrict } from '../packages/engine/src/parser/BNGLParserWrapper';
+
 import { generateExpandedNetwork } from '@bngplayground/engine';
 import { loadEvaluator, _setEvaluatorRefForTests } from '@bngplayground/engine';
 import { SafeExpressionEvaluator } from '@bngplayground/engine';
+
+import { parseBNGLStrict } from '../packages/engine/src/parser/BNGLParserWrapper';
 
 describe('Integration: Network Expansion with Rate Evaluation', () => {
   beforeAll(async () => {

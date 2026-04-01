@@ -1,13 +1,16 @@
 import { z } from 'zod';
-import { ToolArgs, ToolResult, MCPErrorResult } from '../types/index.js';
+
 import { diagnoseModelArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs } from '../services/engine.js';
+import { structureError } from '../services/errors.js';
 import { diagnoseModelDeep } from '../services/intelligence.js';
 import { suggestModelFixes } from '../services/intelligence.js';
+import { ToolArgs, ToolResult, MCPErrorResult } from '../types/index.js';
+
 import { handleAnalyzeResiduals } from './analyzeResiduals.js';
 import { handleAssessModelMaturity } from './assessModelMaturity.js';
 import { handleDiagnose } from './diagnose.js';
-import { structureError } from '../services/errors.js';
+
 
 const diagnoseModelUnifiedArgsSchema = diagnoseModelArgsSchema.extend({
     mode: z.enum(['quick', 'deep']).default('deep').describe('Quick mode runs lightweight checks; deep mode runs full causal diagnostics.'),

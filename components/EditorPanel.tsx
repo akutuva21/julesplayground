@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
-import { Button } from './ui/Button';
-import { Card } from './ui/Card';
-import { LoadingSpinner } from './ui/LoadingSpinner';
+
+import { BioModelsImportModal } from './BioModelsImportModal';
+import { ExampleGalleryModal } from './ExampleGalleryModal';
+import { HelpSection } from './HelpSection';
+import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { UploadIcon } from './icons/UploadIcon';
 import { XIcon } from './icons/XIcon';
-import { SimulationControls } from './SimulationControls';
-import { ExampleGalleryModal } from './ExampleGalleryModal';
-
+import MonacoEditor from './MonacoEditor';
 import { ParameterPanel } from './ParameterPanel';
-import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { SimulationControls } from './SimulationControls';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
 import { Dropdown, DropdownItem } from './ui/Dropdown';
-import { BioModelsImportModal } from './BioModelsImportModal';
-import { HelpSection } from './HelpSection';
+import { LoadingSpinner } from './ui/LoadingSpinner';
 
 // Minimal BNGL tidy helper (inlined to avoid module resolution issues)
 function formatBNGLMini(code: string): string {
@@ -65,8 +66,9 @@ function formatBNGLMini(code: string): string {
   }
   return out.join('\n').trim() + '\n';
 }
-import MonacoEditor from './MonacoEditor';
+
 import { BNGLModel, SimulationOptions, ValidationWarning, EditorMarker } from '../types';
+
 import { getSimulationOptionsFromParsedModel } from '@bngplayground/engine';
 
 interface EditorPanelProps {

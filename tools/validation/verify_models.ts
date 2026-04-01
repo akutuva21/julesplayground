@@ -1,11 +1,13 @@
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
+
 import { NetworkGenerator } from '@bngplayground/engine';
 import { BNGLParser } from '@bngplayground/engine';
-import { parseBNGL } from '../services/parseBNGL.ts';
+
 import { listRuleHubPublishedModelFiles, resolveRuleHubRoot } from '../rulehubLocal.ts';
+import { parseBNGL } from '../services/parseBNGL.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

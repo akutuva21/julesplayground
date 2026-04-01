@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { abcSMC } from '../src/services/inference/ABCSMC';
 
 describe('abcSMC', () => {

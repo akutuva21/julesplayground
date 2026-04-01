@@ -1,7 +1,7 @@
-import { ToolArgs, ToolResult, ContactMap } from '../types/index.js';
 import { getContactMapArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, parseModelOrThrow, buildContactMap } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+import { ToolArgs, ToolResult, ContactMap } from '../types/index.js';
 
 export async function handleGetContactMap(args: ToolArgs): Promise<ToolResult<any>> {
     try {

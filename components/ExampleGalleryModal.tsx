@@ -1,14 +1,17 @@
 import React, { useState, useMemo } from 'react';
-import { Modal } from './ui/Modal';
-import { Card } from './ui/Card';
-import { Input } from './ui/Input';
-import { SearchIcon } from './icons/SearchIcon';
-import { SemanticSearchInput, SearchResult } from './SemanticSearchInput';
-import { BioModelsSearch } from './BioModelsSearch';
-import { Tabs, TabList, Tab, TabPanels, TabPanel } from './ui/Tabs';
-import { getManifestDebugInfo, loadModelCode } from '../services/modelLoader';
+
 import { fetchBioModelsSbml } from '../services/bioModelsImport';
 import { loadModelCatalog, type CatalogCategory, type CatalogExample } from '../services/modelCatalog';
+import { getManifestDebugInfo, loadModelCode } from '../services/modelLoader';
+
+import { BioModelsSearch } from './BioModelsSearch';
+import { SearchIcon } from './icons/SearchIcon';
+import { SemanticSearchInput, SearchResult } from './SemanticSearchInput';
+import { Card } from './ui/Card';
+import { Input } from './ui/Input';
+import { Modal } from './ui/Modal';
+import { Tabs, TabList, Tab, TabPanels, TabPanel } from './ui/Tabs';
+
 
 // Helper to convert model names to Title Case
 // Handles special acronyms like MAPK, EGFR, etc.

@@ -22,6 +22,9 @@
  * Status: ✅ IMPLEMENTED (core model generation, no execute=>1 support)
  */
 
+import { writeBNGL } from '../graph/BNGLWriter';
+import { isSpeciesMatch } from '../parity/PatternMatcher';
+
 import type {
   BNGLModel,
   BNGLPopulationMap,
@@ -33,8 +36,6 @@ import type {
   BNGLFunction,
   BNGLCompartment,
 } from '../../types';
-import { writeBNGL } from '../graph/BNGLWriter';
-import { isSpeciesMatch } from '../parity/PatternMatcher';
 
 export interface HybridModelOptions {
   /** Output file prefix */

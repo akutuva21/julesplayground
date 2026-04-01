@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
+
 import { BNGLModel } from '../../types';
-import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { DataTable } from '../ui/DataTable';
+import { Input } from '../ui/Input';
 
 interface ParametersTabProps {
   model: BNGLModel | null;

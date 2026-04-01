@@ -1,4 +1,5 @@
 import { BNGLParser, GraphCanonicalizer, NetworkExporter, Species, Rxn } from '@bngplayground/engine';
+
 import type { BNGLModel, BNGLSpecies } from '../types';
 
 export const exportToNet = async (model: BNGLModel, evalParamMap?: Map<string, number>): Promise<string> => {

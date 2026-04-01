@@ -6,10 +6,11 @@
  * - `parseBNGLRegexDeprecated()` keeps the legacy regex parser for comparison/debug.
  */
 
-import type { BNGLModel } from '../types.ts';
 import { BNGLParser } from '@bngplayground/engine';
 import { SafeExpressionEvaluator } from '@bngplayground/engine';
 import { parseBNGLWithANTLR } from '@bngplayground/engine';
+
+import type { BNGLModel } from '../types.ts';
 
 interface NetworkGenerationOptions {
   maxStoich?: Record<string, number>;

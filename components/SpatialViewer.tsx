@@ -10,6 +10,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
 import type { SpatialSnapshot, CompartmentGeometry } from '@bngplayground/engine';
 
 /** Color palette for species visualization (colorblind-friendly Okabe-Ito) */

@@ -1,18 +1,20 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, copyFileSync } from 'node:fs';
+import * as fs from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
-import { spawnSync } from 'node:child_process';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { describe, it, expect, afterAll } from 'vitest';
+
+import { simulate } from '@bngplayground/engine';
+import { generateExpandedNetwork } from '@bngplayground/engine';
+
+import { parseBNGL } from '../../services/parseBNGL';
+import { BNG2_EXCLUDED_MODELS, NFSIM_MODELS } from '../../src/constants';
+import { convertBNGXmlToBNGL } from '../../src/lib/atomizer/parser/bngXmlParser';
 import { resolveBNG2Paths, resolveBNGValidateDir } from '../../tools/bng2-paths';
 import { BNGLModel, SimulationOptions } from '../../types';
-import { parseBNGL } from '../../services/parseBNGL';
-import { simulate } from '@bngplayground/engine';
-import { convertBNGXmlToBNGL } from '../../src/lib/atomizer/parser/bngXmlParser';
-import { BNG2_EXCLUDED_MODELS, NFSIM_MODELS } from '../../src/constants';
-import { generateExpandedNetwork } from '@bngplayground/engine';
 import { resolveRuleHubRoot } from '../helpers/rulehub';
 
 console.error(`[DEBUG-ENTRY] CWD: ${process.cwd()}`);

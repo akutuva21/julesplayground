@@ -5,9 +5,9 @@
  * This expands parity coverage from 60 to 88 models
  */
 
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 // ESM-compatible __dirname

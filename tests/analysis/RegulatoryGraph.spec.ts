@@ -1,5 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
+
 import { buildRegulatoryGraph } from '../../services/visualization/regulatoryGraphBuilder';
 import { ReactionRule } from '../../types';
 

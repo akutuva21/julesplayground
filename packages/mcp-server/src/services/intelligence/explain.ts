@@ -1,7 +1,10 @@
-import { parseModelOrThrow } from '../../services/engine.js';
 import { formatBNGL } from '@bngplayground/engine';
-import type { ExplainSection } from './types.js';
+
 import { handleSimulate } from '../../handlers/simulate.js';
+import { parseModelOrThrow } from '../../services/engine.js';
+
+import type { ExplainSection } from './types.js';
+
 
 interface MechanismType {
     name: string;

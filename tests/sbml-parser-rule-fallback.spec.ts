@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { SBMLParser } from '../src/lib/atomizer/parser/sbmlParser';
 
 const PIECEWISE_RULE_SBML = `<?xml version="1.0" encoding="UTF-8"?>

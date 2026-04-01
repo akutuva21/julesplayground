@@ -1,7 +1,7 @@
 
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
 
 const REPO_ROOT = path.resolve(process.cwd(), 'bionetgen_repo');
 const BNG2_PATH = path.resolve(process.cwd(), 'bionetgen_repo/bionetgen/bng2/BNG2.pl');

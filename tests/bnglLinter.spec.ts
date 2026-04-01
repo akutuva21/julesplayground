@@ -3,8 +3,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseBNGL } from '../services/parseBNGL';
+
 import { lintBNGL, LintDiagnostic } from '../services/bnglLinter';
+import { parseBNGL } from '../services/parseBNGL';
 
 function findByCode(diagnostics: LintDiagnostic[], code: string): LintDiagnostic[] {
   return diagnostics.filter((d) => d.code === code);

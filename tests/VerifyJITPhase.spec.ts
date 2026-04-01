@@ -1,6 +1,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { simulate } from '@bngplayground/engine';
+
 import { jitCompiler } from '../../src/services/JITCompiler';
 import { BNGLModel } from '../../types';
 

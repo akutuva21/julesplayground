@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Button } from './ui/Button';
+
 import { downloadTextFile } from '../src/utils/download';
+
+import { Button } from './ui/Button';
 
 export interface VSCodeAnalysisPayload {
   version: 1;

@@ -1,10 +1,11 @@
 import React, { useState, useCallback } from 'react';
-import { Card } from '../ui/Card';
-import { Button } from '../ui/Button';
+
 import { 
   ExperimentalData, 
   readExperimentalCSVFile 
 } from '../../src/utils/experimentalData';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
 
 interface ExperimentalDataPanelProps {
   onDataLoaded: (data: ExperimentalData | null) => void;

@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+
 import { getFeatureFlags, setFeatureFlags } from '../src/featureFlags';
 import { _setEvaluatorRefForTests, evaluateFunctionalRate } from '../src/services/simulation/ExpressionEvaluator';
 import { SafeExpressionEvaluator } from '../src/utils/safeExpressionEvaluator';

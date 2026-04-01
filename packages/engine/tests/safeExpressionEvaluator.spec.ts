@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { describe, expect, it } from 'vitest';
+
 import { SafeExpressionEvaluator } from '../src/utils/safeExpressionEvaluator';
 
 const compile = SafeExpressionEvaluator.compile;

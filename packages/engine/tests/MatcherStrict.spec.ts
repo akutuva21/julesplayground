@@ -1,7 +1,8 @@
 
+import { describe, it } from 'vitest';
+
 import { BNGLParser } from '../src/services/graph/core/BNGLParser';
 import { GraphMatcher as Matcher } from '../src/services/graph/core/Matcher';
-import { describe, it } from 'vitest';
 
 describe('Matcher Strict Unbound Checks', () => {
     it('should NOT match A(b) to A(b!1) when using strict unbound semantics', () => {

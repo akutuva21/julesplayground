@@ -1,14 +1,18 @@
 
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
-import type { BNGLModel, GeneratorProgress } from '../types.ts';
-import { parseBNGL } from '../services/parseBNGL.ts';
+
+
 import { generateExpandedNetwork } from '@bngplayground/engine';
-import { getSimulationOptionsFromParsedModel } from '../packages/engine/src/utils/simulationOptions.ts';
 import { simulate } from '@bngplayground/engine';
+
 import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser.ts';
 import { GraphCanonicalizer } from '../packages/engine/src/services/graph/core/Canonical.ts';
+import { getSimulationOptionsFromParsedModel } from '../packages/engine/src/utils/simulationOptions.ts';
+import { parseBNGL } from '../services/parseBNGL.ts';
+
+import type { BNGLModel, GeneratorProgress } from '../types.ts';
 
 interface ParsedParameter {
   index: number;

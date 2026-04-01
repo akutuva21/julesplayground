@@ -1,12 +1,13 @@
 
+import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { fileURLToPath } from 'url';
+import { promisify } from 'util';
+
+import { resolveBNG2Paths } from '../../tools/bng2-paths';
 import { parseBNGL } from '../services/parseBNGL';
 import { buildContactMap } from '../services/visualization/contactMapBuilder';
-import { resolveBNG2Paths } from '../../tools/bng2-paths';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

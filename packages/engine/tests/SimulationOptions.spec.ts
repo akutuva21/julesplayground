@@ -1,8 +1,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { simulate } from '../src/index';
-import { BNGLModel, SimulationOptions } from '../src/types';
 import { resolveSimulationPhasesForRun } from '../src/services/simulation/SimulationLoop';
+import { BNGLModel, SimulationOptions } from '../src/types';
 
 // Mock ODESolver
 const mockIntegrate = vi.fn().mockImplementation((_times, ..._args) => {

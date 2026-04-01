@@ -1,16 +1,20 @@
-import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser.ts';
-import { GraphCanonicalizer } from '../packages/engine/src/services/graph/core/Canonical.ts';
-import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator.ts';
-import type { GeneratorOptions } from '../packages/engine/src/services/graph/NetworkGenerator.ts';
-import { NetworkExporter } from '../packages/engine/src/services/graph/NetworkExporter.ts';
-import { parseBNGL } from '../services/parseBNGL.ts';
-import { generateExpandedNetwork } from '@bngplayground/engine';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import type { BNGLModel, BNGLSpecies, ReactionRule } from '../types.ts';
-import { Species } from '../packages/engine/src/services/graph/core/Species.ts';
+
+import { generateExpandedNetwork } from '@bngplayground/engine';
+
+import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser.ts';
+import { GraphCanonicalizer } from '../packages/engine/src/services/graph/core/Canonical.ts';
 import { Rxn } from '../packages/engine/src/services/graph/core/Rxn.ts';
+import { Species } from '../packages/engine/src/services/graph/core/Species.ts';
+import { NetworkExporter } from '../packages/engine/src/services/graph/NetworkExporter.ts';
+import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator.ts';
+import { parseBNGL } from '../services/parseBNGL.ts';
+
+import type { GeneratorOptions } from '../packages/engine/src/services/graph/NetworkGenerator.ts';
+import type { BNGLModel, BNGLSpecies, ReactionRule } from '../types.ts';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const logPath = path.resolve(__dirname, 'export.log');

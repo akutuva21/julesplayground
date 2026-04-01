@@ -3,8 +3,10 @@
  * classification between rules based on center/context overlap.
  */
 import { describe, it, expect } from 'vitest';
+
 import { buildRuleOverlays } from '../../services/visualization/buildRuleOverlays';
 import { computeInfluenceGraph } from '../../services/visualization/computeInfluence';
+
 import type { ReactionRule, BNGLMoleculeType } from '../../types';
 
 const molTypes: BNGLMoleculeType[] = [

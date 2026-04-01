@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { sobolSensitivity, generateSaltelliSamples } from '../src/services/analysis/SobolSensitivity';
 
 describe('generateSaltelliSamples', () => {

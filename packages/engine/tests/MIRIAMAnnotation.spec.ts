@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
+
 import {
   generateMIRIAMBlock,
   suggestMIRIAMAnnotations,
   resolveAnnotations,
 } from '../src/services/export/MIRIAMAnnotation';
+
 import type { IdentifierResolver } from '../src/services/export/MIRIAMAnnotation';
 
 describe('generateMIRIAMBlock', () => {

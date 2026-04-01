@@ -5,7 +5,6 @@
  * Generates BNGL model files from parsed SBML data
  */
 
-import { Species, Molecule, Component, Rule, Action, Databases, readFromString } from '../core/structures';
 import {
   SBMLModel,
   SBMLReaction,
@@ -16,6 +15,8 @@ import {
   AtomizerOptions,
   SeedSpeciesEntry,
 } from '../config/types';
+import { SCTEntry, SpeciesCompositionTable } from '../config/types';
+import { Species, Molecule, Component, Rule, Action, Databases, readFromString } from '../core/structures';
 import {
   standardizeName,
   convertMathFunction,
@@ -23,7 +24,6 @@ import {
   logger,
   TranslationException,
 } from '../utils/helpers';
-import { SCTEntry, SpeciesCompositionTable } from '../config/types';
 
 const ASSIGN_RULE_META_PREFIX = '__assign_rule__';
 const RATE_RULE_META_PREFIX = '__rate_rule__';

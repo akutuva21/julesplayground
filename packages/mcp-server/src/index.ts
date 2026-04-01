@@ -1,6 +1,6 @@
 // === MCP stdio transport compatibility ===
-import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, resolve } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -21,29 +21,29 @@ if (isMain) {
   console.debug = (...args: any[]) => _write('[DEBUG] ' + args.map(String).join(' '));
 }
 
-import { Server, StdioServerTransport, CallToolRequestSchema, ListToolsRequestSchema } from './sdk.js';
 
-import { simulationMethods, solverValues } from './schemas/index.js';
 
-import { handleParseBngl } from './handlers/parseBngl.js';
-import { handleGenerateNetwork } from './handlers/generateNetwork.js';
-import { handleSimulate } from './handlers/simulate.js';
-import { handleParameterScan } from './handlers/parameterScan.js';
-import { handleValidateModel } from './handlers/validateModel.js';
-import { handleGetContactMap } from './handlers/getContactMap.js';
-import { handleFitParameters } from './handlers/fitParameters.js';
-import { handleImportPetab } from './handlers/importPetab.js';
-import { handleReduceModel } from './handlers/reduceModel.js';
-import { handleQueryPathwayCommons } from './handlers/queryPathwayCommons.js';
-import { handleSobolSensitivity } from './handlers/sobolSensitivity.js';
-import { handleIdentifiability } from './handlers/identifiability.js';
 import { handleBayesianInference } from './handlers/bayesianInference.js';
-import { handleExportModel } from './handlers/exportModel.js';
 import { handleComposeModel } from './handlers/composeModel.js';
-import { handleEditModel } from './handlers/editModel.js';
 import { handleDiagnoseModel } from './handlers/diagnoseModel.js';
+import { handleEditModel } from './handlers/editModel.js';
 import { handleExplainModel } from './handlers/explainModel.js';
+import { handleExportModel } from './handlers/exportModel.js';
+import { handleFitParameters } from './handlers/fitParameters.js';
+import { handleGenerateNetwork } from './handlers/generateNetwork.js';
+import { handleGetContactMap } from './handlers/getContactMap.js';
+import { handleIdentifiability } from './handlers/identifiability.js';
+import { handleImportPetab } from './handlers/importPetab.js';
 import { handleOptimalExperiment } from './handlers/optimalExperiment.js';
+import { handleParameterScan } from './handlers/parameterScan.js';
+import { handleParseBngl } from './handlers/parseBngl.js';
+import { handleQueryPathwayCommons } from './handlers/queryPathwayCommons.js';
+import { handleReduceModel } from './handlers/reduceModel.js';
+import { handleSimulate } from './handlers/simulate.js';
+import { handleSobolSensitivity } from './handlers/sobolSensitivity.js';
+import { handleValidateModel } from './handlers/validateModel.js';
+import { simulationMethods, solverValues } from './schemas/index.js';
+import { Server, StdioServerTransport, CallToolRequestSchema, ListToolsRequestSchema } from './sdk.js';
 
 const server = new Server(
   {

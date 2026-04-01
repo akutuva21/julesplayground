@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { BNGLModel, SimulationResults } from '../../types';
+
 import { Button } from '../ui/Button';
-import { Select } from '../ui/Select';
 import { Input } from '../ui/Input';
+import { Select } from '../ui/Select';
+
+import type { BNGLModel, SimulationResults } from '../../types';
 
 // Constraint operators
 type ConstraintOperator = '<' | '<=' | '>' | '>=' | '==' | 'constant';

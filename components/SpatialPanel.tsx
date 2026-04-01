@@ -6,8 +6,13 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { SpatialViewer } from './SpatialViewer';
+
+import { DEFAULT_SPATIAL_CONFIG } from '@bngplayground/engine';
+
 import { spatialService } from '../services/spatialService';
+
+import { SpatialViewer } from './SpatialViewer';
+
 import type { SpatialSimulationState } from '../services/spatialService';
 import type {
   SpatialSnapshot,
@@ -15,7 +20,7 @@ import type {
   SpatialSimulationConfig,
   CompartmentGeometry,
 } from '@bngplayground/engine';
-import { DEFAULT_SPATIAL_CONFIG } from '@bngplayground/engine';
+
 
 interface SpatialPanelProps {
   /** Current BNGL model text from the editor */

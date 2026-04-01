@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
+
 import { evaluateFunctionalRate, getFeatureFlags, _setEvaluatorRefForTests, SafeExpressionEvaluator, setFeatureFlags } from '@bngplayground/engine';
 
 describe('Diagnostic: Feature Flags and Rate Evaluation', () => {

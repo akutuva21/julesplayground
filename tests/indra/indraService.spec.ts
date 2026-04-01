@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { INDRAError, INDRAService, summarizeStatement } from '../../services/indra/indraService';
 
 const originalFetch = global.fetch;

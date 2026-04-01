@@ -1,13 +1,14 @@
 import React, { useMemo } from 'react';
-import { BNGLModel, SimulationOptions, SimulationResults } from '../../types';
-import { Button } from '../ui/Button';
-import { LoadingSpinner } from '../ui/LoadingSpinner';
-import { InfoIcon } from '../icons/InfoIcon';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+
 import { CHART_COLORS } from '../../src/utils/chartColors';
-import { formatTooltipNumber, formatYAxisTick } from '../charts/InteractiveLegend';
 import { formatValue } from '../../src/utils/formatValue';
+import { BNGLModel, SimulationOptions, SimulationResults } from '../../types';
+import { formatTooltipNumber, formatYAxisTick } from '../charts/InteractiveLegend';
+import { InfoIcon } from '../icons/InfoIcon';
+import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 
 interface SteadyStateTabProps {
   model: BNGLModel | null;

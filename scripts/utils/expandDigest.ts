@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser';
 import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator';
 

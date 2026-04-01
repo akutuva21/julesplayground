@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { parseSpeciesGraphs } from '../../services/visualization/speciesGraphUtils';
 
 // debug test for the IL6/IL6R complex parsing

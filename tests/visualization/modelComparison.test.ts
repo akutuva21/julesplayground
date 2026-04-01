@@ -3,7 +3,9 @@
  * and model diff logic.
  */
 import { describe, it, expect } from 'vitest';
+
 import { buildAdjacencyMatrix, compareModels } from '../../services/visualization/modelComparison';
+
 import type { ContactMap } from '../../types/visualization';
 
 const makeContactMap = (

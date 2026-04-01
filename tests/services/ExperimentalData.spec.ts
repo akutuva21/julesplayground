@@ -1,5 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
+
 import { parseExperimentalData } from '../../src/services/data/experimentalData';
 
 describe('Experimental Data Parsing', () => {

@@ -1,16 +1,19 @@
 // packages/engine/src/services/analysis/paramFitter.ts
 
 import { BNGLModel, SimulationOptions, SimulationResults } from '../../types';
-import { nelderMead, NelderMeadProgress } from '../optimization/nelderMead';
-import { sbplx } from '../optimization/sbplx';
-import { projectedNM } from '../optimization/projectedNM';
-import type { ProjectedNMOptions } from '../optimization/projectedNM';
 import { differentialEvolution } from '../optimization/differentialEvolution';
-import type { DEProgress } from '../optimization/differentialEvolution';
+import { nelderMead, NelderMeadProgress } from '../optimization/nelderMead';
+import { projectedNM } from '../optimization/projectedNM';
+import { sbplx } from '../optimization/sbplx';
+
+
 import { parseBPSL, evaluateBPSL } from './bpsl';
-import type { BPSLConstraint, BPSLResult } from './bpsl';
 import { computeRegularizationPenalty } from './regularization';
+
+import type { BPSLConstraint, BPSLResult } from './bpsl';
 import type { RegularizationConfig } from './regularization';
+import type { DEProgress } from '../optimization/differentialEvolution';
+import type { ProjectedNMOptions } from '../optimization/projectedNM';
 
 // ---------------------------------------------------------------------------
 // Types (intentional match of UI-side names)

@@ -1,9 +1,12 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { Button } from './ui/Button';
-import { Input } from './ui/Input';
-import { CHART_COLORS } from '../src/utils/chartColors';
+
 import { validateObservablePattern } from '@bngplayground/engine';
 import { BNGLParser } from '@bngplayground/engine';
+
+import { CHART_COLORS } from '../src/utils/chartColors';
+
+import { Button } from './ui/Button';
+import { Input } from './ui/Input';
 
 export interface CustomExpression {
   id: string;

@@ -1,5 +1,5 @@
-import type { BNGLModel, BNGLObservable, ReactionRule } from '../../types';
 import type { Atom, DebuggerNetwork, RuleBlockerReport, RuleBlockerDetails, RuleBlockerSuggestion } from './types';
+import type { BNGLModel, BNGLObservable, ReactionRule } from '../../types';
 
 const COMPONENT_REGEX = /(\w+)(?:~([A-Za-z0-9_]+))?(?:!([0-9+?]+))?/;
 

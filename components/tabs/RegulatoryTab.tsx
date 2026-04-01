@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
+
+import { buildAtomRuleGraph } from '../../services/visualization/arGraphBuilder';
 import { BNGLModel } from '../../types';
 import { ARGraphViewer } from '../ARGraphViewer';
-import { buildAtomRuleGraph } from '../../services/visualization/arGraphBuilder';
 
 interface RegulatoryTabProps {
   model: BNGLModel | null;

@@ -1,5 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
+
 import { buildContactMap } from '../../services/visualization/contactMapBuilder';
 import { ReactionRule, BNGLMoleculeType } from '../../types';
 

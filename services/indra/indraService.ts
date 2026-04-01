@@ -1,3 +1,5 @@
+import { parseBNGLWithANTLR } from '@bngplayground/engine';
+
 import type {
   INDRADBQueryParams,
   INDRADBQueryResponse,
@@ -8,7 +10,6 @@ import type {
   INDRAModification,
   ReviewableStatement,
 } from './types';
-import { parseBNGLWithANTLR } from '@bngplayground/engine';
 
 const DEFAULT_INDRA_API_BASE = 'https://api.indra.bio';
 const DEFAULT_INDRA_DB_BASE = 'https://db.indra.bio';

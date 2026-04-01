@@ -1,8 +1,10 @@
-import { ToolArgs, ToolResult } from '../types/index.js';
 import { z } from 'zod';
-import { createToolResult, parseArgs, parseModelOrThrow, validateModel, findUnreachableRules } from '../services/engine.js';
+
 import { analyzeModelStiffness } from '@bngplayground/engine';
+
+import { createToolResult, parseArgs, parseModelOrThrow, validateModel, findUnreachableRules } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+import { ToolArgs, ToolResult } from '../types/index.js';
 
 const assessModelMaturityArgsSchema = z.object({
     code: z.string().describe('BNGL model code'),

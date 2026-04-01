@@ -1,3 +1,8 @@
+import { formatBNGL, SeededRandom } from '@bngplayground/engine';
+
+import { parseModelOrThrow, validateModel } from '../../services/engine.js';
+
+import { composeModelFromStatements } from './compose.js';
 import {
     normalizeWhitespace,
     ensureModelEnvelope,
@@ -10,10 +15,8 @@ import {
     replaceLineInBlock,
     removeLineInBlock,
 } from './utils/codeUtils.js';
+
 import type { DriftInfo, ScopeInfo } from './types.js';
-import { formatBNGL, SeededRandom } from '@bngplayground/engine';
-import { parseModelOrThrow, validateModel } from '../../services/engine.js';
-import { composeModelFromStatements } from './compose.js';
 
 export function applyModelEdits(
     code: string,

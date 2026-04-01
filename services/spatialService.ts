@@ -5,8 +5,8 @@
  * Pattern: services/bnglService.ts
  */
 
-import type { SpatialSimulationConfig, SpatialSnapshot, SpatialSimulationResult, CompartmentGeometry } from '@bngplayground/engine';
 import type { SpatialWorkerRequest, SpatialWorkerResponse } from './spatialWorker';
+import type { SpatialSimulationConfig, SpatialSnapshot, SpatialSimulationResult, CompartmentGeometry } from '@bngplayground/engine';
 
 export type SpatialSimulationState = 'idle' | 'initializing' | 'running' | 'complete' | 'error';
 

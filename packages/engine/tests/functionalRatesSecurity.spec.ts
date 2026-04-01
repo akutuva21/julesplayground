@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { beforeEach, describe, expect, it } from 'vitest';
+
 import { getFeatureFlags, setFeatureFlags } from '../src/featureFlags';
 import { evaluateFunctionalRate, getCompiledRateFunction } from '../src/services/simulation/ExpressionEvaluator';
 

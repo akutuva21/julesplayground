@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { parseSpeciesGraphs } from '../services/visualization/speciesGraphUtils';
 
 describe('speciesGraphUtils.parseSpeciesGraphs', () => {

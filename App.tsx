@@ -1,27 +1,29 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { EditorPanel } from './components/EditorPanel';
-import { DesignerPanel } from './components/DesignerPanel';
-import { VisualizationPanel } from './components/VisualizationPanel';
-import { Header } from './components/Header';
-import { exportToSBML } from './services/exportSBML';
-import { StatusMessage } from './components/ui/StatusMessage';
-import { AboutModal } from './components/AboutModal';
-import { bnglService } from './services/bnglService';
-import { exportToNet } from './services/exportNet';
-import { exportToSedML } from './services/exportSedML';
-import { exportToOMEX } from './services/exportOMEX';
-import { VSCodeAnalysisPayload } from './components/VSCodeExportModal';
-import { BNGLModel, SimulationOptions, SimulationResults, Status, ValidationWarning, EditorMarker } from './types';
-import { loadModelCode, setCachedCode, getCachedCode } from './services/modelLoader';
-import { loadModelCatalog, getModelCatalogSync, findCatalogExampleByQuery, type CatalogExample } from './services/modelCatalog';
 
-import SimulationModal from './components/SimulationModal';
 import { BNGLParser } from '@bngplayground/engine';
-import { validateBNGLModel, validationWarningsToMarkers } from './services/modelValidation';
-import { lintBNGL, lintDiagnosticsToMarkers } from './services/bnglLinter';
-import { getSharedModelFromUrl, clearModelFromUrl } from './src/utils/shareUrl';
 import { resolveAutoMethod, getSimulationOptionsFromParsedModel } from '@bngplayground/engine';
 import { parseParametersFromCode, isNumericLiteral, stripParametersBlock } from '@bngplayground/engine';
+
+import { AboutModal } from './components/AboutModal';
+import { DesignerPanel } from './components/DesignerPanel';
+import { EditorPanel } from './components/EditorPanel';
+import { Header } from './components/Header';
+import SimulationModal from './components/SimulationModal';
+import { StatusMessage } from './components/ui/StatusMessage';
+import { VisualizationPanel } from './components/VisualizationPanel';
+import { VSCodeAnalysisPayload } from './components/VSCodeExportModal';
+import { lintBNGL, lintDiagnosticsToMarkers } from './services/bnglLinter';
+import { bnglService } from './services/bnglService';
+import { exportToNet } from './services/exportNet';
+import { exportToSBML } from './services/exportSBML';
+import { exportToSedML } from './services/exportSedML';
+import { exportToOMEX } from './services/exportOMEX';
+import { loadModelCatalog, getModelCatalogSync, findCatalogExampleByQuery, type CatalogExample } from './services/modelCatalog';
+import { loadModelCode, setCachedCode, getCachedCode } from './services/modelLoader';
+import { validateBNGLModel, validationWarningsToMarkers } from './services/modelValidation';
+import { getSharedModelFromUrl, clearModelFromUrl } from './src/utils/shareUrl';
+import { BNGLModel, SimulationOptions, SimulationResults, Status, ValidationWarning, EditorMarker } from './types';
+
 
 const normalizeCode = (value: string) => value.replace(/\r\n/g, '\n').trim();
 const SBML_IMPORT_TIMEOUT_MS = 45_000;

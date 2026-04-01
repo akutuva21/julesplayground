@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 // tests in this file exercise DOM-dependent behaviour and therefore
 // run with jsdom at file scope.
-import React from 'react';
 import { render } from '@testing-library/react';
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { ARGraphViewer } from '../components/ARGraphViewer';
+
 import type { AtomRuleGraph } from '../types/visualization';
 
 // stub ResizeObserver so we can trigger its callback manually and watch for
@@ -77,7 +80,6 @@ vi.mock('cytoscape', () => {
   return { default: cyt };
 });
 
-import { ARGraphViewer } from '../components/ARGraphViewer';
 
 const baseGraph: AtomRuleGraph = {
   nodes: [{ id: 'n1', label: 'A()', type: 'atom' }],

@@ -1,8 +1,8 @@
-import { ToolArgs, ToolResult } from '../types/index.js';
 import { explainModelArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs } from '../services/engine.js';
-import { explainModelNarrative } from '../services/intelligence.js';
 import { structureError } from '../services/errors.js';
+import { explainModelNarrative } from '../services/intelligence.js';
+import { ToolArgs, ToolResult } from '../types/index.js';
 
 export async function handleExplainModel(args: ToolArgs): Promise<ToolResult<any>> {
     try {

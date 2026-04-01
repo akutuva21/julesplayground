@@ -1,10 +1,11 @@
 // @ts-nocheck
 import { describe, expect, it } from 'vitest';
-import { SpeciesGraph } from '../packages/engine/src/services/graph/core/SpeciesGraph';
-import { Molecule } from '../packages/engine/src/services/graph/core/Molecule';
+
 import { Component } from '../packages/engine/src/services/graph/core/Component';
-import { GraphMatcher } from '../packages/engine/src/services/graph/core/Matcher';
 import { countEmbeddingDegeneracy } from '../packages/engine/src/services/graph/core/degeneracy';
+import { GraphMatcher } from '../packages/engine/src/services/graph/core/Matcher';
+import { Molecule } from '../packages/engine/src/services/graph/core/Molecule';
+import { SpeciesGraph } from '../packages/engine/src/services/graph/core/SpeciesGraph';
 
 const comp = (name: string) => new Component(name);
 

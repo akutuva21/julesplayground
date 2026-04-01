@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import reactPlugin from "eslint-plugin-react";
 import reactHooksPlugin from "eslint-plugin-react-hooks";
+import importPlugin from "eslint-plugin-import";
 
 export default tseslint.config(
   {
@@ -40,6 +41,7 @@ export default tseslint.config(
     plugins: {
       react: reactPlugin,
       "react-hooks": reactHooksPlugin,
+      import: importPlugin,
     },
     languageOptions: {
       ecmaVersion: 2022,
@@ -104,6 +106,30 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
       "@typescript-eslint/no-unused-expressions": "warn",
       ...reactHooksPlugin.configs.recommended.rules,
+      "import/order": ["error", {
+          "groups": [
+              "builtin",
+              "external",
+              "internal",
+              "parent",
+              "sibling",
+              "index",
+              "type"
+          ],
+          "pathGroups": [
+              {
+                  "pattern": "@bngplayground/**",
+                  "group": "internal",
+                  "position": "before"
+              }
+          ],
+          "pathGroupsExcludedImportTypes": ["type"],
+          "newlines-between": "always",
+          "alphabetize": {
+              "order": "asc",
+              "caseInsensitive": true
+          }
+      }],
     },
     settings: {
       react: {

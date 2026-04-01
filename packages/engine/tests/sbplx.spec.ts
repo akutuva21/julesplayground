@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { sbplx } from '../src/services/optimization/sbplx';
 
 const sphere = async (x: number[]): Promise<number> =>

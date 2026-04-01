@@ -1,33 +1,37 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { BNGLModel, SimulationOptions, SimulationResults } from '../types';
-import { ResultsChart } from './ResultsChart';
-import { ContactMapTab } from './tabs/ContactMapTab';
-import { InfluenceGraphViewer } from './InfluenceGraphViewer';
+
+import { BNGLParser } from '@bngplayground/engine';
+
 import { buildRuleOverlays } from '../services/visualization/buildRuleOverlays';
 import { computeInfluenceGraph } from '../services/visualization/computeInfluence';
-import { SteadyStateTab } from './tabs/SteadyStateTab';
-import { FIMTab } from './tabs/FIMTab';
+import { BNGLModel, SimulationOptions, SimulationResults } from '../types';
+
+import { ComparisonPanel } from './ComparisonPanel';
+import { ExpressionInputPanel, CustomExpression } from './ExpressionInputPanel';
+import { HelpSection } from './HelpSection';
+import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { InfluenceGraphViewer } from './InfluenceGraphViewer';
+import { ResultsChart } from './ResultsChart';
+import { ABCSMCTab } from './tabs/ABCSMCTab';
 import { CartoonTab } from './tabs/CartoonTab';
-import { RegulatoryTab } from './tabs/RegulatoryTab';
-import { RulesTab } from './tabs/RulesTab';
-import { VerificationTab } from './tabs/VerificationTab';
+import { ContactMapTab } from './tabs/ContactMapTab';
+
+import { FIMTab } from './tabs/FIMTab';
 import { ParameterScanTab } from './tabs/ParameterScanTab';
+import { RegulatoryTab } from './tabs/RegulatoryTab';
+import { SteadyStateTab } from './tabs/SteadyStateTab';
+import { RulesTab } from './tabs/RulesTab';
+import { TrajectoryExplorerTab } from './tabs/TrajectoryExplorerTab';
+import { VerificationTab } from './tabs/VerificationTab';
 import { ParameterEstimationTab } from './tabs/ParameterEstimationTab';
 import { FluxAnalysisTab } from './tabs/FluxAnalysisTab';
 import { SobolSensitivityTab } from './tabs/SobolSensitivityTab';
 import { ProfileLikelihoodTab } from './tabs/ProfileLikelihoodTab';
-import { ABCSMCTab } from './tabs/ABCSMCTab';
 import { ModelExplorerTab } from './tabs/ModelExplorerTab';
-import { TrajectoryExplorerTab } from './tabs/TrajectoryExplorerTab';
-import { BNGLParser } from '@bngplayground/engine';
-import { ExpressionInputPanel, CustomExpression } from './ExpressionInputPanel';
-import { ComparisonPanel } from './ComparisonPanel';
 import { JupyterExportTab } from './tabs/JupyterExportTab';
 import { NetworkAnalysisTab } from './tabs/NetworkAnalysisTab';
 import { Dropdown, DropdownItem } from './ui/Dropdown';
-import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { EmptyState } from './ui/EmptyState';
-import { HelpSection } from './HelpSection';
 import { SpatialPanel } from './SpatialPanel';
 
 

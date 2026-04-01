@@ -1,5 +1,6 @@
-import type { BNGLModel } from '../types';
 import { generateSBML } from '../src/lib/atomizer';
+
+import type { BNGLModel } from '../types';
 
 /**
  * Robust SBML export using atomizer-ts (libsbmljs)

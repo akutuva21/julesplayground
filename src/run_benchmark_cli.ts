@@ -1,11 +1,15 @@
 
 import * as fs from 'fs';
-import * as path from 'path';
 import { createRequire } from 'module';
+import * as path from 'path';
+
 import { parseBNGLWithANTLR, NetworkGenerator, BNGLParser, GraphCanonicalizer } from '@bngplayground/engine';
-import type { BNGLModel } from '../types';
-import modelsList from './gdat_models.json';
+
 import { collectBnglFilesRecursive, resolveRuleHubRoot } from '../tools/rulehubLocal';
+
+import modelsList from './gdat_models.json';
+
+import type { BNGLModel } from '../types';
 
 // Simple polyfill for worker environment if needed
 if (typeof global !== 'undefined') {

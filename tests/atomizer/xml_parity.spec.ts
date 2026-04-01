@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { convertBNGXmlToBNGL } from '../../src/lib/atomizer/parser/bngXmlParser';
 
 describe('BNG-XML Rate Law Parity', () => {

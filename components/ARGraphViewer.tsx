@@ -1,12 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import fcose from 'cytoscape-fcose';
-import type { AtomRuleGraph } from '../types/visualization';
-import { colorFromName, foregroundForBackground } from '../services/visualization/colorUtils';
+import React, { useEffect, useRef, useState } from 'react';
+
+
 import { exportArGraphToGraphML } from '../services/visualization/arGraphExporter';
+import { colorFromName, foregroundForBackground } from '../services/visualization/colorUtils';
+
 import { Button } from './ui/Button';
 import { LoadingSpinner } from './ui/LoadingSpinner';
+
+import type { AtomRuleGraph } from '../types/visualization';
 
 // Register layout plugins (idempotent)
 cytoscape.use(dagre);

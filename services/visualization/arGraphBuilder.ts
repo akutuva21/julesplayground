@@ -1,10 +1,12 @@
-import type { ReactionRule } from '../../types';
-import type { AtomRuleGraph, AREdge, ARNode } from '../../types/visualization';
+import { getExpressionDependencies } from '@bngplayground/engine';
+
 import {
   extractAtoms,
   parseSpeciesGraphs,
 } from './speciesGraphUtils';
-import { getExpressionDependencies } from '@bngplayground/engine';
+
+import type { ReactionRule } from '../../types';
+import type { AtomRuleGraph, AREdge, ARNode } from '../../types/visualization';
 
 interface AtomRuleGraphOptions {
   getRuleId?: (rule: ReactionRule, index: number) => string;

@@ -2,17 +2,18 @@
 
 console.log('compare_graphml.ts start');
 
+import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { promisify } from 'util';
-import { exec } from 'child_process';
 import { fileURLToPath } from 'url';
-import { parseGraphML } from '../utils/brute_force_viz';
+import { promisify } from 'util';
+
 import { parseBNGL } from '../../services/parseBNGL';
 import { buildAtomRuleGraph } from '../../services/visualization/arGraphBuilder';
 import { exportArGraphToGraphML } from '../../services/visualization/arGraphExporter';
 import { resolveBNG2Paths } from '../../tools/bng2-paths';
 import { findRuleHubModelPath } from '../../tools/rulehubLocal';
+import { parseGraphML } from '../utils/brute_force_viz';
 
 interface GMLNode {
   id: string;

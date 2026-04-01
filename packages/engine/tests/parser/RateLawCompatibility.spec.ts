@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { parseBNGLWithANTLR } from '../../src/parser/BNGLParserWrapper';
 
 function wrapRule(ruleLine: string): string {

@@ -1,10 +1,11 @@
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
-import { VALIDATION_MODEL_NAMES } from '../validation_models';
+
 import { resolveBNG2Paths } from '../bng2-paths';
 import { findRuleHubModelPath, resolveRuleHubRoot } from '../rulehubLocal';
+import { VALIDATION_MODEL_NAMES } from '../validation_models';
 
 const DEFAULT_BNG2_PATH = resolveBNG2Paths().bng2pl ?? '';
 const DEFAULT_PERL_CMD = process.env.PERL_CMD ?? 'perl';

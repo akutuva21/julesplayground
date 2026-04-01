@@ -1,8 +1,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
 import { performance } from 'perf_hooks';
+import { fileURLToPath } from 'url';
+
 import { parseBNGL as parseNew } from '../services/parseBNGL.ts';
 import { parseBNGL as parseOld } from '../services/parseBNGL_Legacy.ts';
 

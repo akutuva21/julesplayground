@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+
 import { parseBNGLWithANTLR, analyzeModelStiffness } from '../packages/engine/src';
 import { validateModel } from '../packages/mcp-server/src/services/engine';
 

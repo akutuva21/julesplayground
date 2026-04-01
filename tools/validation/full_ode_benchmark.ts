@@ -8,16 +8,18 @@
  * 
  * Run with: npx tsx scripts/full_ode_benchmark.ts
  */
+import { execSync } from 'child_process';
 import * as fs from 'fs';
+import { createRequire } from 'module';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
+
 import { parseBNGLWithANTLR } from '@bngplayground/engine';
 import { NetworkGenerator } from '@bngplayground/engine';
 import { BNGLParser } from '@bngplayground/engine';
 import { NautyService } from '@bngplayground/engine';
 import { createSolver } from '@bngplayground/engine';
-import { execSync } from 'child_process';
+
 import { resolveBNG2Paths } from '../bng2-paths';
 import { findRuleHubModelPath, resolveRuleHubRoot } from '../rulehubLocal';
 

@@ -1,10 +1,13 @@
 
-import { describe, it, expect, beforeAll } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
+
+import { describe, it, expect, beforeAll } from 'vitest';
+
 import { parseBNGLStrict } from '@bngplayground/engine';
 import { generateExpandedNetwork } from '@bngplayground/engine';
 import { simulate } from '@bngplayground/engine';
+
 import { BNGLModel } from '../../types';
 
 // Helper to find all BNGL files recursively

@@ -1,10 +1,13 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+
+import { buildRuleOverlays } from '../../services/visualization/buildRuleOverlays';
+import { buildContactMap } from '../../services/visualization/contactMapBuilder';
+import { buildContactMapSnapshots, ContactMapSnapshot } from '../../services/visualization/dynamicContactMap';
 import { BNGLModel, SimulationResults } from '../../types';
 import { ContactMapViewer } from '../ContactMapViewer';
-import { buildContactMap } from '../../services/visualization/contactMapBuilder';
-import { buildRuleOverlays } from '../../services/visualization/buildRuleOverlays';
+
 import type { RuleOverlay } from '../../services/visualization/ruleOverlay';
-import { buildContactMapSnapshots, ContactMapSnapshot } from '../../services/visualization/dynamicContactMap';
+
 
 interface ContactMapTabProps {
     model: BNGLModel | null;

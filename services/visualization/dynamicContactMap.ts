@@ -10,8 +10,9 @@
  *   - speciesData: Record<string, number>[] (rows with "time" + species cols)
  */
 
-import type { SimulationResults, BNGLMoleculeType } from '../../types';
 import { parseSpeciesGraphs, extractBonds } from './speciesGraphUtils';
+
+import type { SimulationResults, BNGLMoleculeType } from '../../types';
 
 /** Snapshot of contact map element annotations at a single time point */
 export interface ContactMapSnapshot {

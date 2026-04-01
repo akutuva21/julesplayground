@@ -1,5 +1,6 @@
 // import { v4 as uuidv4 } from 'uuid';
 const uuidv4 = () => Math.random().toString(36).substring(2, 9);
+import { buildVerbPattern, VERBS_BY_ACTION } from './ontology';
 import {
     BioSentence,
     InteractionSentence,
@@ -8,7 +9,6 @@ import {
     SimulationSentence,
     ActionType
 } from './types';
-import { buildVerbPattern, VERBS_BY_ACTION } from './ontology';
 import { validateInteractionSentence } from './validator';
 
 // ============================================================================

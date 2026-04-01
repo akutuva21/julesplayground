@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { parseBNGL } from '../services/parseBNGL';
+
 import { lintBNGL, formatLintResults } from '../services/bnglLinter';
+import { parseBNGL } from '../services/parseBNGL';
 
 const TEST_MODEL_WITH_ISSUES = `
 # Demo model with various lint-detectable issues

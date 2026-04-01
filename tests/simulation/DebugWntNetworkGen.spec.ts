@@ -1,5 +1,6 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
+
 import { generateExpandedNetwork } from '@bngplayground/engine';
 import { loadEvaluator, _setEvaluatorRefForTests } from '@bngplayground/engine';
 import { SafeExpressionEvaluator } from '@bngplayground/engine';

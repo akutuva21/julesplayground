@@ -1,6 +1,7 @@
-import { SpeciesGraph } from './SpeciesGraph.ts';
-import { GraphMatcher } from './Matcher.ts';
 import { BNGLParser } from './BNGLParser.ts';
+import { GraphMatcher } from './Matcher.ts';
+import { SpeciesGraph } from './SpeciesGraph.ts';
+
 import type { BNGLEnergyPattern } from '../../../types.ts';
 
 /**

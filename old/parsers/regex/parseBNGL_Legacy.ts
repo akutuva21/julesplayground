@@ -8,8 +8,9 @@
  * NOTE: This is the legacy version, even older than parseBNGL.ts.
  */
 
-import type { BNGLModel } from '../../../types.ts';
 import { BNGLParser } from '../../../src/services/graph/core/BNGLParser.ts';
+
+import type { BNGLModel } from '../../../types.ts';
 
 const speciesPattern = /^[A-Za-z0-9_]+(?:\([^)]*\))?(?:\.[A-Za-z0-9_]+(?:\([^)]*\))?)*$/;
 

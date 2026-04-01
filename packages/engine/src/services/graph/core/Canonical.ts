@@ -1,7 +1,7 @@
 // graph/core/Canonical.ts
-import { SpeciesGraph } from './SpeciesGraph.ts';
-import { NautyService } from './NautyService.ts';
 import { Molecule } from './Molecule.ts';
+import { NautyService } from './NautyService.ts';
+import { SpeciesGraph } from './SpeciesGraph.ts';
 
 interface MoleculeInfo {
   originalIndex: number;

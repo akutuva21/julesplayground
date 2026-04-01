@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
+
 import { parseBNGLWithANTLR } from '../packages/engine/src/parser/BNGLParserWrapper';
-import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator';
 import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser';
+import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator';
 
 describe('Energy Modeling and Arrhenius Rate Law', () => {
     it('should parse energy patterns and calculate Arrhenius rates correctly', async () => {

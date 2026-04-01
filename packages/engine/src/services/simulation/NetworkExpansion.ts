@@ -9,16 +9,18 @@
  * Reference: bionetgen/bng2/Perl2/BNGAction.pm (Perl coordination)
  */
 
-import type { BNGLModel, GeneratorProgress } from '../../types';
 import { BNGLParser } from '../graph/core/BNGLParser';
-import { Species } from '../graph/core/Species';
-import { Rxn } from '../graph/core/Rxn';
-import { NetworkGenerator } from '../graph/NetworkGenerator';
 import { GraphCanonicalizer } from '../graph/core/Canonical';
 import { GraphMatcher } from '../graph/core/Matcher';
-import { containsRateLawMacro, evaluateFunctionalRate, expandRateLawMacros } from './ExpressionEvaluator';
+import { Rxn } from '../graph/core/Rxn';
+import { Species } from '../graph/core/Species';
+import { NetworkGenerator } from '../graph/NetworkGenerator';
 import { formatSpeciesList } from '../parity/ParityService';
 import { isFunctionalRateExpr, countPatternMatches, isSpeciesMatch, removeCompartment, getCompartment } from '../parity/PatternMatcher';
+
+import { containsRateLawMacro, evaluateFunctionalRate, expandRateLawMacros } from './ExpressionEvaluator';
+
+import type { BNGLModel, GeneratorProgress } from '../../types';
 
 /**
  * Main entry point for network generation.

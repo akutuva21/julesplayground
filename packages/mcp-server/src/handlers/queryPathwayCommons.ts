@@ -1,8 +1,10 @@
 import { z } from 'zod';
-import type { ToolArgs, ToolResult } from '../types/index.js';
+
 import { createToolResult, parseArgs } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
 import { queryPathwayCommons } from '../services/pathwayCommons/pathwayCommonsService.js';
+
+import type { ToolArgs, ToolResult } from '../types/index.js';
 
 const queryPathwayCommonsArgsSchema = z.object({
     code: z.string().describe('BNGL model code. Molecule names are extracted and queried against Pathway Commons.'),

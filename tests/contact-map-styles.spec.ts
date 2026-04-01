@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { getContactMapStyles } from '../components/ContactMapViewer';
 
 // This suite validates that the Cytoscape styles used by the contact map

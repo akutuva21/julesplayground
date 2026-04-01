@@ -1,4 +1,5 @@
 import { BNGLModel, SimulationResults } from '../types';
+
 import { getSimulationOptionsFromParsedModel } from './simulationOptions';
 
 /**

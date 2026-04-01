@@ -1,20 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ComposedChart, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, ErrorBar, Scatter } from 'recharts';
+
+import { parsePEtab, parsePEtabCombined } from '@bngplayground/engine';
+
+import { bnglService } from '../../services/bnglService';
+import { fitParameters, FitAlgorithm } from '../../services/optimization/paramFitter';
+import { parseExperimentalData, ExperimentalDataPoint } from '../../src/services/data/experimentalData';
+import { CHART_COLORS } from '../../src/utils/chartColors';
+import { formatValue } from '../../src/utils/formatValue';
 import { BNGLModel } from '../../types';
+import { TimeSeriesChart, TimeSeriesSeries } from '../charts/TimeSeriesChart';
 import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
-import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { Card } from '../ui/Card';
 import { DataTable } from '../ui/DataTable';
 import { EmptyState } from '../ui/EmptyState';
+import { Input } from '../ui/Input';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { StatusMessage } from '../ui/StatusMessage';
-import { CHART_COLORS } from '../../src/utils/chartColors';
-import { TimeSeriesChart, TimeSeriesSeries } from '../charts/TimeSeriesChart';
-import { parseExperimentalData, ExperimentalDataPoint } from '../../src/services/data/experimentalData';
-import { fitParameters, FitAlgorithm } from '../../services/optimization/paramFitter';
-import { bnglService } from '../../services/bnglService';
-import { formatValue } from '../../src/utils/formatValue';
-import { parsePEtab, parsePEtabCombined } from '@bngplayground/engine';
+
 
 type PetabFileKey = 'parameters' | 'measurements' | 'conditions' | 'observables' | 'problem';
 

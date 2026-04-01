@@ -1,7 +1,10 @@
 // @ts-nocheck
 import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
+
 import { parseBNGLWithANTLR } from '@bngplayground/engine';
+
 import { findRuleHubModelPath } from '../tests/helpers/rulehub';
 
 function requireRuleHubModel(modelName: string): string {

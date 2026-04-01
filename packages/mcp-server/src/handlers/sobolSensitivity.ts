@@ -1,8 +1,10 @@
 import { sobolSensitivity, simulate, loadEvaluator } from '@bngplayground/engine';
-import type { ToolArgs, ToolResult } from '../types/index.js';
+
 import { sobolSensitivityArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, applyNetworkOptions, parseModelOrThrow, expandModel, buildSimulationOptions, cloneExpandedModel, updateMassActionRates } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+
+import type { ToolArgs, ToolResult } from '../types/index.js';
 
 export async function handleSobolSensitivity(args: ToolArgs): Promise<ToolResult<any>> {
     try {

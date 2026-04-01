@@ -4,18 +4,22 @@
  * Run with: npx vitest run tests/cbngl-volume-scale.spec.ts
  */
 
-import { describe, it, expect } from 'vitest';
-import { existsSync, readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { resolve, dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
+import { existsSync, readFileSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseBNGL } from '../services/parseBNGL';
-import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator';
+
+import { describe, it, expect } from 'vitest';
+
 import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser';
 import { GraphCanonicalizer } from '../packages/engine/src/services/graph/core/Canonical';
+import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator';
+import { parseBNGL } from '../services/parseBNGL';
 import { resolveBNG2Paths, hasBNG2 } from '../tools/bng2-paths';
+
 import { findRuleHubModelPath } from './helpers/rulehub';
+
 import type { BNGLModel } from '../types';
 
 const thisDir = dirname(fileURLToPath(import.meta.url));

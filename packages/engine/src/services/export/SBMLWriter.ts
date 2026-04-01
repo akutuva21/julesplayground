@@ -1,7 +1,8 @@
-import type { BNGLModel } from '../../types';
-import type { ExpandedNetwork } from '../../interfaces/SimulationEngine';
-import { inferReactionSBO, inferRateLawSBO, SBO } from './SBOAnnotations';
 import { generateMIRIAMBlock, suggestMIRIAMAnnotations } from './MIRIAMAnnotation';
+import { inferReactionSBO, inferRateLawSBO, SBO } from './SBOAnnotations';
+
+import type { ExpandedNetwork } from '../../interfaces/SimulationEngine';
+import type { BNGLModel } from '../../types';
 
 export interface SBMLWriterOptions {
   modelName?: string;

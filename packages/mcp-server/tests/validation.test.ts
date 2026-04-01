@@ -1,17 +1,18 @@
 import { describe, it, expect, vi } from 'vitest';
-import { handleParseBngl } from '../src/handlers/parseBngl';
-import { handleGenerateNetwork } from '../src/handlers/generateNetwork';
-import { handleSimulate } from '../src/handlers/simulate';
-import { handleParameterScan } from '../src/handlers/parameterScan';
-import { handleValidateModel } from '../src/handlers/validateModel';
-import { handleGetContactMap } from '../src/handlers/getContactMap';
-import { handleFitParameters } from '../src/handlers/fitParameters';
-import { handleDiagnose } from '../src/handlers/diagnose';
+
 import { handleComposeModel } from '../src/handlers/composeModel';
-import { handleEditModel } from '../src/handlers/editModel';
+import { handleDiagnose } from '../src/handlers/diagnose';
 import { handleDiagnoseModel } from '../src/handlers/diagnoseModel';
+import { handleEditModel } from '../src/handlers/editModel';
 import { handleExplainModel } from '../src/handlers/explainModel';
+import { handleFitParameters } from '../src/handlers/fitParameters';
+import { handleGenerateNetwork } from '../src/handlers/generateNetwork';
+import { handleGetContactMap } from '../src/handlers/getContactMap';
+import { handleParameterScan } from '../src/handlers/parameterScan';
+import { handleParseBngl } from '../src/handlers/parseBngl';
+import { handleSimulate } from '../src/handlers/simulate';
 import { handleSuggestFix } from '../src/handlers/suggestFix';
+import { handleValidateModel } from '../src/handlers/validateModel';
 
 const simpleModel = `
 begin parameters

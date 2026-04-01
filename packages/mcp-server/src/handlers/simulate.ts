@@ -1,8 +1,9 @@
 import { NetworkGenerationLimitError, simulate, loadEvaluator } from '@bngplayground/engine';
-import { ToolArgs, ToolResult } from '../types/index.js';
+
 import { simulateArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, applyNetworkOptions, parseModelOrThrow, buildSimulationOptions, expandModel } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+import { ToolArgs, ToolResult } from '../types/index.js';
 
 export async function handleSimulate(args: ToolArgs): Promise<ToolResult<any>> {
     const parsedArgs = parseArgs('simulate', simulateArgsSchema, args);

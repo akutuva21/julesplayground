@@ -1,5 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { generateExpandedNetwork, BNGLParser, NetworkGenerator, GraphCanonicalizer, SpeciesGraph } from '../src/index';
 
 // Mocks

@@ -1,12 +1,15 @@
 
+import * as fs from 'fs';
+import * as path from 'path';
+
+import { describe, test, expect, beforeAll } from 'vitest';
+
 import { parseBNGLStrict } from '../packages/engine/src/parser/BNGLParserWrapper';
-import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator';
 import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser';
 import { EnergyService } from '../packages/engine/src/services/graph/core/EnergyService';
 import { RxnRule } from '../packages/engine/src/services/graph/core/RxnRule';
-import * as fs from 'fs';
-import * as path from 'path';
-import { describe, test, expect, beforeAll } from 'vitest';
+import { NetworkGenerator } from '../packages/engine/src/services/graph/NetworkGenerator';
+
 import { findRuleHubModelPath } from './helpers/rulehub';
 
 describe('MWC Energy Model Parity', () => {

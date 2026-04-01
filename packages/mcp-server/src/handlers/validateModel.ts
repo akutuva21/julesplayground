@@ -1,8 +1,9 @@
 import { parseBNGLWithANTLR } from '@bngplayground/engine';
-import { ToolArgs, ToolResult, ValidateModelResult } from '../types/index.js';
+
 import { validateModelArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, validateModel } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+import { ToolArgs, ToolResult, ValidateModelResult } from '../types/index.js';
 
 export async function handleValidateModel(args: ToolArgs): Promise<ToolResult<any>> {
     try {

@@ -1,6 +1,7 @@
+import { getExpressionDependencies } from '../../../parser/ExpressionDependencies';
+
 import type { BNGLModel } from '../../../types';
 
-import { getExpressionDependencies } from '../../../parser/ExpressionDependencies';
 
 export enum ValidationErrorType {
   TOTAL_RATE_MODIFIER = 'TOTAL_RATE_MODIFIER',

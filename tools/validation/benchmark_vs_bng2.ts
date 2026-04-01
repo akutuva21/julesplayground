@@ -11,6 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+
 import { parseBNGLWithANTLR } from '@bngplayground/engine';
 
 const __filename = fileURLToPath(import.meta.url);

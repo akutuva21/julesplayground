@@ -1,12 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
 import Editor from '@monaco-editor/react';
-import { BioParser } from '../services/grammar/parser';
+import React, { useEffect, useMemo, useState } from 'react';
+
 import { BNGLGenerator } from '../services/grammar/generator';
+import { BioParser } from '../services/grammar/parser';
+import { INDRAService, type INDRADBQueryParams, type ReviewableStatement } from '../services/indra';
+import { BNGLModel } from '../types';
+
 import { CheatsheetModal } from './CheatsheetModal';
 import { Button } from './ui/Button';
-import { BNGLModel } from '../types';
 import { Card } from './ui/Card';
-import { INDRAService, type INDRADBQueryParams, type ReviewableStatement } from '../services/indra';
+
 
 interface DesignerPanelProps {
   isCollapsed?: boolean;

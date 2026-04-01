@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { handleComposeModel } from '../src/handlers/composeModel';
 
 const originalFetch = global.fetch;

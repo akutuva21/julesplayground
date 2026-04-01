@@ -1,9 +1,11 @@
 import { z } from 'zod';
-import { ToolArgs, ToolResult } from '../types/index.js';
+
 import { composeModelArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs } from '../services/engine.js';
-import { composeModel } from '../services/intelligence.js';
 import { structureError } from '../services/errors.js';
+import { composeModel } from '../services/intelligence.js';
+import { ToolArgs, ToolResult } from '../types/index.js';
+
 import type { ComposeModelArgs } from '../services/intelligence/compose.js';
 
 type ParsedComposeModelArgs = z.infer<typeof composeModelArgsSchema>;

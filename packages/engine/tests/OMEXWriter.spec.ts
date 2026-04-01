@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+
 import { generateOMEX } from '../src/services/export/OMEXWriter';
+
 import type { BNGLModel } from '../src/types';
 
 const mockModel: BNGLModel = {

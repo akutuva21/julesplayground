@@ -1,8 +1,10 @@
 import { generateOMEX } from '@bngplayground/engine';
-import type { ToolArgs, ToolResult } from '../types/index.js';
+
 import { exportOmexArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, parseModelOrThrow } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+
+import type { ToolArgs, ToolResult } from '../types/index.js';
 
 export async function handleExportOmex(args: ToolArgs): Promise<ToolResult<any>> {
     try {

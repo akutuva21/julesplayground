@@ -13,6 +13,7 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
+
 import type { BNGLModel, SimulationResults } from '../types';
 
 export interface ValidationResult {

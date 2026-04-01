@@ -1,7 +1,8 @@
 
 import { useState, useCallback, useRef } from 'react';
-import { BNGLModel, SimulationOptions } from '../../types';
+
 import { bnglService } from '../../services/bnglService';
+import { BNGLModel, SimulationOptions } from '../../types';
 import { perturbParameterOverrides } from '../utils/bnglManipulation';
 
 export interface RobustnessAnalysisResult {

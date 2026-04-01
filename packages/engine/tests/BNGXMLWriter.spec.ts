@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { BNGXMLWriter, parseBNGLStrict as parseBNGL } from '../src/index';
 
 describe('BNGXMLWriter', () => {

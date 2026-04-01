@@ -3,7 +3,9 @@
  * of rule interactions with contact map elements.
  */
 import { describe, it, expect } from 'vitest';
+
 import { buildRuleOverlays } from '../../services/visualization/buildRuleOverlays';
+
 import type { ReactionRule, BNGLMoleculeType } from '../../types';
 
 const molTypes: BNGLMoleculeType[] = [

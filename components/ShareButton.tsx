@@ -1,6 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { Button } from './ui/Button';
+
 import { generateShareUrl } from '../src/utils/shareUrl';
+
+import { Button } from './ui/Button';
 
 interface ShareButtonProps {
     code: string;

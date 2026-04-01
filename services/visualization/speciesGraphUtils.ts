@@ -1,9 +1,11 @@
 import { BNGLParser, type SpeciesGraph } from '@bngplayground/engine';
+
+import { colorFromName, foregroundForBackground } from './colorUtils';
+
 import type {
   VisualizationComponent,
   VisualizationMolecule,
 } from '../../types/visualization';
-import { colorFromName, foregroundForBackground } from './colorUtils';
 
 export interface BondInfo {
   key: string;

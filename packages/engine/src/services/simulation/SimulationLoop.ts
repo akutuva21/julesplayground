@@ -10,18 +10,20 @@
  * Reference: bionetgen/bng2/Network3/src/run_network.cpp
  */
 
+import { getFeatureFlags } from '../../featureFlags';
 import { BNGLModel, BNGLReaction, SimulationOptions, SimulationResults, SimulationPhase, SSAInfluenceData, SSAInfluenceTimeSeries } from '../../types';
-import type { SolverResult } from './ODESolver';
-
+import { SeededRandom } from '../../utils/random';
+import { createReducedSystem, findConservationLaws } from '../analysis/ConservationLaws';
+import { jitCompiler, type JITCompiledFunction, type NetworkByteCode } from '../analysis/JITCompiler';
 import { BNGLParser } from '../graph/core/BNGLParser';
 import { toBngGridTime } from '../parity/ParityService';
 import { countPatternMatches, isSpeciesMatch, isFunctionalRateExpr } from '../parity/PatternMatcher';
-import { clearAllEvaluatorCaches, evaluateFunctionalRate, evaluateExpressionOrParse, loadEvaluator } from './ExpressionEvaluator';
+
 import { analyzeModelStiffness, getOptimalCVODEConfig, detectModelPreset } from './cvodeStiffConfig';
-import { getFeatureFlags } from '../../featureFlags';
-import { jitCompiler, type JITCompiledFunction, type NetworkByteCode } from '../analysis/JITCompiler';
-import { createReducedSystem, findConservationLaws } from '../analysis/ConservationLaws';
-import { SeededRandom } from '../../utils/random';
+import { clearAllEvaluatorCaches, evaluateFunctionalRate, evaluateExpressionOrParse, loadEvaluator } from './ExpressionEvaluator';
+
+import type { SolverResult } from './ODESolver';
+
 // import * as fs from 'node:fs';
 
 interface ConcreteReaction {

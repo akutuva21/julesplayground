@@ -18,8 +18,8 @@
  * rule nodes. We do the same.
  */
 
-import type { RuleOverlay } from './ruleOverlay';
 import type { InfluenceEdge, InfluenceGraphData, InfluenceNode } from './influenceGraph';
+import type { RuleOverlay } from './ruleOverlay';
 import type { ReactionRule } from '../../types';
 
 /**

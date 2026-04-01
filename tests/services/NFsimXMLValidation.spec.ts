@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
+
 import { BNGXMLWriter } from '@bngplayground/engine';
-import { XMLValidator } from '../../services/simulation/XMLValidator';
+
 import { parseBNGL } from '../../services/parseBNGL';
+import { XMLValidator } from '../../services/simulation/XMLValidator';
 
 // Mock the NFsim loader to avoid WASM issues in tests
 vi.mock('../services/simulation/NFsimLoader', () => ({

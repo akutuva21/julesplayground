@@ -1,6 +1,6 @@
-import { SpeciesGraph } from './SpeciesGraph.ts';
 import { Component } from './Component.ts';
 import { countEmbeddingDegeneracy } from './degeneracy.ts';
+import { SpeciesGraph } from './SpeciesGraph.ts';
 
 const adjacencyKey = (molIdx: number, compIdx: number): string => `${molIdx}.${compIdx}`;
 

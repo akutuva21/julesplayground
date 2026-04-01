@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fc from 'fast-check';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { getValidator, resetValidator, NFsimValidator } from '@bngplayground/engine';
 import { NFsimExecutionOptions } from '@bngplayground/engine';
 

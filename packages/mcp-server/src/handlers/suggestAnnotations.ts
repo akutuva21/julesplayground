@@ -1,8 +1,10 @@
 import { resolveAnnotations, createUniProtResolver, parseBNGLWithANTLR } from '@bngplayground/engine';
-import type { ToolArgs, ToolResult } from '../types/index.js';
+
 import { suggestAnnotationsArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, parseModelOrThrow } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+
+import type { ToolArgs, ToolResult } from '../types/index.js';
 
 export async function handleSuggestAnnotations(args: ToolArgs): Promise<ToolResult<any>> {
     try {

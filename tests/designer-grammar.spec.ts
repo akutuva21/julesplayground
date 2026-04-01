@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { BioParser } from '../services/grammar/parser';
-import { BNGLGenerator } from '../services/grammar/generator';
-import { validateInteractionSentence } from '../services/grammar/validator';
 import { composeModelFromStatements } from '../packages/mcp-server/src/services/intelligence/compose';
+import { BNGLGenerator } from '../services/grammar/generator';
+import { BioParser } from '../services/grammar/parser';
+import { validateInteractionSentence } from '../services/grammar/validator';
 
 const SIMPLE_DOC = [
   'Define A with sites b',

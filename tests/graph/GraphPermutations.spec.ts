@@ -1,7 +1,7 @@
 
 import { describe, it, expect } from 'vitest';
-import { BNGLParser } from '@bngplayground/engine';
 
+import { BNGLParser } from '@bngplayground/engine';
 import { GraphCanonicalizer } from '@bngplayground/engine';
 
 // Helper to canonicalize

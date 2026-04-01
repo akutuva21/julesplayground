@@ -1,6 +1,6 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 
 type SimulationMethod = 'ode' | 'ssa' | 'nf';
 

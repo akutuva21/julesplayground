@@ -1,6 +1,8 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
+
 import * as Engine from '@bngplayground/engine';
+
 import { BNGLModel } from '../../types';
 
 describe('NetworkExpansion Error Handling', () => {

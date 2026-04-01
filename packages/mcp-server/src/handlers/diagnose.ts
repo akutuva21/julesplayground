@@ -1,8 +1,9 @@
 import { analyzeModelStiffness, getOptimalCVODEConfig } from '@bngplayground/engine';
-import { ToolArgs, ToolResult } from '../types/index.js';
+
 import { diagnoseArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, parseModelOrThrow, validateModel } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+import { ToolArgs, ToolResult } from '../types/index.js';
 
 export async function handleDiagnose(args: ToolArgs): Promise<ToolResult<any>> {
     try {

@@ -8,14 +8,16 @@
  * 
  * Run with: npx tsx scripts/complete_benchmark.ts
  */
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { parseBNGL } from '../services/parseBNGL.ts';
+
 import { NetworkGenerator } from '@bngplayground/engine';
 import { BNGLParser } from '@bngplayground/engine';
 import { NautyService } from '@bngplayground/engine';
-import { execSync } from 'child_process';
+
+import { parseBNGL } from '../services/parseBNGL.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

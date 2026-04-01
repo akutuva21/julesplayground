@@ -1,4 +1,3 @@
-import { bnglService } from '../../services/bnglService';
 import {
     normalizeFilterNames,
     safeModelName,
@@ -9,9 +8,13 @@ import {
     SimulationResults,
     BNGLModel
 } from '@bngplayground/engine';
-import { downloadCsv } from './download';
-import { loadModelCode } from '../../services/modelLoader';
+
+import { bnglService } from '../../services/bnglService';
 import { loadModelCatalog, getModelCatalogSync } from '../../services/modelCatalog';
+import { loadModelCode } from '../../services/modelLoader';
+
+import { downloadCsv } from './download';
+
 
 const NFSIM_MODELS = new Set<string>();
 

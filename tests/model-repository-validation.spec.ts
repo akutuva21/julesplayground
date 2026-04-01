@@ -1,8 +1,13 @@
-import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, extname, resolve } from 'path';
-import { parseBNGLStrict } from '../packages/engine/src/parser/BNGLParserWrapper';
+
+import { describe, it, expect } from 'vitest';
+
 import { BNGXMLWriter } from '@bngplayground/engine';
+
+import { parseBNGLStrict } from '../packages/engine/src/parser/BNGLParserWrapper';
+
+
 import { collectBnglFiles, resolveRuleHubRoot } from './helpers/rulehub';
 
 const NFSIM_MODELS_DIR = resolve(process.cwd(), 'src', 'wasm', 'nfsim', 'nfsim-src');

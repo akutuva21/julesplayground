@@ -1,8 +1,10 @@
 import { abcSMC, simulate, loadEvaluator, type ABCSMCConfig } from '@bngplayground/engine';
-import type { ToolArgs, ToolResult } from '../types/index.js';
+
 import { bayesianInferenceArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, applyNetworkOptions, parseModelOrThrow, expandModel, buildSimulationOptions, cloneExpandedModel, updateMassActionRates } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+
+import type { ToolArgs, ToolResult } from '../types/index.js';
 
 export async function handleBayesianInference(args: ToolArgs): Promise<ToolResult<any>> {
     try {

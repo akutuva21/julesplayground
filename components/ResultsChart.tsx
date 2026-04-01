@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea } from 'recharts';
-import { BNGLModel, SimulationResults } from '../types';
-import { CHART_COLORS } from '../src/utils/chartColors';
-import { Card } from './ui/Card';
-import { CustomExpression, evaluateExpression } from './ExpressionInputPanel';
+
 import { computeDynamicObservable } from '@bngplayground/engine';
 
-import { Dropdown, DropdownItem } from './ui/Dropdown';
+import { CHART_COLORS } from '../src/utils/chartColors';
+import { downloadCsv } from '../src/utils/download';
+import { BNGLModel, SimulationResults } from '../types';
+
+import { CustomExpression, evaluateExpression } from './ExpressionInputPanel';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { Card } from './ui/Card';
+import { Dropdown, DropdownItem } from './ui/Dropdown';
 
 interface ResultsChartProps {
   results: SimulationResults | null;
@@ -232,7 +235,6 @@ const CustomLegend = (props: any) => {
 };
 
 // Helper: Export chart data as CSV
-import { downloadCsv } from '../src/utils/download';
 
 function exportAsCSV(data: Record<string, any>[], headers: string[], suffixName?: string) {
   const sfx = !suffixName || suffixName === '__default__' || suffixName === MERGED_PHASE_SUFFIX ? '' : `_${suffixName}`;

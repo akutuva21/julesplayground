@@ -5,9 +5,9 @@
  * Uses BioNetGen (BNG2.pl) to simulate the models
  */
 
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
 
 const MODELS_TO_GENERATE = [
   'Kesseler_2013.bngl',

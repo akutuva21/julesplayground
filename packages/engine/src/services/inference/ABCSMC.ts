@@ -6,7 +6,7 @@
  */
 
 import { SeededRandom } from '../../utils/random';
-import { createPrior, PriorDistribution } from './priors';
+
 import {
   weightedPercentile,
   weightedStats,
@@ -15,6 +15,7 @@ import {
   weightedCovariance,
   interpolateAtTime,
 } from './posteriorAnalysis';
+import { createPrior, PriorDistribution } from './priors';
 
 // ── Types ────────────────────────────────────────────────────────────
 

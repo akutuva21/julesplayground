@@ -1,13 +1,16 @@
+import { parseBNGLWithANTLR, formatBNGL } from '@bngplayground/engine';
+
+import { BioParser, BNGLGenerator } from '../../../../../services/grammar/index.js';
+import { INDRAService } from '../indra/indraService.js';
+
 import {
     normalizeWhitespace,
     setSeedSpeciesLine,
     updateParameterLine,
 } from './utils/codeUtils.js';
-import { BioParser, BNGLGenerator } from '../../../../../services/grammar/index.js';
-import type { DefinitionSentence } from '../../../../../services/grammar/index.js';
+
 import type { ComposeSeedSpecies, ComposeAnalysis, ComposeMolecule } from './types.js';
-import { parseBNGLWithANTLR, formatBNGL } from '@bngplayground/engine';
-import { INDRAService } from '../indra/indraService.js';
+import type { DefinitionSentence } from '../../../../../services/grammar/index.js';
 import type { INDRADBQueryParams } from '../indra/types.js';
 
 interface ComposeRuleResult {

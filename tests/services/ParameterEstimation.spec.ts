@@ -1,5 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
+
 import { safeLog, clamp, deriveBounds, priorToLogNormal } from '../../src/services/ParameterEstimation';
 
 describe('ParameterEstimation Math Helpers', () => {

@@ -1,9 +1,12 @@
 import React from 'react';
-import type { BNGLModel } from '../../types';
+
+import { NetworkTracer } from '@bngplayground/engine';
+
+import { DebuggerPanel } from '../debugger/DebuggerPanel';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
-import { DebuggerPanel } from '../debugger/DebuggerPanel';
-import { NetworkTracer } from '@bngplayground/engine';
+
+import type { BNGLModel } from '../../types';
 import type { TraceResult } from '@bngplayground/engine';
 
 const tracer = new NetworkTracer();

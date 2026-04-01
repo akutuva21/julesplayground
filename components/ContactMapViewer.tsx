@@ -1,14 +1,17 @@
-import React, { useEffect, useRef, useState } from 'react';
 import cytoscape from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import fcose from 'cytoscape-fcose';
-import type { ContactMap } from '../types/visualization';
-import type { RuleOverlay } from '../services/visualization/ruleOverlay';
-import { applyCytoscapeRuleOverlay, ruleOverlayStyles } from '../services/visualization/applyCytoscapeRuleOverlay';
-import type { ContactMapSnapshot } from '../services/visualization/dynamicContactMap';
+import React, { useEffect, useRef, useState } from 'react';
+
 import { applyCytoscapeDynamicOverlay, dynamicOverlayStyles } from '../services/visualization/applyCytoscapeDynamicOverlay';
+import { applyCytoscapeRuleOverlay, ruleOverlayStyles } from '../services/visualization/applyCytoscapeRuleOverlay';
+
 import { Button } from './ui/Button';
 import { LoadingSpinner } from './ui/LoadingSpinner';
+
+import type { ContactMapSnapshot } from '../services/visualization/dynamicContactMap';
+import type { RuleOverlay } from '../services/visualization/ruleOverlay';
+import type { ContactMap } from '../types/visualization';
 
 // Register layouts
 cytoscape.use(dagre);

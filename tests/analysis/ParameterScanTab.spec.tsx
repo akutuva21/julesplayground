@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 // DOM-dependent tests run with jsdom via file-level vitest environment.
-import React from 'react';
 import { render, fireEvent, screen, within, waitFor } from '@testing-library/react';
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { ParameterScanTab } from '../../components/tabs/ParameterScanTab';
 import { bnglService } from '../../services/bnglService';
 

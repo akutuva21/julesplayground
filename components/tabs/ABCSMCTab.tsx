@@ -1,13 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { bnglService } from '../../services/bnglService';
-import { ABCSMCProgress, abcSMC } from '@bngplayground/engine';
-import { BNGLModel } from '../../types';
-import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
-import { LoadingSpinner } from '../ui/LoadingSpinner';
-import { Card } from '../ui/Card';
-import { EmptyState } from '../ui/EmptyState';
-import { parseExperimentalData } from '../../src/services/data/experimentalData';
 import {
   LineChart,
   Line,
@@ -17,7 +8,20 @@ import {
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
+
+import { ABCSMCProgress, abcSMC } from '@bngplayground/engine';
+
+import { bnglService } from '../../services/bnglService';
+import { parseExperimentalData } from '../../src/services/data/experimentalData';
 import { formatValue } from '../../src/utils/formatValue';
+import { BNGLModel } from '../../types';
+import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
+import { EmptyState } from '../ui/EmptyState';
+import { Input } from '../ui/Input';
+import { LoadingSpinner } from '../ui/LoadingSpinner';
+
+
 
 interface ABCSMCTabProps {
   model: BNGLModel | null;

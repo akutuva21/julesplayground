@@ -1,6 +1,6 @@
 // graph/core/RxnRule.ts
-import { SpeciesGraph } from './SpeciesGraph.ts';
 import { Molecule } from './Molecule.ts';
+import { SpeciesGraph } from './SpeciesGraph.ts';
 
 export class RxnRule {
   name: string;

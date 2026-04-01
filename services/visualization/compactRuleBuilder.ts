@@ -1,3 +1,10 @@
+import {
+  convertSpeciesGraph,
+  extractBonds,
+  parseSpeciesGraphs,
+  detectStateChanges,
+} from './speciesGraphUtils';
+
 import type { ReactionRule } from '../../types';
 import type {
   CompactRule,
@@ -5,12 +12,6 @@ import type {
   VisualizationMolecule,
 } from '../../types/visualization';
 import type { SpeciesGraph } from '@bngplayground/engine';
-import {
-  convertSpeciesGraph,
-  extractBonds,
-  parseSpeciesGraphs,
-  detectStateChanges,
-} from './speciesGraphUtils';
 
 const collectMoleculeCounts = (graphs: SpeciesGraph[]): Map<string, number> => {
   const counts = new Map<string, number>();

@@ -12,8 +12,9 @@
  * a deprecation warning at runtime.
  */
 
-import type { BNGLModel } from '../types.ts';
 import { BNGLParser } from '@bngplayground/engine';
+
+import type { BNGLModel } from '../types.ts';
 
 // Runtime deprecation warning - fires once on first use
 let _deprecationWarned = false;

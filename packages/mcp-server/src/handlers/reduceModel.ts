@@ -1,9 +1,11 @@
 import { fitParameters, pruneModel, simulate, loadEvaluator } from '@bngplayground/engine';
-import type { ParamBounds, ExperimentalDataPoint, RegularizationConfig } from '@bngplayground/engine';
-import type { ToolArgs, ToolResult } from '../types/index.js';
+
 import { reduceModelArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, parseModelOrThrow, expandModel, cloneExpandedModel, updateMassActionRates } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+
+import type { ToolArgs, ToolResult } from '../types/index.js';
+import type { ParamBounds, ExperimentalDataPoint, RegularizationConfig } from '@bngplayground/engine';
 
 export async function handleReduceModel(args: ToolArgs): Promise<ToolResult<any>> {
     try {

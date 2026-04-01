@@ -5,13 +5,14 @@
  * to catch common errors before simulation.
  */
 
+import { BNGLParser } from '@bngplayground/engine';
+
 import type {
   BNGLModel,
   BNGLMoleculeType,
   ValidationSeverity,
   EditorMarker,
 } from '../types.ts';
-import { BNGLParser } from '@bngplayground/engine';
 
 // ============================================================================
 // Types

@@ -1,6 +1,7 @@
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+
 import { Atomizer } from '../../src/lib/atomizer/index.ts';
 import { resolveBNG2Paths } from '../../tools/bng2-paths';
 import { listRuleHubExampleModelFiles } from '../../tools/rulehubLocal';

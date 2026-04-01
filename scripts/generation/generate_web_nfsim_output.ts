@@ -1,9 +1,11 @@
 
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseBNGL } from '../services/parseBNGL';
+
 import { BNGXMLWriter } from '@bngplayground/engine';
-import { execSync } from 'child_process';
+
+import { parseBNGL } from '../services/parseBNGL';
 
 function resolveRuleHubRoot(): string {
     const fromEnv = process.env.RULEHUB_ROOT?.trim();

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { generateSBML } from '../src/lib/atomizer';
 
 describe('SBML writer seed concentration resolution', () => {

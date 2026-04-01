@@ -5,9 +5,11 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
 import { NetworkGenerator } from '@bngplayground/engine';
 import { BNGLParser } from '@bngplayground/engine';
 import { GraphCanonicalizer } from '@bngplayground/engine';
+
 import { parseBNGL } from '../../services/parseBNGL.ts';
 import { findRuleHubModelPath, getRuleHubManifestBnglPaths } from '../rulehubLocal';
 

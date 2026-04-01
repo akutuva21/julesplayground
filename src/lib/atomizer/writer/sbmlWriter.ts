@@ -3,10 +3,11 @@
  * Generates SBML Level 3 Version 2 model strings from BNGL model structures
  */
 
-import { BNGLModel, BNGLReaction } from '../config/types';
-import { logger } from '../utils/helpers';
-import { getLibSBMLInstance } from '../parser/sbmlParser';
 import jsep from 'jsep';
+
+import { BNGLModel, BNGLReaction } from '../config/types';
+import { getLibSBMLInstance } from '../parser/sbmlParser';
+import { logger } from '../utils/helpers';
 
 const ASSIGN_RULE_META_PREFIX = '__assign_rule__';
 const RATE_RULE_META_PREFIX = '__rate_rule__';

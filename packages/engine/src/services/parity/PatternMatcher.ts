@@ -9,12 +9,12 @@
  * to handle edge cases in web-parsed BNGL.
  */
 
+import { registerCacheClearCallback } from '../../featureFlags';
+import { getExpressionDependencies } from '../../parser/ExpressionDependencies';
 import { BNGLParser } from '../graph/core/BNGLParser';
 import { GraphCanonicalizer } from '../graph/core/Canonical';
-import { getExpressionDependencies } from '../../parser/ExpressionDependencies';
-import { GraphMatcher } from '../graph/core/Matcher';
 import { countEmbeddingDegeneracy } from '../graph/core/degeneracy';
-import { registerCacheClearCallback } from '../../featureFlags';
+import { GraphMatcher } from '../graph/core/Matcher';
 
 const factorial = (n: number): number => {
     if (!Number.isFinite(n) || n <= 1) return 1;

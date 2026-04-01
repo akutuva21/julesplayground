@@ -5,6 +5,7 @@
  */
 
 import { DOMParser } from '@xmldom/xmldom';
+
 import { logger } from '../utils/helpers';
 
 function escapeName(s: string): string {

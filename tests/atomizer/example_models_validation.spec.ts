@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, copyFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, basename, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { resolveBNG2Paths } from '../../tools/bng2-paths';
+
+import { describe, it, expect } from 'vitest';
+
 import { parseBNGL } from '../../services/parseBNGL';
+import { resolveBNG2Paths } from '../../tools/bng2-paths';
 
 const DEFAULT_BNG2_PATH = resolveBNG2Paths().bng2pl ?? '';
 const DEFAULT_PERL_CMD = process.env.PERL_CMD ?? 'perl';

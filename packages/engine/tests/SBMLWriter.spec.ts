@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
+
 import { SBMLWriter } from '../src/services/export/SBMLWriter';
-import type { BNGLModel } from '../src/types';
+
 import type { ExpandedNetwork } from '../src/interfaces/SimulationEngine';
+import type { BNGLModel } from '../src/types';
 
 describe('SBMLWriter', () => {
   const mockModel: BNGLModel = {

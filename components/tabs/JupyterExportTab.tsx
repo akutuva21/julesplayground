@@ -6,9 +6,10 @@
  */
 
 import React, { useState } from 'react';
-import { BNGLModel } from '../../types';
-import { generateJupyterNotebookContent } from '../../src/utils/jupyterExport';
+
 import { downloadTextFile } from '../../src/utils/download';
+import { generateJupyterNotebookContent } from '../../src/utils/jupyterExport';
+import { BNGLModel } from '../../types';
 import { Card } from '../ui/Card';
 
 interface JupyterExportTabProps {

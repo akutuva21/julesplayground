@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { projectedNM } from '../src/services/optimization/projectedNM';
 
 const sphere = async (x: number[]): Promise<number> =>

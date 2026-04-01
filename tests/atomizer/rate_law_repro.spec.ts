@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
+
 import { evaluateFunctionalRate, expandRateLawMacros, _setEvaluatorRefForTests } from '@bngplayground/engine';
 import { SafeExpressionEvaluator } from '@bngplayground/engine';
 

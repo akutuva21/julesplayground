@@ -1,8 +1,9 @@
 import { ParamBounds, ExperimentalDataPoint, fitParameters, simulate, loadEvaluator } from '@bngplayground/engine';
-import { ToolArgs, ToolResult } from '../types/index.js';
+
 import { fitParametersArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, applyNetworkOptions, parseModelOrThrow, expandModel, cloneExpandedModel, updateMassActionRates } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+import { ToolArgs, ToolResult } from '../types/index.js';
 
 export async function handleFitParameters(args: ToolArgs): Promise<ToolResult<any>> {
     try {

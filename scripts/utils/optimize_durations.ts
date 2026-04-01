@@ -1,8 +1,8 @@
 
-import fs from 'fs';
-import path from 'path';
 import { execSync } from 'child_process';
+import fs from 'fs';
 import os from 'os';
+import path from 'path';
 
 function resolveRuleHubRoot(projectRoot: string): string | null {
     const fromEnv = process.env.RULEHUB_ROOT?.trim();

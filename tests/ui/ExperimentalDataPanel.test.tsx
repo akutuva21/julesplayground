@@ -1,8 +1,9 @@
 
 // @vitest-environment jsdom
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { ExperimentalDataPanel } from '../../components/charts/ExperimentalDataPanel';
 import { vi, describe, it, expect } from 'vitest';
+
+import { ExperimentalDataPanel } from '../../components/charts/ExperimentalDataPanel';
 import * as experimentalDataUtils from '../../src/utils/experimentalData';
 
 // Mock the util

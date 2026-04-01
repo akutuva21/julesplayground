@@ -1,5 +1,5 @@
-import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react';
+import React from 'react';
 import { vi, describe, it, expect } from 'vitest';
 
 // Mock ExampleGalleryModal and SemanticSearchInput to avoid pulling in heavy services during unit tests

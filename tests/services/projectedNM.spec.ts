@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+
 import { projectedNM } from '@bngplayground/engine';
 
 // ---------------------------------------------------------------------------

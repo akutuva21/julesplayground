@@ -1,5 +1,6 @@
-import type { BNGLModel, SimulationResults } from '../../../types';
 import { parseGdat, type GdatData } from '../GdatParser';
+
+import type { BNGLModel, SimulationResults } from '../../../types';
 
 const normalizeHeaders = (headers: string[], model: BNGLModel): string[] => {
   if (!headers.includes('time')) return ['time', ...headers];

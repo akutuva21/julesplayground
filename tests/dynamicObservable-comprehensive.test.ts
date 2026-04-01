@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { computeDynamicObservable, validateObservablePattern } from '../packages/engine/src/utils/dynamicObservable';
 import { SimulationResults } from '../types';
 

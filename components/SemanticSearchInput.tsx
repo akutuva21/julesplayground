@@ -4,8 +4,10 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+
 import { SearchIcon } from './icons/SearchIcon';
 import { SparklesIcon } from './icons/SparklesIcon';
+
 import { semanticSearch, preloadEmbeddingModel, SearchResult } from '@/services/semanticSearch';
 
 interface SemanticSearchInputProps {

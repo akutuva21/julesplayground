@@ -11,7 +11,9 @@ import {
   ResponsiveContainer,
   ReferenceArea,
 } from 'recharts';
+
 import { formatValue } from '../../src/utils/formatValue';
+
 import { InlineLegend } from './InteractiveLegend';
 
 export interface TimeSeriesSeries {

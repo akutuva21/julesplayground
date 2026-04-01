@@ -1,9 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseBNGL } from '../services/parseBNGL.ts';
+
 import { generateExpandedNetwork } from '@bngplayground/engine';
 import { simulate } from '@bngplayground/engine';
+
 import { getSimulationOptionsFromParsedModel } from '../packages/engine/src/utils/simulationOptions.ts';
+import { parseBNGL } from '../services/parseBNGL.ts';
 
 const ROOT = process.cwd();
 const MODELS: Array<{ id: string; bngl: string; refGdat: string; refNet: string; refCdat?: string }> = [

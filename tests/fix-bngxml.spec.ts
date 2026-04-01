@@ -1,8 +1,11 @@
 
-import { describe, it, expect } from 'vitest';
-import { BNGXMLWriter } from '@bngplayground/engine';
-import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser';
 import * as fs from 'fs';
+
+import { describe, it, expect } from 'vitest';
+
+import { BNGXMLWriter } from '@bngplayground/engine';
+
+import { BNGLParser } from '../packages/engine/src/services/graph/core/BNGLParser';
 
 describe('BNGXMLWriter Fixes', () => {
     it('should generate valid XML for degradation rules with dead molecule', () => {

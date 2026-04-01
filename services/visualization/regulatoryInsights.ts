@@ -1,5 +1,6 @@
-import type { BNGLModel } from '../../types';
 import { parseSpeciesGraphs, extractAtoms } from './speciesGraphUtils';
+
+import type { BNGLModel } from '../../types';
 
 const getRuleId = (rule: BNGLModel['reactionRules'][number], index: number): string => {
   return rule.name ?? `rule_${index + 1}`;

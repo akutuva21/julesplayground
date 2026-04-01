@@ -1,10 +1,11 @@
-import type { BNGLModel, BNGLObservable } from '../../types.ts';
-import { Species } from './core/Species.ts';
-import { Rxn } from './core/Rxn.ts';
 import { BNGLParser } from './core/BNGLParser.ts';
-import { GraphMatcher } from './core/Matcher.ts';
 import { GraphCanonicalizer } from './core/Canonical.ts';
 import { countEmbeddingDegeneracy } from './core/degeneracy.ts';
+import { GraphMatcher } from './core/Matcher.ts';
+import { Rxn } from './core/Rxn.ts';
+import { Species } from './core/Species.ts';
+
+import type { BNGLModel, BNGLObservable } from '../../types.ts';
 
 export class NetworkExporter {
   private static requiresGeneratedFunction(expr: string, model: BNGLModel): boolean {

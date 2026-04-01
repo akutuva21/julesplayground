@@ -5,10 +5,12 @@
  *   Task 3: Hybrid Model Generation
  */
 import { describe, it, expect } from 'vitest';
+
 import { parseBNGLWithANTLR } from '../src/parser/BNGLParserWrapper';
-import { SeededRandom } from '../src/utils/random';
-import { PLASimulator, simulatePLA } from '../src/services/simulation/PLASimulator';
 import { HybridModelGenerator, generateHybridModel } from '../src/services/simulation/HybridModelGenerator';
+import { PLASimulator, simulatePLA } from '../src/services/simulation/PLASimulator';
+import { SeededRandom } from '../src/utils/random';
+
 import type { BNGLModel } from '../src/types';
 
 // ================================================================

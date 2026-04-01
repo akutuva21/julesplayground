@@ -1,5 +1,6 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
+
 import { evaluateFunctionalRate, _setEvaluatorRefForTests, SafeExpressionEvaluator, setFeatureFlags } from '@bngplayground/engine';
 
 describe('ExpressionEvaluation', () => {

@@ -1,7 +1,11 @@
-import { parseModelOrThrow, validateModel } from '../../services/engine.js';
 import { formatBNGL } from '@bngplayground/engine';
-import type { SuggestedFix } from './types.js';
+
+import { parseModelOrThrow, validateModel } from '../../services/engine.js';
+
 import { ensureModelEnvelope, insertIntoBlock } from './utils/codeUtils.js';
+
+import type { SuggestedFix } from './types.js';
+
 
 export function suggestModelFixes(code: string, includeAutoCorrectedCode: boolean): {
     fixes: SuggestedFix[];

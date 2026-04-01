@@ -1,6 +1,8 @@
 import React from 'react';
-import type { NetworkTrace } from '@bngplayground/engine';
+
 import { Card } from '../ui/Card';
+
+import type { NetworkTrace } from '@bngplayground/engine';
 
 interface TimelineViewerProps {
   trace: NetworkTrace;

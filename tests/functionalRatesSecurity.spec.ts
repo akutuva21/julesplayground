@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { describe, it, expect, beforeEach } from 'vitest';
+
 import { evaluateFunctionalRate, getCompiledRateFunction, getFeatureFlags, setFeatureFlags } from '@bngplayground/engine';
 
 describe('Functional Rates Security', () => {

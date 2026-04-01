@@ -1,8 +1,10 @@
 
-import { runNFsimSimulation } from '@bngplayground/engine';
-import { parseBNGL } from '../services/parseBNGL';
 import * as fs from 'fs';
 import * as path from 'path';
+
+import { runNFsimSimulation } from '@bngplayground/engine';
+
+import { parseBNGL } from '../services/parseBNGL';
 
 function resolveRuleHubRoot(): string {
     const fromEnv = process.env.RULEHUB_ROOT?.trim();

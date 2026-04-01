@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { createPrior } from '../src/services/inference/priors';
 import { SeededRandom } from '../src/utils/random';
 

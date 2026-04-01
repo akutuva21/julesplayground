@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fc from 'fast-check';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { 
   NFsimFunctionCompatibility, 
   getFunctionCompatibilityChecker, 
@@ -8,6 +9,7 @@ import {
   CompatibilityAnalysis,
   ReplacementSuggestion
 } from '@bngplayground/engine';
+
 import { BNGLModel, BNGLFunction } from '../../types';
 
 describe('NFsim Function Compatibility Validation', () => {

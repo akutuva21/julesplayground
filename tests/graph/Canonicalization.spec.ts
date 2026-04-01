@@ -1,5 +1,6 @@
 
 import { describe, it, expect } from 'vitest';
+
 import { BNGLParser } from '@bngplayground/engine'; // Adjust path
 // Adjust path if needed
 // Or use canonical labeling directly if ParityService not available in test scope easily

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { SimulationResults } from '../../types';
+
 import { getSelectedSimulationSlice, reconcileVisibleSeries } from '../../components/ResultsChart';
+
+import type { SimulationResults } from '../../types';
 
 describe('ResultsChart helpers', () => {
   it('uses the selected suffix slice instead of the default dataset', () => {

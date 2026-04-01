@@ -1,17 +1,6 @@
 /// <reference lib="webworker" />
 import './workerPolyfills';
 
-import type {
-  BNGLModel,
-  SimulationOptions,
-  WorkerRequest,
-  WorkerResponse,
-  SerializedWorkerError,
-  NetworkGeneratorOptions,
-  SimulationResults,
-  SharedSimulationOutputDescriptor,
-  NetworkAnalysisPayload,
-} from '../types';
 
 import {
   generateExpandedNetwork as generateExpandedNetworkService,
@@ -25,9 +14,23 @@ import {
   parseBNGLWithANTLR,
   CVODESolver
 } from '@bngplayground/engine';
-import type { NFsimSimulationOptions } from '@bngplayground/engine';
+
 import { Atomizer } from '../src/lib/atomizer';
+
 import { analyseGraph } from './igraphLoader';
+
+import type {
+  BNGLModel,
+  SimulationOptions,
+  WorkerRequest,
+  WorkerResponse,
+  SerializedWorkerError,
+  NetworkGeneratorOptions,
+  SimulationResults,
+  SharedSimulationOutputDescriptor,
+  NetworkAnalysisPayload,
+} from '../types';
+import type { NFsimSimulationOptions } from '@bngplayground/engine';
 
 // Wire up the CVODE factory with a lazy dynamic import so:
 //   1. The worker doesn't crash at init time — a static import of the Emscripten CJS file

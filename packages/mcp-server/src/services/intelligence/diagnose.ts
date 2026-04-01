@@ -8,6 +8,9 @@ import {
     sobolSensitivity,
     loadEvaluator,
 } from '@bngplayground/engine';
+
+import { handleGetContactMap } from '../../handlers/getContactMap.js';
+import { handleSimulate } from '../../handlers/simulate.js';
 import {
     parseModelOrThrow,
     validateModel,
@@ -17,28 +20,29 @@ import {
     buildSimulationOptions,
     findUnreachableRules,
 } from '../../services/engine.js';
-import { handleSimulate } from '../../handlers/simulate.js';
-import { handleGetContactMap } from '../../handlers/getContactMap.js';
+import { queryPathwayCommons } from '../pathwayCommons/pathwayCommonsService.js';
+
 import {
-    buildMoleculeGraph,
-    findShortestPath,
-    extractMoleculeNames,
-} from './utils/graphUtils.js';
+    detectDiminishingReturns,
+    detectCrosstalk,
+    assessSensitivityConvergence,
+} from './utils/analysisUtils.js';
+import { normalizeWhitespace } from './utils/codeUtils.js';
 import {
     reachedSteadyState,
     detectOscillation,
     detectSurprises,
 } from './utils/diagnosticsUtils.js';
 import {
-    detectDiminishingReturns,
-    detectCrosstalk,
-    assessSensitivityConvergence,
-} from './utils/analysisUtils.js';
+    buildMoleculeGraph,
+    findShortestPath,
+    extractMoleculeNames,
+} from './utils/graphUtils.js';
+import { checkPlausibility, detectCompilationSurprise } from './utils/plausibilityUtils.js';
 import { inferConservationHints, detectIrreversibleSteps } from './utils/ruleAnalysisUtils.js';
 import { generateThreeRegisters } from './utils/summaryUtils.js';
-import { checkPlausibility, detectCompilationSurprise } from './utils/plausibilityUtils.js';
-import { normalizeWhitespace } from './utils/codeUtils.js';
-import { queryPathwayCommons } from '../pathwayCommons/pathwayCommonsService.js';
+
+
 import type { StiffnessResult, DynamicsResult, ProfileLikelihoodResult } from './types.js';
 
 export async function diagnoseModelDeep(args: {

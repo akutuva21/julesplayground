@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+
 import { profileLikelihood } from '../src/services/analysis/ProfileLikelihood';
 
 describe('profileLikelihood', () => {
