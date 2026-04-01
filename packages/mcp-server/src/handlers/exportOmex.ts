@@ -1,3 +1,11 @@
+/**
+ * @internal
+ * This handler is not registered as a standalone MCP tool.
+ * It is called internally by a unified surface.
+ *
+ * See: §6.16 of bngplayground-plan-v4_5.md
+ */
+
 import { generateOMEX } from '@bngplayground/engine';
 import type { ToolArgs, ToolResult } from '../types/index.js';
 import { exportOmexArgsSchema } from '../schemas/index.js';

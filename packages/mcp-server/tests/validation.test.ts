@@ -11,7 +11,6 @@ import { handleComposeModel } from '../src/handlers/composeModel';
 import { handleEditModel } from '../src/handlers/editModel';
 import { handleDiagnoseModel } from '../src/handlers/diagnoseModel';
 import { handleExplainModel } from '../src/handlers/explainModel';
-import { handleSuggestFix } from '../src/handlers/suggestFix';
 
 const simpleModel = `
 begin parameters
@@ -305,15 +304,5 @@ describe('MCP Server Tools Functional Validation', () => {
         expect(result.structuredContent.summary).toContain('Model contains');
         expect(Array.isArray(result.structuredContent.sections)).toBe(true);
         expect(result.structuredContent.sections.length).toBeGreaterThan(0);
-    });
-
-    it('should suggest fixes and optional autocorrected code (suggest_fix)', async () => {
-        const modelWithoutObservables = simpleModel.replace(/begin observables[\s\S]*?end observables/m, 'begin observables\nend observables');
-        const result = await handleSuggestFix({
-            code: modelWithoutObservables,
-            include_auto_corrected_code: true,
-        });
-        expect(result.structuredContent.fixes.length).toBeGreaterThan(0);
-        expect(result.structuredContent.auto_corrected_code).toContain('begin observables');
     });
 });

@@ -88,8 +88,3 @@ export const explainModelArgsSchema = z.object({
     code: z.string(),
     include_crux: z.boolean().optional(),
 }).strict();
-
-export const suggestFixArgsSchema = z.object({
-    code: z.string(),
-    include_auto_corrected_code: z.boolean().optional(),
-}).strict();

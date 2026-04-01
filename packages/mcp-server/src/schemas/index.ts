@@ -23,7 +23,6 @@ export {
     editModelArgsSchema,
     diagnoseModelArgsSchema,
     explainModelArgsSchema,
-    suggestFixArgsSchema,
 } from './intelligence.js';
 
 export {

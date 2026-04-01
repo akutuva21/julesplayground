@@ -1,3 +1,11 @@
+/**
+ * @internal
+ * This handler is not registered as a standalone MCP tool.
+ * It is called internally by a unified surface.
+ *
+ * See: §6.16 of bngplayground-plan-v4_5.md
+ */
+
 import { ToolArgs, ToolResult } from '../types/index.js';
 import { z } from 'zod';
 import { createToolResult, parseArgs, parseModelOrThrow, validateModel, findUnreachableRules } from '../services/engine.js';
