@@ -143,6 +143,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
     const resolvedParams: Record<string, number> = {};
 
     for (let pass = 0; pass < maxPasses; pass++) {
+      let anyResolvedThisPass = false;
       let allResolved = true;
       for (const [name, expr] of Object.entries(this.paramExpressions)) {
         if (name in resolvedParams) continue;
@@ -153,11 +154,12 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
 
         if (!isNaN(val)) {
           resolvedParams[name] = val;
+          anyResolvedThisPass = true;
         } else {
           allResolved = false;
         }
       }
-      if (allResolved) break;
+      if (allResolved || !anyResolvedThisPass) break;
     }
 
     // Assign resolved values to model
