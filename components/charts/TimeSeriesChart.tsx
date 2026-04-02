@@ -163,7 +163,11 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
       style={{ height: height || '100%' }}
     >
       {/* Main Chart Area */}
-      <div className="flex-1 min-h-[160px] relative">
+      <div
+        className="flex-1 min-h-[160px] relative"
+        role="img"
+        aria-label={`Time series chart showing ${series.map(s => s.name).join(', ')} over time`}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart 
             data={plotData} 
