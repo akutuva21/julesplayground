@@ -278,7 +278,7 @@ export const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
             </Dropdown>
           </div>
 
-        </nav>
+        </div>
 
         {/* Network View Toggle - only visible on Network tab */}
         {activeTab === 1 && (
