@@ -1,0 +1,11 @@
+--- packages/engine/tests/HybridModelGenerator.bench.ts
++++ packages/engine/tests/HybridModelGenerator.bench.ts
+@@ -37,6 +37,10 @@
+   bench('generate', async () => {
+     await HybridModelGenerator.generate(model);
+   });
++
++  bench('partitionRules', () => {
++    HybridModelGenerator.partitionRules(model, popTypes.map(pt => ({ moleculeName: pt.name, treatAsPopulation: true })));
++  });
+ });

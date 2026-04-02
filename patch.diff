@@ -1,0 +1,29 @@
+--- packages/engine/src/services/simulation/HybridModelGenerator.ts
++++ packages/engine/src/services/simulation/HybridModelGenerator.ts
+@@ -148,11 +148,18 @@
+       components: [...mt.components],
+     }));
+
++    const existingMoleculeNames = new Set(moleculeTypes.map(mt => mt.name));
++    const seenPopTypes = new Set<string>();
++
+     // Add population types as new molecule types
+     for (const pt of popTypes) {
+-      const existingIdx = moleculeTypes.findIndex(mt => mt.name === pt.name);
+-      if (existingIdx >= 0) {
+-        throw new Error(`PopulationType ${pt.name} clashes with MoleculeType of the same name.`);
++      if (seenPopTypes.has(pt.name)) {
++        throw new Error(`PopulationType ${pt.name} clashes with another PopulationType of the same name.`);
++      }
++      seenPopTypes.add(pt.name);
++
++      if (existingMoleculeNames.has(pt.name)) {
++        throw new Error(`PopulationType ${pt.name} clashes with MoleculeType of the same name.`);
+       }
+       moleculeTypes.push({
+         name: pt.name,
+         components: pt.components ?? [],
+         comment: 'population type',
+       });
++      existingMoleculeNames.add(pt.name);
+     }

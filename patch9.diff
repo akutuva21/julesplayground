@@ -1,0 +1,26 @@
+--- packages/engine/src/services/simulation/HybridModelGenerator.ts
++++ packages/engine/src/services/simulation/HybridModelGenerator.ts
+@@ -233,20 +233,12 @@
+       // Add population matches to observable pattern
+-      // Original pattern might be an exact population mapping pattern, or include it.
+-      // To optimize the O(N*M) loop here, if obs.pattern is long or popMaps is large,
+-      // We will check isSimplePatternMatch inside. We don't have a perfect O(1) string match
+-      // for all patterns, but we can do a quick substring filter before full match.
+       const addedPatterns: string[] = [];
+       for (const pm of popMaps) {
+         const simpleBase = pm.pattern.split('(')[0];
+-        // Fast rejection: If obs.pattern doesn't contain the base molecule name,
+-        // it can't possibly match the full pattern
+         if (obs.pattern.includes(simpleBase)) {
+-           // The original logic checked `isSimplePatternMatch(pm.pattern, obs.pattern) || obs.pattern.includes(pm.pattern.split('(')[0])`
+-           // Which means `obs.pattern.includes(simpleBase)` is actually strictly required
+-           // for the second part, and highly likely for the first part.
+-           // Wait, if it's an OR, and the right side is `obs.pattern.includes(simpleBase)`,
+-           // we just evaluate that!
+-           // If it doesn't include it, we don't need to check `isSimplePatternMatch`.
+-           addedPatterns.push(pm.populationName + '()');
++          addedPatterns.push(pm.populationName + '()');
++        } else if (isSimplePatternMatch(pm.pattern, obs.pattern)) {
++          addedPatterns.push(pm.populationName + '()');
+         }
+       }

@@ -1,0 +1,15 @@
+--- packages/engine/src/services/simulation/HybridModelGenerator.ts
++++ packages/engine/src/services/simulation/HybridModelGenerator.ts
+@@ -398,12 +398,8 @@
+           if (populationMolecules.has(molName)) {
+             hasPopulation = true;
+-          }
+-        }
+-
+-        for (const molName of moleculeNames) {
+-          if (!populationMolecules.has(molName)) {
++          } else {
+             hasParticle = true;
+           }
+         }
+       }
