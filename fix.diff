@@ -1,0 +1,20 @@
+--- packages/engine/tests/HybridModelGenerator.bench.ts
++++ packages/engine/tests/HybridModelGenerator.bench.ts
+@@ -21,7 +21,8 @@
+       name: `r_${i}`,
+       reactants: [`Molecule_1()`, `PopType_${i}()`],
+       products: [`Molecule_2()`],
+-      rate: '1'
++      rate: '1',
++      isBidirectional: false
+     });
+   }
+
+@@ -43,7 +44,3 @@
+     HybridModelGenerator.partitionRules(model, popTypes.map(pt => ({ moleculeName: pt.name, treatAsPopulation: true })));
+   });
+ });
+-
+-  bench('partitionRules', () => {
+-    HybridModelGenerator.partitionRules(model, popTypes.map(pt => ({ moleculeName: pt.name, treatAsPopulation: true })));
+-  });

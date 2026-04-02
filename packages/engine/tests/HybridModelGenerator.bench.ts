@@ -23,7 +23,8 @@ describe('HybridModelGenerator performance', () => {
       name: `r_${i}`,
       reactants: [`Molecule_1()`, `PopType_${i}()`],
       products: [`Molecule_2()`],
-      rate: '1'
+      rate: '1',
+      isBidirectional: false
     });
   }
 
@@ -47,7 +48,3 @@ describe('HybridModelGenerator performance', () => {
     HybridModelGenerator.partitionRules(model, popTypes.map(pt => ({ moleculeName: pt.name, treatAsPopulation: true })));
   });
 });
-
-  bench('partitionRules', () => {
-    HybridModelGenerator.partitionRules(model, popTypes.map(pt => ({ moleculeName: pt.name, treatAsPopulation: true })));
-  });

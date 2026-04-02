@@ -42,6 +42,10 @@ describe('HybridModelGenerator performance', () => {
   bench('generate', async () => {
     await HybridModelGenerator.generate(model);
   });
+
+  bench('partitionRules', () => {
+    HybridModelGenerator.partitionRules(model, popTypes.map(pt => ({ moleculeName: pt.name, treatAsPopulation: true })));
+  });
 });
 
   bench('partitionRules', () => {
