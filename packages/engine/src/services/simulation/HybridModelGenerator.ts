@@ -395,7 +395,17 @@ export class HybridModelGenerator {
 
       for (const pattern of allPatterns) {
         // Extract molecule names from pattern
-        const moleculeNames = pattern.match(/\b[A-Z][A-Za-z0-9_]*\b/g) || [];
+        // 1. Strip component groups to avoid misidentifying uppercase states or components
+        // 2. Remove compartment prefixes (e.g., @cell:)
+        // 3. Split by '.' to handle multi-molecule patterns
+        const strippedPattern = pattern.replace(/\(.*?\)/g, '');
+        const moleculeNames = strippedPattern.split('.')
+          .map(part => {
+            const colonIndex = part.indexOf(':');
+            return colonIndex !== -1 ? part.substring(colonIndex + 1) : part;
+          })
+          .filter(name => name.length > 0 && /^[A-Z]/.test(name)); // Molecules must start with uppercase
+
         for (const molName of moleculeNames) {
           if (populationMolecules.has(molName)) {
             hasPopulation = true;
