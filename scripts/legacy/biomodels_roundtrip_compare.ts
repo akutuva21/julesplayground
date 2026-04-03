@@ -6,7 +6,6 @@ import { spawn } from 'node:child_process';
 import { fetchBioModelsSbml } from '../../services/bioModelsImport';
 import { Atomizer, SBMLParser } from '../../src/lib/atomizer';
 import { parseBNGLStrict } from '../../packages/engine/src/parser/BNGLParserWrapper';
-import { parseBNGLRegexDeprecated } from '../../services/parseBNGL';
 import { generateExpandedNetwork } from '@bngplayground/engine';
 import { loadEvaluator } from '@bngplayground/engine';
 import { requiresCompartmentResolution, resolveCompartmentVolumes } from '@bngplayground/engine';
@@ -67,7 +66,7 @@ type RoundtripResult = {
       expansionTimedOut: boolean;
       exportUsedUnexpandedFallback: boolean;
       exportUsedOriginalSbmlFallback: boolean;
-      parserUsed: 'strict' | 'legacy' | 'none';
+      parserUsed: 'strict' | 'none';
       parserStrictError?: string;
     };
     parseCompareFallback?: {
@@ -451,7 +450,6 @@ const ALLOW_SKIP_UNFETCHABLE_MODELS =
   (process.env.BIOMODELS_ROUNDTRIP_SKIP_UNFETCHABLE_MODELS ?? '1') !== '0';
 const ALLOW_SKIP_NON_SBML_FETCH_ERRORS =
   (process.env.BIOMODELS_ROUNDTRIP_SKIP_NON_SBML_FETCH_ERRORS ?? '1') !== '0';
-const PARSER_FORCE_LEGACY = (process.env.BIOMODELS_ROUNDTRIP_FORCE_LEGACY_PARSER ?? '0') === '1';
 const PARSER_STRICT_MAX_BNGL_LEN = positiveOrFallback(
   parseFiniteNumber(process.env.BIOMODELS_ROUNDTRIP_STRICT_MAX_BNGL_LEN, 10000000),
   10000000
@@ -1007,68 +1005,17 @@ const extractBnglParseSnippet = (bngl: string, errText: string): string | undefi
   return `L${lineNo}:${colNo} ${line}\n${pointer}`;
 };
 
-const parserPreferenceForBngl = (args: {
-  bnglLength: number;
-  functionCount: number;
-  reactionRuleLineCount: number;
-  hasRules: boolean;
-  reactionTagCount: number;
-  hasRateRuleMetadata?: boolean;
-}): { preferLegacyFirst: boolean; reasons: string[] } => {
-  const reasons: string[] = [];
-  const RATE_RULE_LEGACY_MIN_BNGL_LEN = 300000;
-  const RATE_RULE_LEGACY_MIN_FUNCTIONS = 600;
-  const RATE_RULE_LEGACY_MIN_RULE_LINES = 1200;
-  if (PARSER_FORCE_LEGACY) reasons.push('force_legacy_env');
-  if (args.bnglLength >= PARSER_STRICT_MAX_BNGL_LEN) reasons.push(`bngl_len>=${PARSER_STRICT_MAX_BNGL_LEN}`);
-  if (args.functionCount >= PARSER_STRICT_MAX_FUNCTIONS) reasons.push(`functions>=${PARSER_STRICT_MAX_FUNCTIONS}`);
-  if (args.reactionRuleLineCount >= PARSER_STRICT_MAX_RULE_LINES) reasons.push(`rule_lines>=${PARSER_STRICT_MAX_RULE_LINES}`);
-  if (args.hasRules && args.reactionTagCount === 0) reasons.push('rule_only_source');
-  if (
-    args.hasRateRuleMetadata &&
-    (
-      args.bnglLength >= RATE_RULE_LEGACY_MIN_BNGL_LEN ||
-      args.functionCount >= RATE_RULE_LEGACY_MIN_FUNCTIONS ||
-      args.reactionRuleLineCount >= RATE_RULE_LEGACY_MIN_RULE_LINES
-    )
-  ) {
-    reasons.push('rate_rule_metadata_large');
-  }
-  return { preferLegacyFirst: reasons.length > 0, reasons };
-};
-
 type ParsedBnglOutcome = {
   model: BNGLModel;
-  parser: 'strict' | 'legacy';
+  parser: 'strict';
   strictError?: string;
 };
 type SbmlInputDiagnostics = NonNullable<NonNullable<RoundtripResult['diagnostics']>['sbmlInput']>;
 type TrajectoryDiagnostics = NonNullable<NonNullable<RoundtripResult['diagnostics']>['trajectory']>;
 
 const parseBnglWithFallback = (
-  bngl: string,
-  preferLegacyFirst = false
+  bngl: string
 ): ParsedBnglOutcome => {
-  if (preferLegacyFirst) {
-    try {
-      return {
-        model: parseBNGLRegexDeprecated(bngl, { debug: false }),
-        parser: 'legacy',
-      };
-    } catch (legacyErr) {
-      const legacyMessage = legacyErr instanceof Error ? legacyErr.message : String(legacyErr);
-      try {
-        return {
-          model: parseBNGLStrict(bngl),
-          parser: 'strict',
-        };
-      } catch (strictErr) {
-        const strictMessage = strictErr instanceof Error ? strictErr.message : String(strictErr);
-        throw new Error(`Legacy parse failed: ${legacyMessage}\nStrict parse failed: ${strictMessage}`);
-      }
-    }
-  }
-
   try {
     return {
       model: parseBNGLStrict(bngl),
@@ -1076,16 +1023,7 @@ const parseBnglWithFallback = (
     };
   } catch (strictErr) {
     const strictMessage = strictErr instanceof Error ? strictErr.message : String(strictErr);
-    try {
-      return {
-        model: parseBNGLRegexDeprecated(bngl, { debug: false }),
-        parser: 'legacy',
-        strictError: strictMessage,
-      };
-    } catch (legacyErr) {
-      const legacyMessage = legacyErr instanceof Error ? legacyErr.message : String(legacyErr);
-      throw new Error(`Strict parse failed: ${strictMessage}\nLegacy parse failed: ${legacyMessage}`);
-    }
+    throw new Error(`Strict parse failed: ${strictMessage}`);
   }
 };
 
@@ -2051,12 +1989,12 @@ const toBnglThenSbml = async (
   expansionTimedOut: boolean;
   exportUsedUnexpandedFallback: boolean;
   exportUsedOriginalSbmlFallback: boolean;
-  parserUsed: 'strict' | 'legacy' | 'none';
+      parserUsed: 'strict' | 'none';
   parserStrictError?: string;
   bnglModel?: BNGLModel;
 }> => {
   let model: BNGLModel;
-  let parserUsed: 'strict' | 'legacy' | 'none' = 'strict';
+  let parserUsed: 'strict' | 'none' = 'strict';
   let parserStrictError: string | undefined;
   const quickFunctionCount = bngl
     .split('\n')
@@ -2108,17 +2046,9 @@ const toBnglThenSbml = async (
     log(modelId, 'bngl_to_sbml.parse_model', 'reusing pre-parsed BNGL model from diagnostics');
   } else {
     const stopParseHb = startHeartbeat(modelId, 'bngl_to_sbml.parse_model');
-    const parserPref = parserPreferenceForBngl({
-      bnglLength: bngl.length,
-      functionCount: quickFunctionCount,
-      reactionRuleLineCount: quickReactionRuleLineCount,
-      hasRules: false,
-      reactionTagCount: 1,
-      hasRateRuleMetadata: /__rate_rule__/i.test(bngl),
-    });
     try {
       const parsed = await withTimeout(
-        Promise.resolve(parseBnglWithFallback(bngl, parserPref.preferLegacyFirst)),
+        Promise.resolve(parseBnglWithFallback(bngl)),
         resolveTimeoutMs('bngl_to_sbml.parse_model', PHASE_TIMEOUT_MS),
         `${modelId} parse BNGL (for SBML export)`
       );
@@ -2717,26 +2647,10 @@ async function roundtripOne(modelId: string): Promise<RoundtripResult> {
         `Skipped heavy BNGL diagnostics parse (bnglLen=${atomized.bngl.length}, functions=${diagnostics.bngl.functionCount}, ruleLines=${diagnostics.bngl.reactionRuleLineCount})`
       );
     } else {
-      const diagnosticsParserPref = parserPreferenceForBngl({
-        bnglLength: atomized.bngl.length,
-        functionCount: diagnostics.bngl.functionCount,
-        reactionRuleLineCount: diagnostics.bngl.reactionRuleLineCount,
-        hasRules: diagnostics.sbmlInput.hasRules,
-        reactionTagCount: diagnostics.sbmlInput.reactionTagCount,
-        hasRateRuleMetadata: diagnostics.bngl.hasRateRuleMetadata,
-      });
-      if (diagnosticsParserPref.preferLegacyFirst) {
-        log(
-          modelId,
-          'parse_bngl_diagnostics',
-          `parser_preference=legacy_first reason=${diagnosticsParserPref.reasons.join(',')}`
-        );
-      }
-
       const parsedBnglResult = await runPhase('parse_bngl_diagnostics', async () => {
         try {
           return await withTimeout(
-            Promise.resolve(parseBnglWithFallback(atomized.bngl, diagnosticsParserPref.preferLegacyFirst)),
+            Promise.resolve(parseBnglWithFallback(atomized.bngl)),
             resolveTimeoutMs('parse_bngl_diagnostics.parse', PARSE_BNGL_PHASE_TIMEOUT_MS),
             `${modelId} parse BNGL`
           );
@@ -2748,9 +2662,6 @@ async function roundtripOne(modelId: string): Promise<RoundtripResult> {
       });
       parsedBnglForConversion = parsedBnglResult;
       const parsedBngl = parsedBnglResult.model;
-      if (parsedBnglResult.parser === 'legacy' && parsedBnglResult.strictError) {
-        diagnostics.parseBnglErrorSnippet = extractBnglParseSnippet(atomized.bngl, parsedBnglResult.strictError);
-      }
       diagnostics.bngl.parameterCount = Object.keys(parsedBngl.parameters || {}).length;
       diagnostics.bngl.nonZeroParameterCount = Object.values(parsedBngl.parameters || {}).filter((v) => Number(v) !== 0).length;
       diagnostics.bngl.speciesCount = parsedBngl.species?.length ?? 0;
