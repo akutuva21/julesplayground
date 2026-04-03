@@ -475,7 +475,8 @@ export async function simulate(
       name: obs.name,
       type: obs.type,
       indices: new Int32Array(matchingIndices),
-      coefficients: new Float64Array(coefficients)
+      coefficients: new Float64Array(coefficients),
+      volumes: obs.volumes
     };
   });
 
