@@ -1,0 +1,3 @@
+## 2024-04-03 - Context Spreads in Inner Loops Break V8 Optimization
+**Learning:** Found a major performance bottleneck where `buildDerivativesFunction` created a new context object (`rxnContext`) using the object spread operator (`{ ...context, ...rxnContext }`) *per reaction* on *every simulation step*. In a model with thousands of species and millions of steps, this causes massive allocations, triggering GC pauses and preventing V8 from optimizing the hot loop.
+**Action:** Always allocate a `sharedRateContext` outside of hot simulation loops. Mutate this single shared object in place using standard property assignments instead of creating new objects or using spread operators. Set unneeded keys to `0` or `null` instead of deleting them to maintain hidden classes.
