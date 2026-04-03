@@ -1,5 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CartesianGrid, ReferenceArea } from 'recharts';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BNGLModel } from '../../types';
 import { Button } from '../ui/Button';
 import { Select } from '../ui/Select';
@@ -7,495 +6,98 @@ import { Input } from '../ui/Input';
 import { LoadingSpinner } from '../ui/LoadingSpinner';
 import { Card } from '../ui/Card';
 import { DataTable } from '../ui/DataTable';
-import { bnglService } from '../../services/bnglService';
 import { CHART_COLORS } from '../../src/utils/chartColors';
 import HeatmapChart from '../HeatmapChart';
 
-
-// reusable helpers for parameter scanning logic and formatting
-import {
-  roundForInput,
-  computeDefaultBounds,
-  generateRange,
-  formatNumber,
-} from '@bngplayground/engine';
+import { formatNumber } from '@bngplayground/engine';
 import { TimeSeriesChart, TimeSeriesSeries } from '../charts/TimeSeriesChart';
+
+import { useParameterScanConfig } from '../../hooks/useParameterScanConfig';
+import { useParameterScanExecution } from '../../hooks/useParameterScanExecution';
+import { useSurrogateModel } from '../../hooks/useSurrogateModel';
 
 interface ParameterScanTabProps {
   model: BNGLModel | null;
 }
 
-type ScanMode = '1d' | '2d';
-
-interface OneDPoint {
-  parameterValue: number;
-  observables: Record<string, number>;
-}
-
-interface OneDResult {
-  parameterName: string;
-  values: OneDPoint[];
-}
-
-interface TwoDResult {
-  parameterNames: [string, string];
-  xValues: number[];
-  yValues: number[];
-  grid: Record<string, number[][]>;
-}
-
-
 export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => {
-  const [scanType, setScanType] = useState<ScanMode>('1d');
-  const [parameter1, setParameter1] = useState('');
-  const [parameter2, setParameter2] = useState('');
-  const [param1Start, setParam1Start] = useState('');
-  const [param1End, setParam1End] = useState('');
-  const [param1Steps, setParam1Steps] = useState('5');
-  const [param2Start, setParam2Start] = useState('');
-  const [param2End, setParam2End] = useState('');
-  const [param2Steps, setParam2Steps] = useState('5');
-  const [method, setMethod] = useState<'ode' | 'ssa'>('ode');
-  const [solver, setSolver] = useState<'auto' | 'cvode' | 'cvode_sparse' | 'rosenbrock23' | 'rk45' | 'rk4' | 'webgpu_rk4'>('auto');
-  const [tEnd, setTEnd] = useState('100');
-  const [nSteps, setNSteps] = useState('100');
-  const [selectedObservable, setSelectedObservable] = useState('');
-  const [oneDResult, setOneDResult] = useState<OneDResult | null>(null);
-  const [twoDResult, setTwoDResult] = useState<TwoDResult | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
-  const [error, setError] = useState<string | null>(null);
+  const {
+    scanType, setScanType,
+    parameter1, setParameter1,
+    parameter2, setParameter2,
+    param1Start, setParam1Start,
+    param1End, setParam1End,
+    param1Steps, setParam1Steps,
+    param2Start, setParam2Start,
+    param2End, setParam2End,
+    param2Steps, setParam2Steps,
+    method, setMethod,
+    solver, setSolver,
+    tEnd, setTEnd,
+    nSteps, setNSteps,
+    parameterTypeMap,
+    parameterNames,
+    observableNames,
+    speciesMap,
+    paramToSpecies,
+    effectiveParam1Start,
+    effectiveParam1End,
+    effectiveParam2Start,
+    effectiveParam2End,
+    defaultParam1Start,
+    defaultParam1End,
+    defaultParam2Start,
+    defaultParam2End,
+    canRunScan
+  } = useParameterScanConfig(model);
+
   const [isLogScale, setIsLogScale] = useState(false);
 
-  // Series visibility for 1D chart
+  const {
+    oneDResult,
+    twoDResult,
+    isRunning,
+    progress,
+    error,
+    runScan,
+    cancelActiveScan,
+    setOneDResult,
+    setTwoDResult,
+    setError,
+    setProgress
+  } = useParameterScanExecution({
+    model, scanType, parameter1, parameter2,
+    effectiveParam1Start, effectiveParam1End,
+    effectiveParam2Start, effectiveParam2End,
+    param1Steps, param2Steps,
+    method, solver, tEnd, nSteps,
+    observableNames, paramToSpecies, isLogScale
+  });
+
+  const {
+    useSurrogate, setUseSurrogate,
+    surrogateStatus, setSurrogateStatus,
+    surrogateProgress, setSurrogateProgress,
+    surrogateMetrics, setSurrogateMetrics,
+    activeBackend, setActiveBackend,
+    surrogateTrainingSims, setSurrogateTrainingSims,
+    surrogateTrainingEpochs, setSurrogateTrainingEpochs,
+    surrogateNetworkSize, setSurrogateNetworkSize,
+    surrogateRef,
+    trainSurrogate
+  } = useSurrogateModel({
+    model, scanType, parameter1, parameter2,
+    observableNames, setError
+  });
+
+  const [selectedObservable, setSelectedObservable] = useState('');
   const [visibleObservables, setVisibleObservables] = useState<Set<string>>(new Set());
 
-  // Neural ODE Surrogate state
-  const [useSurrogate, setUseSurrogate] = useState(false);
-  const [surrogateStatus, setSurrogateStatus] = useState<'none' | 'training' | 'ready' | 'error'>('none');
-  const [surrogateProgress, setSurrogateProgress] = useState<{
-    phase: 'data' | 'train';
-    current: number;
-    total: number;
-    loss: number;
-  }>({ phase: 'data', current: 0, total: 0, loss: 0 });
-  const [surrogateMetrics, setSurrogateMetrics] = useState<{ mse: number; mae: number; r2: number[] } | null>(null);
-  const [activeBackend, setActiveBackend] = useState<string>('');
-  const surrogateRef = useRef<any>(null); // Will hold NeuralODESurrogate instance
-
-  // Surrogate training controls (defaults enabled)
-  const [surrogateTrainingSims, setSurrogateTrainingSims] = useState('200');
-  const [surrogateTrainingEpochs, setSurrogateTrainingEpochs] = useState('100');
-  // Network size: 'auto' | 'light' | 'standard' | 'full'
-  const [surrogateNetworkSize, setSurrogateNetworkSize] = useState<'auto' | 'light' | 'standard' | 'full'>('auto');
-
-  // Use refs for lifecycle-bound cancellers and mounts to avoid setState-after-unmount races
-  const scanAbortControllerRef = useRef<AbortController | null>(null);
-  const isMountedRef = useRef(true);
-  const cachedModelIdRef = useRef<number | null>(null);
-
-  const previousModelRef = useRef<BNGLModel | null>(null);
-  const previousParameter1 = useRef<string | null>(null);
-  const previousParameter2 = useRef<string | null>(null);
-
-  // keep track of whether each entry is a parameter or a species so we can
-  // show appropriate hints and compute default bounds correctly.
-  const parameterTypeMap = useMemo(() => {
-    const map: Record<string, 'parameter' | 'species'> = {};
-    if (!model) return map;
-    Object.keys(model.parameters).forEach((p) => (map[p] = 'parameter'));
-    model.species.forEach((s) => (map[s.name] = 'species'));
-    return map;
-  }, [model]);
-
-  const parameterNames = useMemo(() => Object.keys(parameterTypeMap), [parameterTypeMap]);
-  const observableNames = useMemo(() => (model ? model.observables.map((obs) => obs.name) : []), [model]);
-
-  const speciesMap = useMemo(() => {
-    const map = new Map<string, typeof model.species[0]>();
-    if (model) {
-      model.species.forEach(s => map.set(s.name, s));
-    }
-    return map;
-  }, [model]);
-
-  // map from a parameter name to any species whose initialExpression references it
-  const paramToSpecies = useMemo<Record<string, string[]>>(() => {
-    const map: Record<string, string[]> = {};
-    if (!model) return map;
-    model.species.forEach((s) => {
-      if (s.initialExpression) {
-        const tokens = s.initialExpression.match(/\b[A-Za-z_]\w*\b/g) || [];
-        tokens.forEach((tok) => {
-          if (tok in model.parameters) {
-            map[tok] = map[tok] || [];
-            if (!map[tok].includes(s.name)) map[tok].push(s.name);
-          }
-        });
-      }
-    });
-    return map;
-  }, [model]);
-
   useEffect(() => {
-    if (!model) {
-      setParameter1('');
-      setParameter2('');
-      setSelectedObservable('');
-      setOneDResult(null);
-      setTwoDResult(null);
-      setParam1Start('');
-      setParam1End('');
-      setParam2Start('');
-      setParam2End('');
-      previousModelRef.current = null;
-      previousParameter1.current = null;
-      previousParameter2.current = null;
-      return;
-    }
-
-    if (previousModelRef.current !== model) {
-      setParam1Start('');
-      setParam1End('');
-      setParam2Start('');
-      setParam2End('');
-      previousParameter1.current = null;
-      previousParameter2.current = null;
-      previousModelRef.current = model;
-    }
-
-    if (!parameterNames.includes(parameter1)) {
-      setParameter1(parameterNames[0] ?? '');
-    }
-
-    if (!parameterNames.includes(parameter2) || parameter2 === parameter1) {
-      const secondChoice = parameterNames.find((name) => name !== parameter1);
-      setParameter2(secondChoice ?? parameterNames[0] ?? '');
-    }
-
     if (!selectedObservable || !observableNames.includes(selectedObservable)) {
       setSelectedObservable(observableNames[0] ?? '');
     }
-  }, [model, parameter1, parameter2, parameterNames, observableNames, selectedObservable]);
-
-  useEffect(() => {
-    if (!model) return;
-    if (parameter1 && previousParameter1.current !== parameter1) {
-      previousParameter1.current = parameter1;
-      setParam1Start('');
-      setParam1End('');
-    }
-  }, [model, parameter1]);
-
-  useEffect(() => {
-    if (!model) return;
-    if (parameter2 && previousParameter2.current !== parameter2) {
-      previousParameter2.current = parameter2;
-      setParam2Start('');
-      setParam2End('');
-    }
-  }, [model, parameter2]);
-
-  useEffect(() => {
-    setOneDResult(null);
-    setTwoDResult(null);
-  }, [scanType]);
-
-  // Cleanup surrogate when model changes
-  useEffect(() => {
-    if (surrogateRef.current) {
-      surrogateRef.current.dispose?.();
-      surrogateRef.current = null;
-      setSurrogateStatus('none');
-      setSurrogateMetrics(null);
-    }
-  }, [model]);
-
-  const cancelActiveScan = useCallback((reason?: string) => {
-    const controller = scanAbortControllerRef.current;
-    if (controller) {
-      controller.abort(reason ?? 'Parameter scan cancelled.');
-      scanAbortControllerRef.current = null;
-    }
-  }, []);
-
-  // Train Neural ODE Surrogate
-  const handleTrainSurrogate = useCallback(async () => {
-    if (!model || !parameter1) return;
-
-    const nTrainingSamples = Math.max(5, Math.min(2000, Math.floor(Number(surrogateTrainingSims) || 200)));
-    const trainingEpochs = Math.max(1, Math.min(500, Math.floor(Number(surrogateTrainingEpochs) || 100)));
-
-    setSurrogateStatus('training');
-    setSurrogateProgress({ phase: 'data', current: 0, total: nTrainingSamples, loss: 0 });
-    setError(null);
-
-    try {
-      // Dynamically import TensorFlow.js and surrogate module
-      const [tf, { NeuralODESurrogate, SurrogateDatasetGenerator }] = await Promise.all([
-        import('@tensorflow/tfjs'),
-        import('../../src/services/NeuralODESurrogate')
-      ]);
-
-      if (isMountedRef.current) {
-        setActiveBackend(tf.getBackend());
-      }
-
-      const maybeSwitchBackend = async (backend: string): Promise<boolean> => {
-        try {
-          const current = tf.getBackend();
-          if (current === backend) return true;
-          const ok = await tf.setBackend(backend);
-          await tf.ready();
-          if (ok && isMountedRef.current) {
-            setActiveBackend(backend);
-          }
-          return ok;
-        } catch {
-          return false;
-        }
-      };
-
-      const isWebglBackendError = (err: unknown): boolean => {
-        const msg = err instanceof Error ? err.message : String(err);
-        // Cover a broader set of TFJS/WebGL failures observed in the wild:
-        // - shader linking failures
-        // - context creation failures
-        // - exhausted driver options / ANGLE errors
-        // - backend initialization failures
-        return /(?:Failed to link vertex and fragment shaders|Failed to create WebGL context|Could not get context for WebGL|Exhausted GL driver options|Initialization of backend webgl failed|webgl creation failed|ANGLE|Exhausted GL driver)/i.test(msg);
-      };
-
-      // Determine parameters to vary
-      const paramsToVary = scanType === '2d' && parameter2 ? [parameter1, parameter2] : [parameter1];
-      const paramRanges: [number, number][] = paramsToVary.map(p => {
-        const baseValue = model.parameters[p] ?? 1;
-        return [baseValue * 0.1, baseValue * 10];
-      });
-
-      // Generate training data using ODE solver
-      const timePoints = Array.from({ length: 51 }, (_, i) => i * 2); // 0 to 100
-
-      // Create sample parameter sets.
-      // If ranges are strictly positive and span orders of magnitude, sample in log-space.
-      const shouldLogSample = paramRanges.every(([min, max]) => min > 0 && max / Math.max(min, 1e-12) >= 50);
-      const parameterSets = shouldLogSample
-        ? SurrogateDatasetGenerator
-          .latinHypercubeSample(paramRanges.map(([min, max]) => [Math.log(min), Math.log(max)]), nTrainingSamples)
-          .map((row) => row.map((v) => Math.exp(v)))
-        : SurrogateDatasetGenerator.latinHypercubeSample(paramRanges, nTrainingSamples);
-
-      // Run simulations for training data
-      const concentrations: number[][][] = [];
-      const modelId = await bnglService.prepareModel(model, {});
-
-      for (let i = 0; i < parameterSets.length; i++) {
-        const overrides: Record<string, number> = {};
-        paramsToVary.forEach((p, idx) => {
-          overrides[p] = parameterSets[i][idx];
-        });
-
-        const simResult = await bnglService.simulateCached(modelId, overrides, {
-          method: 'ode',
-          t_end: 100,
-          n_steps: 50,
-          solver: 'cvode'
-        } as any, {});
-
-        // Extract observable values at each time point
-        const trajectory: number[][] = simResult.data.map(point =>
-          observableNames.map(obs => point[obs] as number ?? 0)
-        );
-        concentrations.push(trajectory);
-
-        if (isMountedRef.current) {
-          setSurrogateProgress((prev) => ({
-            ...prev,
-            phase: 'data',
-            current: i + 1,
-            total: nTrainingSamples
-          }));
-        }
-
-        // Yield occasionally to keep the browser responsive.
-        if (i % 2 === 0) {
-          await tf.nextFrame();
-        }
-      }
-
-      await bnglService.releaseModel(modelId);
-
-      // Create training dataset
-      const trainingData = {
-        parameters: parameterSets,
-        timePoints,
-        concentrations
-      };
-
-      // Create and train surrogate
-      let surrogate = new NeuralODESurrogate(paramsToVary.length, observableNames.length);
-
-      const trainWithRetry = async (): Promise<void> => {
-        if (isMountedRef.current) {
-          setSurrogateProgress((prev) => ({
-            ...prev,
-            phase: 'train',
-            current: 0,
-            total: trainingEpochs
-          }));
-        }
-
-        try {
-          await surrogate.train(trainingData, {
-            epochs: trainingEpochs,
-            batchSize: 16,
-            validationSplit: 0.1,
-            learningRate: 0.001,
-            earlyStopping: true,
-            patience: Math.max(10, Math.floor(trainingEpochs / 10)),
-            verbose: false,
-            onEpochEnd: async (epoch, logs) => {
-              if (!isMountedRef.current) return;
-              const loss = typeof logs?.loss === 'number' ? (logs.loss as number) : undefined;
-              setSurrogateProgress((prev) => ({
-                ...prev,
-                phase: 'train',
-                current: Math.max(prev.current, epoch + 1),
-                total: trainingEpochs,
-                loss: loss ?? prev.loss
-              }));
-            }
-          });
-          return;
-        } catch (err) {
-          console.error('Surrogate training error (attempting fallback):', err);
-          // Some GPUs/drivers fail TFJS WebGL shader compilation/linking.
-          // Retry once on CPU backend for robustness (slower but typically reliable).
-          // If the error looks like a WebGL/backend initialization failure, fall back to CPU and retry.
-          if (!isWebglBackendError(err)) {
-            throw err;
-          }
-
-          const switched = await maybeSwitchBackend('cpu');
-          console.info('maybeSwitchBackend returned', switched, 'current backend after setBackend:', tf.getBackend());
-          if (!switched) {
-            throw err;
-          }
-
-          console.warn('TFJS WebGL shader link failed; falling back to CPU backend for training.');
-          if (isMountedRef.current) {
-            // Include a short excerpt of the original error to help debugging without flooding the UI
-            setError(`WebGL backend failed on this device. Falling back to CPU for surrogate training (slower). Error: ${String(err).slice(0, 300)}`);
-          }
-
-          // Dispose of the old surrogate/model and create a fresh one for the new backend
-          surrogate.dispose();
-          surrogate = new NeuralODESurrogate(paramsToVary.length, observableNames.length);
-
-          // Reset progress for retry
-          if (isMountedRef.current) {
-            setSurrogateProgress((prev) => ({
-              ...prev,
-              phase: 'train',
-              current: 0,
-              total: trainingEpochs
-            }));
-          }
-
-          await surrogate.train(trainingData, {
-            epochs: trainingEpochs,
-            batchSize: 16,
-            validationSplit: 0.1,
-            learningRate: 0.001,
-            earlyStopping: true,
-            patience: Math.max(10, Math.floor(trainingEpochs / 10)),
-            verbose: false,
-            onEpochEnd: async (epoch, logs) => {
-              if (!isMountedRef.current) return;
-              const loss = typeof logs?.loss === 'number' ? (logs.loss as number) : undefined;
-              setSurrogateProgress((prev) => ({
-                ...prev,
-                phase: 'train',
-                current: Math.max(prev.current, epoch + 1),
-                total: trainingEpochs,
-                loss: loss ?? prev.loss
-              }));
-            }
-          });
-        }
-      };
-
-      try {
-        await trainWithRetry();
-      } catch (err) {
-        console.error('Error after trainWithRetry, will attempt outer CPU retry if applicable:', err);
-        // If fallback inside trainWithRetry didn't cover a backend initialization error,
-        // attempt one more explicit retry on CPU (covers errors thrown before training loop).
-        if (isWebglBackendError(err)) {
-          const switched = await maybeSwitchBackend('cpu');
-          console.info('Outer retry maybeSwitchBackend returned', switched, 'backend now:', tf.getBackend());
-          if (switched) {
-            surrogate.dispose();
-            surrogate = new NeuralODESurrogate(paramsToVary.length, observableNames.length);
-            await trainWithRetry();
-          } else {
-            throw err;
-          }
-        } else {
-          throw err;
-        }
-      }
-
-      // Evaluate surrogate
-      const testData = {
-        parameters: shouldLogSample
-          ? SurrogateDatasetGenerator
-            .latinHypercubeSample(paramRanges.map(([min, max]) => [Math.log(min), Math.log(max)]), 20)
-            .map((row) => row.map((v) => Math.exp(v)))
-          : SurrogateDatasetGenerator.latinHypercubeSample(paramRanges, 20),
-        timePoints,
-        concentrations: [] as number[][][]
-      };
-
-      // Generate test data
-      const testModelId = await bnglService.prepareModel(model, {});
-      for (const params of testData.parameters) {
-        const overrides: Record<string, number> = {};
-        paramsToVary.forEach((p, idx) => {
-          overrides[p] = params[idx];
-        });
-
-        const simResult = await bnglService.simulateCached(testModelId, overrides, {
-          method: 'ode',
-          t_end: 100,
-          n_steps: 50,
-          solver: 'cvode'
-        } as any, {});
-
-        const trajectory = simResult.data.map(point =>
-          observableNames.map(obs => point[obs] as number ?? 0)
-        );
-        testData.concentrations.push(trajectory);
-      }
-      await bnglService.releaseModel(testModelId);
-
-      const metrics = surrogate.evaluate(testData);
-
-      surrogateRef.current = surrogate;
-      if (isMountedRef.current) {
-        setSurrogateStatus('ready');
-        setSurrogateMetrics(metrics);
-      }
-
-    } catch (err) {
-      console.error('Surrogate training failed:', err);
-      if (isMountedRef.current) {
-        setSurrogateStatus('error');
-        setError(`Surrogate training failed: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-  }, [model, parameter1, parameter2, scanType, observableNames, surrogateTrainingSims, surrogateTrainingEpochs]);
-
+  }, [observableNames, selectedObservable]);
 
   const oneDChartData = useMemo(() => {
     if (!oneDResult) return [];
@@ -512,7 +114,6 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
     }));
   }, [observableNames]);
 
-  // Update visible observables when results arrive
   useEffect(() => {
     if (oneDResult && visibleObservables.size === 0) {
       setVisibleObservables(new Set([selectedObservable]));
@@ -550,262 +151,6 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
     return points;
   }, [twoDResult, selectedObservable]);
 
-  // Do not early-return here; use `guardMessage` in the JSX so hook order stays stable across renders.
-
-  const baseParam1 = useMemo(() => {
-    if (!parameter1 || !model) return undefined;
-    if (parameter1 in model.parameters) {
-      // if scanning a parameter that drives one or more species, use the
-      // species' initial concentration as the base value for defaults (makes
-      // more sense to the user). fall back to the raw parameter value.
-      const deps = paramToSpecies[parameter1];
-      if (deps && deps.length > 0) {
-        const sp = speciesMap.get(deps[0]);
-        if (sp) return sp.initialConcentration;
-      }
-      return model.parameters[parameter1];
-    }
-    return speciesMap.get(parameter1)?.initialConcentration;
-  }, [parameter1, model, paramToSpecies, speciesMap]);
-
-  const baseParam2 = useMemo(() => {
-    if (!parameter2 || !model) return undefined;
-    if (parameter2 in model.parameters) {
-      const deps = paramToSpecies[parameter2];
-      if (deps && deps.length > 0) {
-        const sp = speciesMap.get(deps[0]);
-        if (sp) return sp.initialConcentration;
-      }
-      return model.parameters[parameter2];
-    }
-    return speciesMap.get(parameter2)?.initialConcentration;
-  }, [parameter2, model, paramToSpecies, speciesMap]);
-
-  const [defaultParam1Lower, defaultParam1Upper] = useMemo(() => {
-    if (baseParam1 === undefined) return [0, 0];
-    return computeDefaultBounds(baseParam1);
-  }, [baseParam1]);
-
-  const [defaultParam2Lower, defaultParam2Upper] = useMemo(() => {
-    if (baseParam2 === undefined) return [0, 0];
-    return computeDefaultBounds(baseParam2);
-  }, [baseParam2]);
-
-  const defaultParam1Start = baseParam1 !== undefined ? roundForInput(defaultParam1Lower) : '';
-  const defaultParam1End = baseParam1 !== undefined ? roundForInput(defaultParam1Upper) : '';
-  const defaultParam2Start = baseParam2 !== undefined ? roundForInput(defaultParam2Lower) : '';
-  const defaultParam2End = baseParam2 !== undefined ? roundForInput(defaultParam2Upper) : '';
-
-  const effectiveParam1Start = param1Start !== '' ? param1Start : defaultParam1Start;
-  const effectiveParam1End = param1End !== '' ? param1End : defaultParam1End;
-  const effectiveParam2Start = param2Start !== '' ? param2Start : defaultParam2Start;
-  const effectiveParam2End = param2End !== '' ? param2End : defaultParam2End;
-
-  const canRunScan = () => {
-    if (!parameter1 || !effectiveParam1Start || !effectiveParam1End || !param1Steps) return false;
-    if (isLogScale && (Number(effectiveParam1Start) <= 0 || Number(effectiveParam1End) <= 0)) return false;
-    if (scanType === '2d' && (!parameter2 || parameter2 === parameter1 || !effectiveParam2Start || !effectiveParam2End || !param2Steps)) {
-      return false;
-    }
-    if (scanType === '2d' && isLogScale && (Number(effectiveParam2Start) <= 0 || Number(effectiveParam2End) <= 0)) return false;
-    return true;
-  };
-
-  const handleRunScan = async () => {
-    if (!canRunScan()) return;
-    if (!model) {
-      setError('No model is loaded to run the scan.');
-      return;
-    }
-
-    cancelActiveScan('Parameter scan replaced by a new request.');
-
-    const start1 = Number(effectiveParam1Start);
-    const end1 = Number(effectiveParam1End);
-    const steps1 = Math.max(1, Math.floor(Number(param1Steps)));
-    if (!Number.isFinite(start1) || !Number.isFinite(end1) || Number.isNaN(steps1) || steps1 < 1) {
-      setError('Please provide valid numeric settings for the primary parameter.');
-      return;
-    }
-
-    const tEndValue = Number(tEnd);
-    const nStepsValue = Math.max(1, Math.floor(Number(nSteps)));
-    if (!Number.isFinite(tEndValue) || tEndValue <= 0 || Number.isNaN(nStepsValue) || nStepsValue < 1) {
-      setError('Simulation settings must have positive numeric values for t_end and steps.');
-      return;
-    }
-
-    const range1 = generateRange(start1, end1, steps1, isLogScale);
-    let totalRuns = range1.length;
-    let range2: number[] = [];
-
-    if (scanType === '2d') {
-      const start2 = Number(effectiveParam2Start);
-      const end2 = Number(effectiveParam2End);
-      const steps2 = Math.max(1, Math.floor(Number(param2Steps)));
-      if (!Number.isFinite(start2) || !Number.isFinite(end2) || Number.isNaN(steps2) || steps2 < 1) {
-        setError('Please provide valid numeric settings for the second parameter.');
-        return;
-      }
-      if (parameter2 === parameter1) {
-        setError('Select two different parameters for a 2D scan.');
-        return;
-      }
-      range2 = generateRange(start2, end2, steps2, isLogScale);
-      totalRuns = range1.length * range2.length;
-    }
-
-    if (totalRuns > 400) {
-      setError('Please reduce the number of combinations (limit 400) to keep the scan responsive.');
-      return;
-    }
-
-    setError(null);
-    setIsRunning(true);
-    setProgress({ current: 0, total: totalRuns });
-    setOneDResult(null);
-    setTwoDResult(null);
-
-    const simulationOptions = {
-      method,
-      t_end: tEndValue,
-      n_steps: nStepsValue,
-      ...(method === 'ode' ? { solver } : {}),
-    } as const;
-
-    const controller = new AbortController();
-    scanAbortControllerRef.current = controller;
-
-    // Ensure modelId is visible in finally for best-effort release
-    let modelId: number | null = null;
-
-    try {
-      // Cache the base model in the worker to avoid serializing the full model for every run.
-      modelId = await bnglService.prepareModel(model, { signal: controller.signal });
-      cachedModelIdRef.current = modelId;
-
-      if (scanType === '1d') {
-        const result: OneDResult = { parameterName: parameter1, values: [] };
-        const speciesDeps = paramToSpecies[parameter1] || [];
-        let completed = 0;
-        for (const value of range1) {
-          const overrides: Record<string, number> = { [parameter1]: value };
-          // if we're scanning a parameter that also feeds species initial
-          // concentrations, make sure the override updates the species too
-          speciesDeps.forEach((sname) => {
-            overrides[sname] = value;
-          });
-
-          const simResults = await bnglService.simulateCached(modelId, overrides, simulationOptions, {
-            signal: controller.signal,
-            description: `Parameter scan (${parameter1}=${value})`,
-          });
-          const lastPoint = simResults.data.at(-1) ?? {};
-          const observables = observableNames.reduce<Record<string, number>>((acc, name) => {
-            const raw = lastPoint[name];
-            const numeric = typeof raw === 'number' ? raw : Number(raw ?? 0);
-            acc[name] = Number.isFinite(numeric) ? numeric : 0;
-            return acc;
-          }, {});
-          result.values.push({ parameterValue: value, observables });
-          completed += 1;
-          if (isMountedRef.current) setProgress({ current: completed, total: totalRuns });
-        }
-        if (isMountedRef.current) setOneDResult(result);
-      } else {
-        const grid: Record<string, number[][]> = {};
-        observableNames.forEach((name) => {
-          grid[name] = range2.map(() => new Array(range1.length).fill(0));
-        });
-        let completed = 0;
-        const deps1 = paramToSpecies[parameter1] || [];
-        const deps2 = paramToSpecies[parameter2] || [];
-        for (let yi = 0; yi < range2.length; yi += 1) {
-          for (let xi = 0; xi < range1.length; xi += 1) {
-            const overrides: Record<string, number> = {
-              [parameter1]: range1[xi],
-              [parameter2]: range2[yi],
-            };
-            deps1.forEach((s) => (overrides[s] = range1[xi]));
-            deps2.forEach((s) => (overrides[s] = range2[yi]));
-            const simResults = await bnglService.simulateCached(modelId, overrides, simulationOptions, {
-              signal: controller.signal,
-              description: `2D parameter scan (${parameter1}, ${parameter2})`,
-            });
-            const lastPoint = simResults.data.at(-1) ?? {};
-            observableNames.forEach((name) => {
-              const raw = lastPoint[name];
-              const numeric = typeof raw === 'number' ? raw : Number(raw ?? 0);
-              grid[name][yi][xi] = Number.isFinite(numeric) ? numeric : 0;
-            });
-            completed += 1;
-            if (isMountedRef.current) setProgress({ current: completed, total: totalRuns });
-          }
-        }
-        if (isMountedRef.current) setTwoDResult({
-          parameterNames: [parameter1, parameter2],
-          xValues: range1,
-          yValues: range2,
-          grid,
-        });
-      }
-    } catch (scanError) {
-      if (scanError instanceof DOMException && scanError.name === 'AbortError') {
-        const cancelledByUser = scanError.message?.includes('cancelled by user');
-        if (isMountedRef.current) setError(cancelledByUser ? 'Parameter scan was cancelled.' : null);
-      } else {
-        const message = scanError instanceof Error ? scanError.message : String(scanError);
-        if (isMountedRef.current) setError(`Parameter scan failed: ${message}`);
-        if (isMountedRef.current) setOneDResult(null);
-        if (isMountedRef.current) setTwoDResult(null);
-      }
-    } finally {
-      if (isMountedRef.current) setIsRunning(false);
-      const wasAborted = controller.signal.aborted;
-      if (scanAbortControllerRef.current === controller) scanAbortControllerRef.current = null;
-
-      // Best-effort release of the prepared model to avoid leaking cached worker state.
-      if (typeof modelId === 'number') {
-        bnglService.releaseModel(modelId).catch((err) => {
-
-          console.warn('Failed to release cached model after parameter scan', modelId, err);
-        });
-        if (cachedModelIdRef.current === modelId) cachedModelIdRef.current = null;
-      }
-
-      if (!wasAborted) {
-        if (isMountedRef.current) setProgress((current) => ({ ...current, current: current.total }));
-      }
-    }
-  };
-
-  // Release any cached model when this component unmounts or when the model changes.
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      // Abort any running scan promptly
-      const controller = scanAbortControllerRef.current;
-      if (controller) {
-        try {
-          controller.abort('Component unmounted: aborting parameter scan.');
-        } catch (e) {
-          // ignore
-        }
-        scanAbortControllerRef.current = null;
-      }
-
-      const id = cachedModelIdRef.current;
-      if (typeof id === 'number') {
-        bnglService.releaseModel(id).catch((err) => {
-
-          console.warn('Failed to release cached model on ParameterScanTab unmount', id, err);
-        });
-        cachedModelIdRef.current = null;
-      }
-    };
-  }, [model]);
-
   const downloadFile = (content: string, fileName: string, mime = 'text/csv') => {
     const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
@@ -819,7 +164,6 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
   };
 
   const handleExportCSV = () => {
-    // Long-form CSV: param1_name, param1_value, [param2_name, param2_value], observable_name, value
     if (!oneDResult && !twoDResult) return;
     const rows: string[] = [];
     if (oneDResult) {
@@ -835,7 +179,6 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
       const [p1Name, p2Name] = twoDResult.parameterNames;
       const header = ['param1_name', 'param1_value', 'param2_name', 'param2_value', 'observable', 'value'];
       rows.push(header.join(','));
-      // iterate y (rows) and x (cols)
       twoDResult.yValues.forEach((yVal, yi) => {
         twoDResult.xValues.forEach((xVal, xi) => {
           Object.keys(twoDResult.grid).forEach((obs) => {
@@ -1026,7 +369,7 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
             {isRunning && (
               <Button variant="danger" onClick={() => cancelActiveScan('Parameter scan cancelled by user.')}>Cancel Scan</Button>
             )}
-            <Button onClick={handleRunScan} disabled={isRunning || !canRunScan()}>
+            <Button onClick={runScan} disabled={isRunning || !canRunScan(isLogScale)}>
               {isRunning ? 'Running…' : 'Run Scan'}
             </Button>
           </div>
@@ -1135,7 +478,7 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
 
           <Button
             variant="subtle"
-            onClick={handleTrainSurrogate}
+            onClick={trainSurrogate}
             disabled={surrogateStatus === 'training' || !model || !parameter1}
           >
             {surrogateStatus === 'training' ? 'Training...' :
