@@ -23,9 +23,6 @@ import { getSharedModelFromUrl, clearModelFromUrl } from './src/utils/shareUrl';
 import { resolveAutoMethod, getSimulationOptionsFromParsedModel } from '@bngplayground/engine';
 import { parseParametersFromCode, isNumericLiteral, stripParametersBlock } from '@bngplayground/engine';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
-import { createDebugLogger } from './src/utils/debug';
-
-const debug = createDebugLogger('App');
 
 const normalizeCode = (value: string) => value.replace(/\r\n/g, '\n').trim();
 const SBML_IMPORT_TIMEOUT_MS = 45_000;
@@ -641,7 +638,7 @@ function App() {
   useEffect(() => {
     let cancelled = false;
 
-    debug('initializeModel effect run');
+    console.log('[App] initializeModel effect run');
 
     const initializeModel = async () => {
       try {
@@ -718,7 +715,7 @@ function App() {
     import('./src/utils/batchRunner').then(({ runAllModels, runModels }) => {
       (window as any).runAllModels = runAllModels;
       (window as any).runModels = runModels;
-      debug('🤖 batch runner loaded. Run `window.runAllModels()` to start.');
+      console.log('🤖 batch runner loaded. Run `window.runAllModels()` to start.');
     });
 
     return () => {
@@ -803,7 +800,7 @@ function App() {
   }, [handleSimulate]);
 
   const handleCodeChange = (newCode: string) => {
-    debug('handleCodeChange called:', {
+    console.log('[App] handleCodeChange called:', {
       codeLength: newCode.length,
       codePreview: newCode.substring(0, 200),
       firstLine: newCode.split('\n')[0] || '',
@@ -839,8 +836,8 @@ function App() {
     try {
       const startedAt = performance.now();
       const text = await file.text();
-      debug(
-        `[SBML Import] file=${file.name} bytes=${file.size} chars=${text.length} timeoutMs=${SBML_IMPORT_TIMEOUT_MS}`
+      console.log(
+        `[App][SBML Import] file=${file.name} bytes=${file.size} chars=${text.length} timeoutMs=${SBML_IMPORT_TIMEOUT_MS}`
       );
       const result = await bnglService.atomize(text, {
         timeoutMs: SBML_IMPORT_TIMEOUT_MS,
@@ -854,7 +851,7 @@ function App() {
         } catch (e) {
           // ignore failures in name parsing
         }
-        debug(`[SBML Import] success in ${Math.round(performance.now() - startedAt)} ms`);
+        console.log(`[App][SBML Import] success in ${Math.round(performance.now() - startedAt)} ms`);
         setStatus({ type: 'success', message: 'SBML imported successfully!' });
       } else {
         setStatus({ type: 'error', message: `Import failed: ${result.error || 'Unknown error'}` });

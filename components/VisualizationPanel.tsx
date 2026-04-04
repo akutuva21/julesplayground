@@ -48,20 +48,9 @@ const TabButton: React.FC<{
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
-  id?: string;
-  ariaControls?: string;
-  tabIndex?: number;
-  onKeyDown?: (e: React.KeyboardEvent) => void;
-}> = React.forwardRef<HTMLButtonElement, any>(({ active, onClick, children, id, ariaControls, tabIndex, onKeyDown }, ref) => (
+}> = ({ active, onClick, children }) => (
   <button
-    ref={ref}
-    role="tab"
-    id={id}
-    aria-selected={active}
-    aria-controls={ariaControls}
-    tabIndex={tabIndex ?? (active ? 0 : -1)}
     onClick={onClick}
-    onKeyDown={onKeyDown}
     className={`whitespace-nowrap py-2 px-3 border-b-2 font-medium text-sm transition-colors ${active
       ? 'border-teal-600 text-teal-600 dark:text-teal-400 dark:border-teal-400'
       : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:border-slate-600'
@@ -69,7 +58,7 @@ const TabButton: React.FC<{
   >
     {children}
   </button>
-));
+);
 
 
 export const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
@@ -184,59 +173,16 @@ export const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
     return computeInfluenceGraph(overlays, model.reactionRules);
   }, [model]);
 
-  const handleTabKeyDown = (e: React.KeyboardEvent, index: number) => {
-    let nextIndex: number | null = null;
-    const tabIndices = [0, 1]; // Indices of main tabs
-    const currentIndex = tabIndices.indexOf(index);
-
-    switch (e.key) {
-      case 'ArrowRight':
-      case 'ArrowDown':
-        nextIndex = tabIndices[(currentIndex + 1) % tabIndices.length];
-        break;
-      case 'ArrowLeft':
-      case 'ArrowUp':
-        nextIndex = tabIndices[(currentIndex - 1 + tabIndices.length) % tabIndices.length];
-        break;
-      case 'Home':
-        nextIndex = tabIndices[0];
-        break;
-      case 'End':
-        nextIndex = tabIndices[tabIndices.length - 1];
-        break;
-    }
-
-    if (nextIndex !== null) {
-      e.preventDefault();
-      setActiveTab(nextIndex);
-      setTimeout(() => {
-        document.getElementById(`main-tab-${nextIndex}`)?.focus();
-      }, 0);
-    }
-  };
-
   return (
     <div className="flex h-full min-h-0 flex-col gap-0 border rounded-lg border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-white dark:bg-slate-900 dark:bg-slate-800 shadow-sm relative">
       {/* Header / Tabs */}
       <div className="flex items-center justify-between px-2 bg-slate-50 dark:bg-slate-900/50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 dark:border-slate-700 shrink-0 rounded-t-lg">
-        <div role="tablist" className="flex space-x-1" aria-label="Main Visualization Tabs">
-          <TabButton
-            id="main-tab-0"
-            ariaControls="main-tabpanel-0"
-            active={activeTab === 0}
-            onClick={() => setActiveTab(0)}
-            onKeyDown={(e: React.KeyboardEvent) => handleTabKeyDown(e, 0)}
-          >
+        <nav className="flex space-x-1" aria-label="Tabs">
+          <TabButton active={activeTab === 0} onClick={() => setActiveTab(0)}>
             📈 Time Courses
           </TabButton>
 
-          <TabButton
-            id="main-tab-1"
-            ariaControls="main-tabpanel-1"
-            active={activeTab === 1}
-            onClick={() => setActiveTab(1)}
-            onKeyDown={(e: React.KeyboardEvent) => handleTabKeyDown(e, 1)}
-          >
+          <TabButton active={activeTab === 1} onClick={() => setActiveTab(1)}>
             🔗 Network
           </TabButton>
 
@@ -279,7 +225,7 @@ export const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
             </Dropdown>
           </div>
 
-        </div>
+        </nav>
 
         {/* Network View Toggle - only visible on Network tab */}
         {activeTab === 1 && (
@@ -339,7 +285,7 @@ export const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
       {/* Content Panels */}
       <div className="flex-1 min-h-0 flex flex-col p-4 overflow-hidden">
         {activeTab === 0 && (
-          <div role="tabpanel" id="main-tabpanel-0" aria-labelledby="main-tab-0" tabIndex={0} className="flex-1 min-h-0 flex flex-col overflow-y-auto pb-2 focus:outline-none">
+          <div className="flex-1 min-h-0 flex flex-col overflow-y-auto pb-2">
             <HelpSection
               title="Time Courses"
               description="Visualize how your model's observables (species or groups of species) evolve over simulated time. This is the primary way to observe the dynamic behavior of your biological system."
@@ -379,7 +325,7 @@ export const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
         )}
 
         {activeTab === 1 && networkViewMode === 'regulatory' && (
-          <div role="tabpanel" id="main-tabpanel-1" aria-labelledby="main-tab-1" tabIndex={0} className="flex-1 min-h-0 flex flex-col focus:outline-none">
+          <div className="flex-1 min-h-0 flex flex-col">
             <HelpSection
               title="Regulatory Graph"
               description="A rule-level view of how reactions influence each other. This is different from a standard species-interaction network; it shows which rules enable (activate) or disable (inhibit) other rules."
@@ -403,7 +349,7 @@ export const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
         )}
 
         {activeTab === 1 && networkViewMode === 'contact' && (
-          <div role="tabpanel" id="main-tabpanel-1" aria-labelledby="main-tab-1" tabIndex={0} className="flex-1 min-h-0 flex flex-col focus:outline-none">
+          <div className="flex-1 min-h-0 flex flex-col">
             <HelpSection
               title="Contact Map"
               description="The Contact Map provides a global view of the physical structure of your model. It shows every molecule type and all possible bonds between their components."
@@ -422,7 +368,7 @@ export const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
         )}
 
         {activeTab === 1 && networkViewMode === 'rules' && (
-          <div role="tabpanel" id="main-tabpanel-1" aria-labelledby="main-tab-1" tabIndex={0} className="flex-1 min-h-0 flex flex-col overflow-y-auto focus:outline-none">
+          <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
             <HelpSection
               title="Rules Inspector"
               description="Follow specific site-level changes (atoms) through the simulation. This tool identifies exactly which bonds or states are modified by each rule and tracks their abundance over time."
@@ -447,7 +393,7 @@ export const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
         )}
 
         {activeTab === 1 && networkViewMode === 'influence' && (
-          <div role="tabpanel" id="main-tabpanel-1" aria-labelledby="main-tab-1" tabIndex={0} className="flex-1 min-h-0 flex flex-col focus:outline-none">
+          <div className="flex-1 min-h-0 flex flex-col">
             <HelpSection
               title="Structural Influence Graph"
               description="Shows rule-to-rule causal relationships. An edge from rule A to rule B means A's structural changes can affect B's ability to fire."
@@ -697,7 +643,7 @@ export const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
         )}
 
         {activeTab === 1 && networkViewMode === 'analysis' && (
-          <div role="tabpanel" id="main-tabpanel-1" aria-labelledby="main-tab-1" tabIndex={0} className="flex-1 min-h-0 flex flex-col overflow-y-auto focus:outline-none">
+          <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
             <HelpSection
               title="Network Analysis"
               description="Apply graph-theory algorithms to your reaction network. Compute centrality metrics (betweenness, PageRank, closeness), detect communities, and measure network connectivity."
