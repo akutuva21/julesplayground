@@ -27,6 +27,7 @@ export interface ActionContext {
   // Execution state
   outputPrefix?: string;
   outputDir?: string;
+  speciesMap?: Map<string, BNGLModel['species'][0]>;
   // Callbacks
   readFile?: (filepath: string) => Promise<string>;
   writeFile?: (filepath: string, content: string) => Promise<void>;
@@ -42,6 +43,16 @@ export class ActionDispatcher {
       concentrationCaches: new Map(),
       ...context
     };
+  }
+
+  private getSpecies(name: string) {
+    if (!this.context.speciesMap) {
+      this.context.speciesMap = new Map();
+      for (const s of this.context.model.species) {
+        this.context.speciesMap.set(s.name, s);
+      }
+    }
+    return this.context.speciesMap.get(name);
   }
 
   /**
@@ -81,6 +92,14 @@ export class ActionDispatcher {
         return this.saveConcentrations(args);
       case 'resetConcentrations':
         return this.resetConcentrations(args);
+
+      // Model metadata actions
+      case 'setModelName':
+        return this.setModelName(args);
+      case 'setVolume':
+        return this.setVolume(args);
+      case 'substanceUnits':
+        return this.setSubstanceUnits(args);
 
       // Network generation (already handled by main engine)
       case 'generate_network':
@@ -292,7 +311,7 @@ export class ActionDispatcher {
     }
 
     // Find species in model
-    const speciesObj = this.context.model.species.find(s => s.name === species);
+    const speciesObj = this.getSpecies(species);
     if (!speciesObj) {
       throw new Error(`setConcentration: species not found: ${species}`);
     }
@@ -329,7 +348,7 @@ export class ActionDispatcher {
     }
 
     // Find species in model
-    const speciesObj = this.context.model.species.find(s => s.name === species);
+    const speciesObj = this.getSpecies(species);
     if (!speciesObj) {
       throw new Error(`addConcentration: species not found: ${species}`);
     }
@@ -383,5 +402,88 @@ export class ActionDispatcher {
     }
 
     console.log(`[ActionDispatcher] Reset concentrations from label '${label}'`);
+  }
+
+  // ========================================================================
+  // MODEL METADATA ACTIONS
+  // ========================================================================
+
+  /**
+   * setModelName(name) - Set the model's name field.
+   * BNG2 parity: BNGAction.pm setModelName
+   */
+  private setModelName(args: Record<string, any>): void {
+    const name = args.name || args.target;
+    if (!name) {
+      throw new Error('setModelName: name is required');
+    }
+    this.context.model.name = String(name);
+    console.log(`[ActionDispatcher] Set model name to "${this.context.model.name}"`);
+  }
+
+  /**
+   * setVolume(target, value) - Update the volume of a compartment.
+   * BNG2 parity: BNGAction.pm setVolume
+   *
+   * @param args.target - Compartment name
+   * @param args.value  - New volume (number or expression string)
+   */
+  private setVolume(args: Record<string, any>): void {
+    const target = args.target;
+    const value = args.value;
+
+    if (!target) {
+      throw new Error('setVolume: target (compartment name) is required');
+    }
+    if (value === undefined) {
+      throw new Error('setVolume: value is required');
+    }
+
+    if (!this.context.model.compartments || this.context.model.compartments.length === 0) {
+      throw new Error('setVolume: model has no compartments');
+    }
+
+    const compartment = this.context.model.compartments.find(c => c.name === target);
+    if (!compartment) {
+      throw new Error(`setVolume: compartment "${target}" not found`);
+    }
+
+    let numericValue: number;
+    if (typeof value === 'string') {
+      if (this.context.model.parameters[value] !== undefined) {
+        numericValue = this.context.model.parameters[value];
+      } else {
+        numericValue = parseFloat(value);
+        if (isNaN(numericValue)) {
+          throw new Error(`setVolume: invalid value: ${value}`);
+        }
+      }
+    } else {
+      numericValue = value;
+    }
+
+    compartment.size = numericValue;
+    console.log(`[ActionDispatcher] Set volume of compartment "${target}" to ${numericValue}`);
+  }
+
+  /**
+   * substanceUnits(units) - Set the model's concentration units.
+   * BNG2 parity: BNGAction.pm substanceUnits
+   *
+   * Valid values: "Concentration" or "Number"
+   */
+  private setSubstanceUnits(args: Record<string, any>): void {
+    const units = args.units || args.target || args.value;
+    if (!units) {
+      throw new Error('substanceUnits: units is required ("Concentration" or "Number")');
+    }
+
+    const normalized = String(units);
+    if (normalized !== 'Concentration' && normalized !== 'Number') {
+      console.warn(`[ActionDispatcher] substanceUnits: unexpected value "${normalized}" (expected "Concentration" or "Number")`);
+    }
+
+    (this.context.model as any).substanceUnits = normalized;
+    console.log(`[ActionDispatcher] Set substanceUnits to "${normalized}"`);
   }
 }
