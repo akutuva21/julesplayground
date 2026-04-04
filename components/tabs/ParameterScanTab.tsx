@@ -602,6 +602,49 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
     downloadFile(JSON.stringify(exportObj, null, 2), 'parameter_scan.json', 'application/json');
   };
 
+
+  // Derived values for parameter scan bounds
+  const baseParam1 = useMemo(() => {
+    if (!parameter1 || !model) return undefined;
+    if (parameter1 in model.parameters) {
+      const deps = paramToSpecies[parameter1];
+      if (deps && deps.length > 0) { const sp = speciesMap.get(deps[0]); if (sp) return sp.initialConcentration; }
+      return model.parameters[parameter1];
+    }
+    return speciesMap.get(parameter1)?.initialConcentration;
+  }, [parameter1, model, paramToSpecies, speciesMap]);
+
+  const baseParam2 = useMemo(() => {
+    if (!parameter2 || !model) return undefined;
+    if (parameter2 in model.parameters) {
+      const deps = paramToSpecies[parameter2];
+      if (deps && deps.length > 0) { const sp = speciesMap.get(deps[0]); if (sp) return sp.initialConcentration; }
+      return model.parameters[parameter2];
+    }
+    return speciesMap.get(parameter2)?.initialConcentration;
+  }, [parameter2, model, paramToSpecies, speciesMap]);
+
+  const [defaultParam1Lower, defaultParam1Upper] = useMemo(() => baseParam1 === undefined ? [0, 0] : computeDefaultBounds(baseParam1), [baseParam1]);
+  const [defaultParam2Lower, defaultParam2Upper] = useMemo(() => baseParam2 === undefined ? [0, 0] : computeDefaultBounds(baseParam2), [baseParam2]);
+
+  const defaultParam1Start = baseParam1 !== undefined ? roundForInput(defaultParam1Lower) : '';
+  const defaultParam1End = baseParam1 !== undefined ? roundForInput(defaultParam1Upper) : '';
+  const defaultParam2Start = baseParam2 !== undefined ? roundForInput(defaultParam2Lower) : '';
+  const defaultParam2End = baseParam2 !== undefined ? roundForInput(defaultParam2Upper) : '';
+
+  const effectiveParam1Start = param1Start !== '' ? param1Start : defaultParam1Start;
+  const effectiveParam1End = param1End !== '' ? param1End : defaultParam1End;
+  const effectiveParam2Start = param2Start !== '' ? param2Start : defaultParam2Start;
+  const effectiveParam2End = param2End !== '' ? param2End : defaultParam2End;
+
+  const canRunScan = (logScale: boolean) => {
+    if (!parameter1 || !effectiveParam1Start || !effectiveParam1End || !param1Steps) return false;
+    if (logScale && (Number(effectiveParam1Start) <= 0 || Number(effectiveParam1End) <= 0)) return false;
+    if (scanType === '2d' && (!parameter2 || parameter2 === parameter1 || !effectiveParam2Start || !effectiveParam2End || !param2Steps)) return false;
+    if (scanType === '2d' && logScale && (Number(effectiveParam2Start) <= 0 || Number(effectiveParam2End) <= 0)) return false;
+    return true;
+  };
+
   const guardMessage = !model
     ? 'Parse a model to set up a parameter scan.'
     : parameterNames.length === 0
