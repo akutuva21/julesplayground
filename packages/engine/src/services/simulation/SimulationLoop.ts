@@ -1630,7 +1630,7 @@ export async function simulate(
                   });
                 }
                 if (isNaN(rate) || !isFinite(rate)) {
-                  console.error(`[Worker] Functional rate evaluation for '${rxn.rateExpression}' returned ${rate}.`);
+                  console.error(`[Worker] Functional rate evaluation for '${rxn.rateExpression}' returned ${rate}. Context:`, JSON.stringify(sharedRateContext));
                   rate = 0;
                 }
               } catch (e: any) {
