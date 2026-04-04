@@ -10,6 +10,7 @@ import { DataTable } from '../ui/DataTable';
 import { bnglService } from '../../services/bnglService';
 import { CHART_COLORS } from '../../src/utils/chartColors';
 import HeatmapChart from '../HeatmapChart';
+import { downloadTextFile } from '../../src/utils/download';
 
 
 // reusable helpers for parameter scanning logic and formatting
@@ -110,6 +111,14 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
 
   const parameterNames = useMemo(() => Object.keys(parameterTypeMap), [parameterTypeMap]);
   const observableNames = useMemo(() => (model ? model.observables.map((obs) => obs.name) : []), [model]);
+
+  const speciesMap = useMemo(() => {
+    const map = new Map<string, typeof model.species[0]>();
+    if (model) {
+      model.species.forEach(s => map.set(s.name, s));
+    }
+    return map;
+  }, [model]);
 
   // map from a parameter name to any species whose initialExpression references it
   const paramToSpecies = useMemo<Record<string, string[]>>(() => {
@@ -552,26 +561,26 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
       // more sense to the user). fall back to the raw parameter value.
       const deps = paramToSpecies[parameter1];
       if (deps && deps.length > 0) {
-        const sp = model.species.find((s) => s.name === deps[0]);
+        const sp = speciesMap.get(deps[0]);
         if (sp) return sp.initialConcentration;
       }
       return model.parameters[parameter1];
     }
-    return model.species.find((s) => s.name === parameter1)?.initialConcentration;
-  }, [parameter1, model, paramToSpecies]);
+    return speciesMap.get(parameter1)?.initialConcentration;
+  }, [parameter1, model, paramToSpecies, speciesMap]);
 
   const baseParam2 = useMemo(() => {
     if (!parameter2 || !model) return undefined;
     if (parameter2 in model.parameters) {
       const deps = paramToSpecies[parameter2];
       if (deps && deps.length > 0) {
-        const sp = model.species.find((s) => s.name === deps[0]);
+        const sp = speciesMap.get(deps[0]);
         if (sp) return sp.initialConcentration;
       }
       return model.parameters[parameter2];
     }
-    return model.species.find((s) => s.name === parameter2)?.initialConcentration;
-  }, [parameter2, model, paramToSpecies]);
+    return speciesMap.get(parameter2)?.initialConcentration;
+  }, [parameter2, model, paramToSpecies, speciesMap]);
 
   const [defaultParam1Lower, defaultParam1Upper] = useMemo(() => {
     if (baseParam1 === undefined) return [0, 0];
@@ -798,18 +807,6 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
     };
   }, [model]);
 
-  const downloadFile = (content: string, fileName: string, mime = 'text/csv') => {
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
   const handleExportCSV = () => {
     // Long-form CSV: param1_name, param1_value, [param2_name, param2_value], observable_name, value
     if (!oneDResult && !twoDResult) return;
@@ -838,13 +835,13 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
       });
     }
 
-    downloadFile(rows.join('\n'), 'parameter_scan.csv', 'text/csv');
+    downloadTextFile(rows.join('\n'), 'parameter_scan.csv', 'text/csv');
   };
 
   const handleExportJSON = () => {
     const exportObj = oneDResult ?? twoDResult ?? null;
     if (!exportObj) return;
-    downloadFile(JSON.stringify(exportObj, null, 2), 'parameter_scan.json', 'application/json');
+    downloadTextFile(JSON.stringify(exportObj, null, 2), 'parameter_scan.json', 'application/json');
   };
 
   const guardMessage = !model
@@ -892,7 +889,7 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
                 const isSpecies = parameterTypeMap[param] === 'species';
                 let label = param;
                 if (isSpecies && model) {
-                  const sp = model.species.find((s) => s.name === param);
+                  const sp = speciesMap.get(param);
                   const expr = sp?.initialExpression || param;
                   label = `${expr} (initial amount for ${param})`;
                 }
@@ -905,7 +902,7 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
             </Select>
             <div className="text-xs text-slate-500 dark:text-slate-400">
               {parameterTypeMap[parameter1] === 'species'
-                ? `Numbers correspond to the initial concentration/amount of the selected species. This value is injected directly into the simulator; changing the underlying parameter (${model?.species.find((s) => s.name === parameter1)?.initialExpression || parameter1}) outside of the scan UI will not automatically update the species.`
+                ? `Numbers correspond to the initial concentration/amount of the selected species. This value is injected directly into the simulator; changing the underlying parameter (${speciesMap.get(parameter1)?.initialExpression || parameter1}) outside of the scan UI will not automatically update the species.`
                 : 'Numbers correspond to the value of the selected model parameter.'}
             </div>
             {parameterTypeMap[parameter1] !== 'species' && paramToSpecies[parameter1] && paramToSpecies[parameter1].length > 0 && (
@@ -928,7 +925,7 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
                   const isSpecies = parameterTypeMap[param] === 'species';
                   let label = param;
                   if (isSpecies && model) {
-                    const sp = model.species.find((s) => s.name === param);
+                    const sp = speciesMap.get(param);
                     const expr = sp?.initialExpression || param;
                     label = `${expr} (initial amount for ${param})`;
                   }
@@ -941,7 +938,7 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
               </Select>
               <div className="text-xs text-slate-500 dark:text-slate-400">
                 {parameterTypeMap[parameter2] === 'species'
-                  ? `Numbers correspond to the initial concentration/amount of the selected species. This value is injected directly into the simulator; changing the underlying parameter (${model?.species.find((s) => s.name === parameter2)?.initialExpression || parameter2}) outside of the scan UI will not automatically update the species.`
+                  ? `Numbers correspond to the initial concentration/amount of the selected species. This value is injected directly into the simulator; changing the underlying parameter (${speciesMap.get(parameter2)?.initialExpression || parameter2}) outside of the scan UI will not automatically update the species.`
                   : 'Numbers correspond to the value of the selected model parameter.'}
               </div>
               {parameterTypeMap[parameter2] !== 'species' && paramToSpecies[parameter2] && paramToSpecies[parameter2].length > 0 && (

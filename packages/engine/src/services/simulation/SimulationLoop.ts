@@ -11,7 +11,7 @@
  */
 
 import { BNGLModel, BNGLReaction, SimulationOptions, SimulationResults, SimulationPhase, SSAInfluenceData, SSAInfluenceTimeSeries } from '../../types';
-import type { SolverResult } from './ODESolver';
+import type { SolverResult, Solver } from './ODESolver';
 
 import { BNGLParser } from '../graph/core/BNGLParser';
 import { toBngGridTime } from '../parity/ParityService';
@@ -23,6 +23,16 @@ import { jitCompiler, type JITCompiledFunction, type NetworkByteCode } from '../
 import { createReducedSystem, findConservationLaws } from '../analysis/ConservationLaws';
 import { SeededRandom } from '../../utils/random';
 // import * as fs from 'node:fs';
+
+const debugState = {
+  hasLoggedIndices: false,
+  hasLoggedDerivCall: false,
+  hasLoggedDeriv: false,
+};
+
+function hasValueProp(v: unknown): v is { value: unknown } {
+  return v != null && typeof v === 'object' && 'value' in v;
+}
 
 interface ConcreteReaction {
   reactants: Int32Array;
@@ -40,6 +50,18 @@ interface ConcreteReaction {
   ruleName?: string;
 }
 
+/**
+ * Resolves the sequence of simulation phases to execute based on the model and options.
+ *
+ * Extracts authored `simulate({ ... })` blocks from the BNGL model and normalizes them into
+ * a standardized array of `SimulationPhase` objects. If no phases are authored, it generates
+ * a single default phase based on the provided `SimulationOptions`. It also handles overrides
+ * from the interactive UI (e.g., when a user changes the end time for a single-phase model).
+ *
+ * @param model - The parsed BNGL model, which may contain predefined simulation phases.
+ * @param options - Fallback options (method, time, tolerances) to use if the model lacks phases.
+ * @returns An array of normalized simulation phases detailing method, duration, and output requirements.
+ */
 export function resolveSimulationPhasesForRun(model: BNGLModel, options: SimulationOptions): SimulationPhase[] {
   const normalizeNSteps = (value: unknown): number | undefined => {
     if (!Number.isFinite(value)) {
@@ -50,8 +72,8 @@ export function resolveSimulationPhasesForRun(model: BNGLModel, options: Simulat
 
   const authoredPhases: SimulationPhase[] = (model.simulationPhases && model.simulationPhases.length > 0)
     ? model.simulationPhases.map((phase) => ({ ...phase }))
-    : (model as any).phases && (model as any).phases.length > 0
-      ? (model as any).phases.map((phase: SimulationPhase) => ({ ...phase }))
+    : model.phases && model.phases.length > 0
+      ? model.phases.map((phase: SimulationPhase) => ({ ...phase }))
       : [];
 
   const normalizedNSteps = normalizeNSteps(options.n_steps);
@@ -172,6 +194,35 @@ async function convertReactionsToGPU(
   return { gpuReactions, rateConstants };
 }
 
+/**
+ * Executes a full simulation of a BioNetGen reaction network.
+ *
+ * This is the core driver of the engine, equivalent to `run_network.cpp` in BNG2.
+ * It manages the entire simulation lifecycle:
+ * 1. Resolving the sequence of simulation phases (e.g., equilibration followed by perturbation).
+ * 2. Compiling the reaction network into highly optimized structures (JIT-compiled functions, WebAssembly CVODE, or WebGPU).
+ * 3. Handling parameter and concentration changes between phases.
+ * 4. Executing the numerical integration via ODE (CVODE/RK45), SSA (Gillespie), or PLA (Hybrid).
+ * 5. Calculating dynamic observables and functional rates at every output step.
+ *
+ * Results are dynamically accumulated and returned as a unified data structure matching BNG2's `.gdat` output.
+ *
+ * @param _jobId - A unique identifier for the simulation job, used for logging or cancellation tracking.
+ * @param inputModel - The expanded BNGL model (containing species, parameters, and generated reactions).
+ * @param options - Top-level simulation configuration (overridden by phase-specific settings if present).
+ * @param callbacks - Integration callbacks for checking cancellation status and posting progress messages.
+ * @returns A promise resolving to the final simulation results, including time series data for observables and species.
+ * @throws {Error} If JIT compilation fails, functional rate evaluation encounters an error, or the underlying numerical solver fails to converge.
+ *
+ * @example
+ * ```typescript
+ * const results = await simulate(1, expandedNetwork, { method: 'ode', t_end: 100, n_steps: 1000 }, {
+ *   checkCancelled: () => { if (userCancelled) throw new Error('Cancelled'); },
+ *   postMessage: (msg) => console.log('Progress:', msg)
+ * });
+ * console.log('Final time:', results.data[results.data.length - 1].time);
+ * ```
+ */
 export async function simulate(
   _jobId: number,
   inputModel: BNGLModel,
@@ -349,7 +400,7 @@ export async function simulate(
   // 3. Pre-process Observables
   // Prefer concrete observables attached to the model (produced earlier by NetworkExpansion). If not present,
   // fall back to dynamic matching here (legacy behavior).
-  const concreteObservables = (model as any).concreteObservables ? (model as any).concreteObservables : model.observables.map(obs => {
+  const concreteObservables = model.concreteObservables ? model.concreteObservables : model.observables.map(obs => {
     const splitPatternsSafe = (patternStr: string): string[] => {
       const commaChunks: string[] = [];
       let current = '';
@@ -424,7 +475,8 @@ export async function simulate(
       name: obs.name,
       type: obs.type,
       indices: new Int32Array(matchingIndices),
-      coefficients: new Float64Array(coefficients)
+      coefficients: new Float64Array(coefficients),
+      volumes: obs.volumes
     };
   });
 
@@ -520,8 +572,8 @@ export async function simulate(
       initialEvalParamMap.set(name, direct);
       continue;
     }
-    if (rawValue && typeof rawValue === 'object' && 'value' in (rawValue as any)) {
-      const nested = Number((rawValue as any).value);
+    if (hasValueProp(rawValue)) {
+      const nested = Number(rawValue.value);
       if (Number.isFinite(nested)) {
         initialEvalParamMap.set(name, nested);
       }
@@ -545,7 +597,7 @@ export async function simulate(
     (model.functions || []).map((f) => [f.name, { args: f.args, expr: f.expression } as any])
   );
   const resolveInitialAmount = (species: BNGLModel['species'][number]): number => {
-    const rawConcentration = (species as any).initialConcentration;
+    const rawConcentration = species.initialConcentration as unknown;
     if (typeof rawConcentration === 'number' && Number.isFinite(rawConcentration)) {
       return rawConcentration;
     }
@@ -554,7 +606,7 @@ export async function simulate(
       if (Number.isFinite(parsedConcentration)) return parsedConcentration;
     }
 
-    const rawAmount = (species as any).initialAmount;
+    const rawAmount = species.initialAmount as unknown;
     if (typeof rawAmount === 'number' && Number.isFinite(rawAmount)) {
       return rawAmount;
     }
@@ -563,8 +615,8 @@ export async function simulate(
       if (Number.isFinite(parsedAmount)) return parsedAmount;
     }
 
-    const expression = typeof (species as any).initialExpression === 'string'
-      ? (species as any).initialExpression.trim()
+    const expression = typeof species.initialExpression === 'string'
+      ? species.initialExpression.trim()
       : '';
     if (!expression) return 0;
     try {
@@ -709,9 +761,11 @@ export async function simulate(
         })()
       : null;
 
-    const evaluateObservablesIntoBuffer = (currentState: Float64Array) => {
+    const evaluateObservablesIntoBuffer = (currentState: Float64Array | number[]) => {
       if (compiledObservableEvaluator) {
-        compiledObservableEvaluator.evaluate(currentState, observableValuesBuffer, speciesVolumes);
+        // compiledObservableEvaluator expects a Float64Array, so we wrap it if needed.
+        const stateArray = currentState instanceof Float64Array ? currentState : Float64Array.from(currentState);
+        compiledObservableEvaluator.evaluate(stateArray, observableValuesBuffer, speciesVolumes);
         return observableValuesBuffer;
       }
 
@@ -721,8 +775,8 @@ export async function simulate(
         for (let j = 0; j < obs.indices.length; j++) {
           const idx = obs.indices[j];
           const val = currentState[idx];
-          const obsVolumes = (obs as any).volumes;
-          const termVolume = Array.isArray(obsVolumes)
+          const obsVolumes = obs.volumes;
+          const termVolume = Array.isArray(obsVolumes) || obsVolumes instanceof Float64Array
             ? (obsVolumes[j] ?? speciesVolumes[idx])
             : speciesVolumes[idx];
           const amount = isOde
@@ -736,7 +790,7 @@ export async function simulate(
       return observableValuesBuffer;
     };
 
-    const evaluateObservablesFast = (currentState: Float64Array) => {
+    const evaluateObservablesFast = (currentState: Float64Array | number[]) => {
       const buffer = evaluateObservablesIntoBuffer(currentState);
       for (let i = 0; i < observableNames.length; i++) {
         observableValuesRecord[observableNames[i]] = buffer[i];
@@ -822,7 +876,7 @@ export async function simulate(
       for (const change of parameterChanges) {
 
         if (change.afterPhaseIndex === targetPhaseIdx - 1) {
-          const currentObsValues = isOde ? evaluateObservablesFast(y) : evaluateObservablesFast(state as any as Float64Array);
+          const currentObsValues = isOde ? evaluateObservablesFast(y) : evaluateObservablesFast(state);
           let newVal: number;
           if (typeof change.value === 'number') newVal = change.value;
           else {
@@ -856,7 +910,7 @@ export async function simulate(
           let anyChanged = false;
           for (const [name, expr] of Object.entries(model.paramExpressions)) {
             try {
-              const currentObsValues = isOde ? evaluateObservablesFast(y) : evaluateObservablesFast(state as any as Float64Array);
+              const currentObsValues = isOde ? evaluateObservablesFast(y) : evaluateObservablesFast(state);
               const val = evaluateFunctionalRate(expr, model.parameters, currentObsValues, model.functions);
               if (Math.abs(val - (model.parameters[name] || 0)) > 1e-12) {
 
@@ -1002,12 +1056,20 @@ export async function simulate(
         if (rxn.isFunctionalRate && rxn.rateExpression) {
           try {
             const currentObs = evaluateObservablesFast(state);
+            // Build context with ridx0/ridx1 placeholders for expanded Sat/MM/Hill macros
+            const rxnContext: Record<string, number> = { ...currentObs };
+            for (let j = 0; j < rxn.reactants.length; j++) {
+              rxnContext[`ridx${j}`] = state[rxn.reactants[j]];
+            }
+            for (let k = 0; k < model.species.length; k++) {
+              rxnContext[model.species[k].name] = state[k];
+            }
             rate = evaluateFunctionalRate(
               rxn.rateExpression,
               model.parameters || {},
               currentObs,
               model.functions,
-              undefined,
+              rxnContext,
               undefined
             );
           } catch (e: any) {
@@ -1153,12 +1215,21 @@ export async function simulate(
             let rate = rxn.rateConstant;
             if (rxn.isFunctionalRate && rxn.rateExpression) {
               try {
+                const obsForProp = getCurrentObsForPropensity();
+                // Build context with ridx0/ridx1 placeholders for expanded Sat/MM/Hill macros
+                const rxnContext: Record<string, number> = { ...obsForProp };
+                for (let j = 0; j < rxn.reactants.length; j++) {
+                  rxnContext[`ridx${j}`] = state[rxn.reactants[j]];
+                }
+                for (let k = 0; k < model.species.length; k++) {
+                  rxnContext[model.species[k].name] = state[k];
+                }
                 rate = evaluateFunctionalRate(
                   rxn.rateExpression,
                   model.parameters || {},
-                  getCurrentObsForPropensity(),
+                  obsForProp,
                   model.functions,
-                  undefined,
+                  rxnContext,
                   undefined
                 );
               } catch (e: any) {
@@ -1306,7 +1377,7 @@ export async function simulate(
                     else console.log('[Worker Debug] Output obs at t=', outT, 'Total_pSTAT3=', obsValues['Total_pSTAT3'], 'Active_Dimer=', obsValues['Active_Dimer']);
                   }
                   // Also list species with nonzero pSTAT3 concentrations
-                  const nonzeroP = [] as any[];
+                  const nonzeroP = [] as Array<{ name: string; state: number }>;
                   for (let si = 0; si < model.species.length; si++) {
                     if (state[si] > 0 && model.species[si].name.includes('s~P')) nonzeroP.push({ name: model.species[si].name, state: state[si] });
                   }
@@ -1418,7 +1489,7 @@ export async function simulate(
           let rate = rxn.rateConstant;
           if (rxn.isFunctionalRate && rxn.rateExpression) {
             try {
-              const currentObs = evaluateObservablesFast(state as any as Float64Array);
+              const currentObs = evaluateObservablesFast(state);
               rate = evaluateFunctionalRate(rxn.rateExpression, model.parameters || {}, currentObs, model.functions, undefined, undefined);
             } catch {
               rate = rxn.rateConstant;
@@ -1451,7 +1522,7 @@ export async function simulate(
               if (rxn.isFunctionalRate && rxn.rateExpression) {
                 try {
                   // provide current observable context for initial probe
-                  const currentObs = evaluateObservablesFast(state as any as Float64Array);
+                  const currentObs = evaluateObservablesFast(state);
                   rateNum = evaluateFunctionalRate(rxn.rateExpression, model.parameters || {}, currentObs, model.functions, undefined, undefined);
                 } catch {
                   rateNum = rxn.rateConstant;
@@ -1496,7 +1567,7 @@ export async function simulate(
               let rateNum = rxn.rateConstant;
               if (rxn.isFunctionalRate && rxn.rateExpression) {
                 try {
-                  const currentObs = evaluateObservablesFast(state as any as Float64Array);
+                  const currentObs = evaluateObservablesFast(state);
                   rateNum = evaluateFunctionalRate(rxn.rateExpression, model.parameters || {}, currentObs, model.functions, undefined, undefined);
                 } catch {
                   rateNum = rxn.rateConstant;
@@ -1543,9 +1614,9 @@ export async function simulate(
           const context = reusableRateContext;
 
           for (let i = 0; i < concreteReactions.length; i++) {
-            if (debugDerivs && !(globalThis as any)._hasLoggedIndices) {
+            if (debugDerivs && !debugState.hasLoggedIndices) {
               console.log(`[Worker] Rxn ${i}: k=${concreteReactions[i].rateConstant} isFunc=${concreteReactions[i].isFunctionalRate}`);
-              if (i === concreteReactions.length - 1) (globalThis as any)._hasLoggedIndices = true;
+              if (i === concreteReactions.length - 1) debugState.hasLoggedIndices = true;
             }
             const rxn = concreteReactions[i];
             let rate: number;
@@ -1663,14 +1734,14 @@ export async function simulate(
 
       // Fallback: Mass Action Loop
       return (yIn: Float64Array, dydt: Float64Array) => {
-        if (!(globalThis as any)._hasLoggedDerivCall) {
+        if (!debugState.hasLoggedDerivCall) {
           console.log('[Worker] DERIVATIVE FUNCTION CALLED (Loop Fallback)');
-          (globalThis as any)._hasLoggedDerivCall = true;
+          debugState.hasLoggedDerivCall = true;
         }
         dydt.fill(0);
-        if (!(globalThis as any)._hasLoggedDeriv && debugDerivs) {
+        if (!debugState.hasLoggedDeriv && debugDerivs) {
           console.log('[Worker] Computing derivatives (first step)...');
-          (globalThis as any)._hasLoggedDeriv = true;
+          debugState.hasLoggedDeriv = true;
         }
 
         for (let i = 0; i < concreteReactions.length; i++) {
@@ -1974,7 +2045,7 @@ export async function simulate(
     const hasLocalFunctions = (model.functions || []).some((f) => Array.isArray(f.args) && f.args.length > 0);
     const disableNativeBytecode =
       ((typeof process !== 'undefined') && process?.env?.BNG_DISABLE_NATIVE_BYTECODE === '1') ||
-      ((options as any)?.disableNativeBytecode === true);
+      (options.disableNativeBytecode === true);
     const enableNativeBytecode = !disableNativeBytecode;
     rebuildNativeByteCode = () => {
       activeNativeByteCode = undefined;
@@ -2403,7 +2474,7 @@ export async function simulate(
       // matching BNG2's continuous-integration behavior.
       const canReuseCvode = isContinue && persistedSolver !== undefined && thisSolverKey === persistedSolverKey;
 
-      let solver;
+      let solver: Solver;
       if (canReuseCvode) {
         solver = persistedSolver!;
       } else {
@@ -2575,7 +2646,7 @@ export async function simulate(
           persistedSolver = solver as typeof persistedSolver;
           persistedSolverKey = thisSolverKey;
         } else {
-          (solver as any)?.destroy?.();
+          solver?.destroy?.();
           persistedSolver = undefined;
         }
       }

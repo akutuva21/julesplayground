@@ -36,6 +36,9 @@ import type {
 import { writeBNGL } from '../graph/BNGLWriter';
 import { isSpeciesMatch } from '../parity/PatternMatcher';
 
+/**
+ * Configuration options governing the generation of a hybrid particle/population BNGL model.
+ */
 export interface HybridModelOptions {
   /** Output file prefix */
   prefix?: string;
@@ -53,11 +56,17 @@ export interface HybridModelOptions {
   verbose?: boolean;
 }
 
+/**
+ * Internal helper structure storing the population classification inferred for a molecule type.
+ */
 export interface PopulationType {
   moleculeName: string;
   treatAsPopulation: boolean;
 }
 
+/**
+ * Rule governing how species matching a BNGL pattern are automatically lumped into an ODE population variable.
+ */
 export interface PopulationMap {
   pattern: string;
   populationVariable: string;
@@ -67,6 +76,13 @@ export interface PopulationMap {
 // ────────────────────────────────────────────────────────────────────
 // Hybrid Model Generator
 // ────────────────────────────────────────────────────────────────────
+/**
+ * Service responsible for generating a hybrid particle/population (HPP) model from a standard BNGL model.
+ *
+ * An HPP model partitions the state space into ODE populations (for high-copy, structurally simple species)
+ * and NFsim particles (for low-copy, complex species). This generator translates the species, rules, and observables
+ * to support the hybrid methodology defined in Hogg et al. (2014).
+ */
 export class HybridModelGenerator {
   /**
    * Generate a hybrid particle/population model.
@@ -146,10 +162,17 @@ export class HybridModelGenerator {
       components: [...mt.components],
     }));
 
+    const existingMoleculeNames = new Set(moleculeTypes.map(mt => mt.name));
+    const seenPopTypes = new Set<string>();
+
     // Add population types as new molecule types
     for (const pt of popTypes) {
-      const existingIdx = moleculeTypes.findIndex(mt => mt.name === pt.name);
-      if (existingIdx >= 0) {
+      if (seenPopTypes.has(pt.name)) {
+        throw new Error(`PopulationType ${pt.name} clashes with another PopulationType of the same name.`);
+      }
+      seenPopTypes.add(pt.name);
+
+      if (existingMoleculeNames.has(pt.name)) {
         throw new Error(`PopulationType ${pt.name} clashes with MoleculeType of the same name.`);
       }
       moleculeTypes.push({
@@ -189,14 +212,15 @@ export class HybridModelGenerator {
 
     // Step 5: Add zero-count populations for unmatched population types
     let zeroPops = 0;
+    const existingSpeciesNames = new Set(species.map(s => s.name));
     for (const pm of popMaps) {
       const popName = pm.populationName + '()';
-      const existing = species.find(s => s.name === popName);
-      if (!existing) {
+      if (!existingSpeciesNames.has(popName)) {
         species.push({
           name: popName,
           initialConcentration: 0,
         });
+        existingSpeciesNames.add(popName);
         zeroPops++;
       }
     }
@@ -209,7 +233,9 @@ export class HybridModelGenerator {
       // Add population matches to observable pattern
       const addedPatterns: string[] = [];
       for (const pm of popMaps) {
-        if (isSimplePatternMatch(pm.pattern, obs.pattern) || obs.pattern.includes(pm.pattern.split('(')[0])) {
+        const simpleBase = pm.pattern.split('(')[0];
+        // Fast rejection with includes before running full pattern match
+        if (obs.pattern.includes(simpleBase) || isSimplePatternMatch(pm.pattern, obs.pattern)) {
           addedPatterns.push(pm.populationName + '()');
         }
       }
@@ -368,16 +394,22 @@ export class HybridModelGenerator {
       let hasParticle = false;
 
       for (const pattern of allPatterns) {
-        for (const molName of populationMolecules) {
-          if (pattern.includes(molName)) {
-            hasPopulation = true;
-          }
-        }
-
         // Extract molecule names from pattern
-        const moleculeNames = pattern.match(/\b[A-Z][A-Za-z0-9_]*\b/g) || [];
+        // 1. Strip component groups to avoid misidentifying uppercase states or components
+        // 2. Remove compartment prefixes (e.g., @cell:)
+        // 3. Split by '.' to handle multi-molecule patterns
+        const strippedPattern = pattern.replace(/\(.*?\)/g, '');
+        const moleculeNames = strippedPattern.split('.')
+          .map(part => {
+            const colonIndex = part.indexOf(':');
+            return colonIndex !== -1 ? part.substring(colonIndex + 1) : part;
+          })
+          .filter(name => name.length > 0 && /^[A-Z]/.test(name)); // Molecules must start with uppercase
+
         for (const molName of moleculeNames) {
-          if (!populationMolecules.has(molName)) {
+          if (populationMolecules.has(molName)) {
+            hasPopulation = true;
+          } else {
             hasParticle = true;
           }
         }
@@ -400,6 +432,10 @@ export class HybridModelGenerator {
 // ────────────────────────────────────────────────────────────────────
 // Result type
 // ────────────────────────────────────────────────────────────────────
+/**
+ * Structured output returned after generating a hybrid model.
+ * Contains both the in-memory AST and the serialized BNGL string.
+ */
 export interface HybridModelResult {
   /** The generated hybrid model */
   model: BNGLModel;
@@ -433,7 +469,15 @@ function isSimplePatternMatch(speciesStr: string, patternStr: string): boolean {
 // ────────────────────────────────────────────────────────────────────
 
 /**
- * Entry point for generate_hybrid_model action.
+ * Generates a Hybrid Particle/Population (HPP) model from an existing BNGL model.
+ *
+ * Replaces specified high-copy seed species with population variables, auto-infers
+ * population mappings if none are provided, and adds bridging mapping rules to link
+ * the stochastic particle phase to the continuous ODE population phase.
+ *
+ * @param model - The parsed standard BNGL model.
+ * @param options - Configuration dictating generation safety rules and output file formatting.
+ * @returns An object containing the generated AST, BNGL string, and diagnostic logs.
  */
 export async function generateHybridModel(
   model: BNGLModel,
