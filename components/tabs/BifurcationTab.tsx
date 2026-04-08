@@ -123,14 +123,19 @@ export const BifurcationTab: React.FC<BifurcationTabProps> = ({
         const initialState = new Float64Array(nSpecies);
         model.species.forEach((s, i) => { initialState[i] = s.initialConcentration; });
 
+        const speciesIndexMap = engine.createSpeciesIndexMap(model.species.map(s => s.name));
+        const compiledRHS = engine.jitCompiler.compileFromRxns(
+          model.reactions || [],
+          nSpecies,
+          speciesIndexMap,
+          model.parameters
+        );
+
         const result = engine.continuation({
           nSpecies,
           rhsFn: (_y: Float64Array, _p: number, _dydt: Float64Array) => {
-            // TODO: Use engine.JITCompiler to generate real RHS from expanded model.
-            // For now, explicitly fail rather than returning meaningless results.
-            throw new Error(
-              'Bifurcation analysis is not yet implemented: RHS function is not available for continuation.'
-            );
+            compiledRHS.updateParameters?.({ ...model.parameters, [selectedParam]: _p });
+            compiledRHS.evaluate(0, _y, _dydt);
           },
           initialState,
           parameterStart: startValue,
@@ -165,10 +170,23 @@ export const BifurcationTab: React.FC<BifurcationTabProps> = ({
           const fixed = new Float64Array(nSpecies);
           model.species.forEach((s, i) => { fixed[i] = s.initialConcentration; });
 
+          const speciesIndexMap = engine.createSpeciesIndexMap(model.species.map(s => s.name));
+          const compiledRHS = engine.jitCompiler.compileFromRxns(
+            model.reactions || [],
+            nSpecies,
+            speciesIndexMap,
+            model.parameters
+          );
+
           const ncResult = engine.computeNullclines({
             rhsFn: (_state: Float64Array) => {
-              // TODO: Use engine.JITCompiler to generate real RHS from expanded model
-              return new Float64Array(2);
+              const fullState = new Float64Array(fixed);
+              fullState[idx1] = _state[0];
+              fullState[idx2] = _state[1];
+              const dydt = new Float64Array(nSpecies);
+              compiledRHS.updateParameters?.(model.parameters);
+              compiledRHS.evaluate(0, fullState, dydt);
+              return new Float64Array([dydt[idx1], dydt[idx2]]);
             },
             xRange: [0, fixed[idx1] * 3 || 10] as [number, number],
             yRange: [0, fixed[idx2] * 3 || 10] as [number, number],
