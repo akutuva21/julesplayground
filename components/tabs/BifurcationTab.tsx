@@ -172,7 +172,7 @@ export const BifurcationTab: React.FC<BifurcationTabProps> = ({
               const speciesMap = new Map();
               model.species.forEach((s: any, i: number) => speciesMap.set(s.name, i));
               if (model.reactions) {
-                compiledRhs = jit.compileFromRxns(model.reactions, nSpecies, speciesMap, model.parameters);
+                compiledRhs = jit.compileFromRxns(model.reactions as any, nSpecies, speciesMap, model.parameters);
               }
             } catch (e) {
               console.warn('Failed to compile RHS for nullclines', e);
