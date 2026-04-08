@@ -110,14 +110,19 @@ export const BifurcationTab: React.FC<BifurcationTabProps> = ({
       const expandedModel = await engine.generateExpandedNetwork(model, () => {}, () => {});
       const nSpecies = expandedModel.species.length;
 
-      const jit = new engine.JITCompiler();
+      const speciesIndexMap = new Map<string, number>();
+      expandedModel.species.forEach((s: any, idx: number) => {
+        speciesIndexMap.set(s.name, idx);
+      });
+
+      const jit = engine.jitCompiler;
       let compiled: any;
       try {
-        compiled = jit.compile(
-          expandedModel.reactions || [],
+        compiled = jit.compileFromRxns(
+          (expandedModel.reactions || []) as any,
           nSpecies,
-          model.parameters,
-          expandedModel.species?.map((s: any) => s.isConstant ?? false)
+          speciesIndexMap,
+          model.parameters
         );
       } catch (err) {
         console.warn('JIT Compilation failed, using fallback RHS');
@@ -192,8 +197,15 @@ export const BifurcationTab: React.FC<BifurcationTabProps> = ({
           }
           const ncResult = engine.computeNullclines({
             rhsFn: (state: Float64Array) => {
+              // State provided by computeNullclines is only 2D [x, y].
+              // We must inject it into the full N-dimensional state vector
+              // using the fixed initial concentrations for all other species.
+              const fullState = new Float64Array(fixed);
+              fullState[idx1] = state[0];
+              fullState[idx2] = state[1];
+
               const dydt = new Float64Array(nSpecies);
-              evaluateRhs(0, state, dydt);
+              evaluateRhs(0, fullState, dydt);
               return new Float64Array([dydt[idx1], dydt[idx2]]);
             },
             xRange: [0, fixed[idx1] * 3 || 10] as [number, number],
