@@ -313,9 +313,19 @@ export class JITCompiler {
             const terms: string[] = [];
             for (let j = 0; j < obs.indices.length; j++) {
                 const idx = this.normalizeSpeciesIndex(obs.indices[j], nSpecies, outputOffset + i, 'reactant', j);
+
+                // Security Fix: Robust sanitization before string concatenation to prevent code injection
                 const coeff = Number(obs.coefficients[j]);
+                if (!Number.isFinite(coeff)) {
+                    throw new Error(`[JITCompiler] Invalid non-finite coefficient for observable ${i}`);
+                }
+
                 const explicitVolume = obs.volumes && j < obs.volumes.length ? Number(obs.volumes[j]) : null;
-                const volumeExpr = explicitVolume === null || Number.isNaN(explicitVolume)
+                if (explicitVolume !== null && !Number.isFinite(explicitVolume)) {
+                    throw new Error(`[JITCompiler] Invalid non-finite volume for observable ${i}`);
+                }
+
+                const volumeExpr = explicitVolume === null
                     ? `speciesVolumes[${idx}]`
                     : `${explicitVolume}`;
                 const speciesExpr = useAmounts
@@ -327,17 +337,19 @@ export class JITCompiler {
             source += `output[${outputOffset + i}] = ${terms.length > 0 ? terms.join(' + ') : '0.0'};\n`;
         }
 
-        const fullSource = `(function(y, output, speciesVolumes) {\n${source}})`;
+        // Security Fix: Replaced eval() with new Function() to prevent local scope pollution
+        // while maintaining the performance benefits of JIT compilation.
+        const fullSource = source;
 
         let evaluate: CompiledObservableEvaluator;
         try {
-            evaluate = eval(fullSource) as CompiledObservableEvaluator;
+            evaluate = new Function('y', 'output', 'speciesVolumes', fullSource) as CompiledObservableEvaluator;
         } catch (error) {
             console.error('[JITCompiler] Failed to compile observable evaluator chunk:', error);
             evaluate = this.buildFallbackEvaluator(observables, nSpecies, useAmounts, outputOffset);
         }
 
-        return { evaluate, sourceCode: fullSource };
+        return { evaluate, sourceCode: `(function(y, output, speciesVolumes) {\n${fullSource}})` };
     }
 
     /**
@@ -451,10 +463,21 @@ export class JITCompiler {
         for (let i = 0; i < reactions.length; i++) {
             const rxn = reactions[i];
 
-            // Build rate expression: k * product(y[reactant]^stoich)
-            let rateExpr = typeof rxn.rateConstant === 'number'
-                ? rxn.rateConstant.toString()
-                : `(${ExpressionTranslator.translate(rxn.rateConstant.toString()).replace(/\bt\b/g, '__t__')})`; // Expression in parentheses for safety
+            // Security Fix: Robust validation of symbolic rate constants before string interpolation
+            let rateExpr: string;
+            if (typeof rxn.rateConstant === 'number') {
+                if (!Number.isFinite(rxn.rateConstant)) throw new Error(`[JITCompiler] Invalid rate constant: ${rxn.rateConstant}`);
+                rateExpr = rxn.rateConstant.toString();
+            } else {
+                // Ensure the base expression doesn't contain unsafe code injection payloads
+                // We use replace() here because the compiler handles '__t__' as the time variable
+                rateExpr = `(${ExpressionTranslator.translate(rxn.rateConstant.toString()).replace(/\bt\b/g, '__t__')})`;
+
+                // Disallow characters that could escape the function body context
+                if (/[;'"{}[\]]/.test(rateExpr)) {
+                    throw new Error(`[JITCompiler] Unsafe characters detected in rate expression: ${rxn.rateConstant}`);
+                }
+            }
 
             // NOTE: BNG2 network simulations (ODE) do not implement TotalRate; treat as standard mass action.
             for (let j = 0; j < rxn.reactantIndices.length; j++) {
@@ -571,12 +594,13 @@ export class JITCompiler {
         }
 
         // Create the function
-        const fullSource = `(function(params) {\nreturn function(__t__, y, dydt, speciesVolumes) {\n${source}}\n})`;
+        // Security Fix: Replaced eval() with new Function() to prevent local scope pollution
+        const fullSource = `return function(__t__, y, dydt, speciesVolumes) {\n${source}}\n`;
 
         let evaluate: CompiledRHS;
         const parameterVector = this.buildParameterVector(parameterNames, parameters);
         try {
-            const factory = eval(fullSource) as (params: Float64Array) => CompiledRHS;
+            const factory = new Function('params', fullSource) as (params: Float64Array) => CompiledRHS;
             evaluate = factory(parameterVector);
         } catch (error) {
             console.error('[JITCompiler] Failed to compile RHS function:', error);
@@ -589,7 +613,7 @@ export class JITCompiler {
 
         const result: JITCompiledFunction = {
             evaluate,
-            sourceCode: fullSource,
+            sourceCode: `(function(params) {\n${fullSource}})`,
             nSpecies,
             nReactions: reactions.length,
             compiledAt: Date.now(),
