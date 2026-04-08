@@ -17,6 +17,7 @@ export interface ExpressionEvaluator {
   compile: (expr: string, vars: string[]) => (ctx: Record<string, number>) => number;
   getReferencedVariables: (expr: string) => string[];
   evaluateConstant: (expr: string) => number;
+  isSafe: (expr: string, vars: string[]) => boolean;
 }
 
 /**
@@ -506,27 +507,17 @@ const JIT_ALLOWED_FUNCTIONS: Record<string, string> = {
  *  - String manipulation, property access, assignment, etc.
  */
 export function isJITSafe(expandedExpr: string, knownVars: Set<string>): boolean {
-  // Reject anything with property access, assignment, semicolons, or template literals
-  if (/[;`\[\]{}]|\.(?![0-9])|\b(var|let|const|function|return|this|new|delete|typeof|void|import|export|class|throw|try|catch|finally|while|for|do|switch|with|yield|async|await)\b/.test(expandedExpr)) {
-    return false;
+  // Use SafeExpressionEvaluator's AST parser to guarantee the string is a valid mathematical expression
+  // with no unsupported JS syntax, property access, or unexpected function calls.
+  const evaluator = getEvaluator();
+
+  if (evaluator && typeof evaluator.isSafe === 'function') {
+    return evaluator.isSafe(expandedExpr, Array.from(knownVars));
   }
 
-  // Reject assignment operators: = but not ==, !=, <=, >=
-  if (/(?<![=!<>])=(?!=)/.test(expandedExpr)) {
-    return false;
-  }
-
-  // Extract all identifiers (word tokens not preceded by a dot)
-  const identifiers = expandedExpr.match(/\b[A-Za-z_][A-Za-z0-9_]*\b/g) || [];
-  for (const id of identifiers) {
-    if (knownVars.has(id)) continue;
-    if (id in JIT_ALLOWED_FUNCTIONS) continue;
-    // It could be a numeric suffix like e10 from scientific notation — skip
-    if (/^[eE]\d*$/.test(id)) continue;
-    return false;
-  }
-
-  return true;
+  // Fail securely: if we cannot securely validate the expression using the AST parser,
+  // we must reject JIT compilation to prevent code injection.
+  return false;
 }
 
 /**
