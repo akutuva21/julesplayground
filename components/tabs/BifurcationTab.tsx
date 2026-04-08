@@ -165,10 +165,30 @@ export const BifurcationTab: React.FC<BifurcationTabProps> = ({
           const fixed = new Float64Array(nSpecies);
           model.species.forEach((s, i) => { fixed[i] = s.initialConcentration; });
 
+          let compiledRhs: any = null;
+          if (engine.JITCompiler) {
+            try {
+              const jit = new engine.JITCompiler();
+              const speciesMap = new Map();
+              model.species.forEach((s: any, i: number) => speciesMap.set(s.name, i));
+              if (model.reactions) {
+                compiledRhs = jit.compileFromRxns(model.reactions, nSpecies, speciesMap, model.parameters);
+              }
+            } catch (e) {
+              console.warn('Failed to compile RHS for nullclines', e);
+            }
+          }
+
           const ncResult = engine.computeNullclines({
-            rhsFn: (_state: Float64Array) => {
-              // TODO: Use engine.JITCompiler to generate real RHS from expanded model
-              return new Float64Array(2);
+            rhsFn: (state: Float64Array) => {
+              const fullState = new Float64Array(fixed);
+              fullState[idx1] = state[0];
+              fullState[idx2] = state[1];
+              const dydt = new Float64Array(nSpecies);
+              if (compiledRhs) {
+                compiledRhs(0, fullState, dydt);
+              }
+              return new Float64Array([dydt[idx1], dydt[idx2]]);
             },
             xRange: [0, fixed[idx1] * 3 || 10] as [number, number],
             yRange: [0, fixed[idx2] * 3 || 10] as [number, number],
