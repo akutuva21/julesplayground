@@ -17,7 +17,7 @@ export interface ExpressionEvaluator {
   compile: (expr: string, vars: string[]) => (ctx: Record<string, number>) => number;
   getReferencedVariables: (expr: string) => string[];
   evaluateConstant: (expr: string) => number;
-  isSafe: (expr: string, vars: string[]) => boolean;
+  isSafe?: (expr: string, vars: string[]) => boolean;
 }
 
 /**
@@ -509,15 +509,33 @@ const JIT_ALLOWED_FUNCTIONS: Record<string, string> = {
 export function isJITSafe(expandedExpr: string, knownVars: Set<string>): boolean {
   // Use SafeExpressionEvaluator's AST parser to guarantee the string is a valid mathematical expression
   // with no unsupported JS syntax, property access, or unexpected function calls.
-  const evaluator = getEvaluator();
-
-  if (evaluator && typeof evaluator.isSafe === 'function') {
-    return evaluator.isSafe(expandedExpr, Array.from(knownVars));
+  if (!SafeExpressionEvaluatorStatic || typeof SafeExpressionEvaluatorStatic.isSafe !== 'function') {
+    // Fail securely: if we cannot securely validate the expression using the AST parser,
+    // we must reject JIT compilation to prevent code injection.
+    return false;
   }
 
-  // Fail securely: if we cannot securely validate the expression using the AST parser,
-  // we must reject JIT compilation to prevent code injection.
-  return false;
+  if (!SafeExpressionEvaluatorStatic.isSafe(expandedExpr, Array.from(knownVars))) {
+    return false;
+  }
+
+  // The AST parser validates that the expression is mathematically safe.
+  // However, JIT compilation via new Function() only supports a strict subset of
+  // mathematical functions (defined in JIT_ALLOWED_FUNCTIONS).
+  // Functions like BNG's "if()" or "mratio" are parsed safely by AST but cannot be
+  // safely mapped directly to JS semantics in buildJITFunctionBody, so we must reject them here.
+
+  // Extract all identifiers (word tokens not preceded by a dot)
+  const identifiers = expandedExpr.match(/\b[A-Za-z_][A-Za-z0-9_]*\b/g) || [];
+  for (const id of identifiers) {
+    if (knownVars.has(id)) continue;
+    if (id in JIT_ALLOWED_FUNCTIONS) continue;
+    // It could be a numeric suffix like e10 from scientific notation - skip
+    if (/^[eE]\d*$/.test(id)) continue;
+    return false; // Found an unsupported identifier/function for JIT
+  }
+
+  return true;
 }
 
 /**
