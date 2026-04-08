@@ -123,9 +123,9 @@ export const BifurcationTab: React.FC<BifurcationTabProps> = ({
         const initialState = new Float64Array(nSpecies);
         model.species.forEach((s, i) => { initialState[i] = s.initialConcentration; });
 
-        const speciesIndexMap = engine.createSpeciesIndexMap(model.species.map(s => s.name));
+        const speciesIndexMap = new Map(model.species.map((s, i) => [s.name, i]));
         const compiledRHS = engine.jitCompiler.compileFromRxns(
-          model.reactions || [],
+          (model.reactions || []) as any,
           nSpecies,
           speciesIndexMap,
           model.parameters
@@ -170,9 +170,9 @@ export const BifurcationTab: React.FC<BifurcationTabProps> = ({
           const fixed = new Float64Array(nSpecies);
           model.species.forEach((s, i) => { fixed[i] = s.initialConcentration; });
 
-          const speciesIndexMap = engine.createSpeciesIndexMap(model.species.map(s => s.name));
+          const speciesIndexMap = new Map(model.species.map((s, i) => [s.name, i]));
           const compiledRHS = engine.jitCompiler.compileFromRxns(
-            model.reactions || [],
+            (model.reactions || []) as any,
             nSpecies,
             speciesIndexMap,
             model.parameters
