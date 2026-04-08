@@ -6,6 +6,7 @@ import {
     DefinitionSentence,
     InitializationSentence,
     SimulationSentence,
+    ObservableSentence,
     ActionType
 } from './types';
 import { buildVerbPattern, VERBS_BY_ACTION } from './ontology';
@@ -604,13 +605,17 @@ export class BioParser {
         };
     }
 
-    private static parseObservable(text: string, match: RegExpMatchArray): BioSentence {
-        // For now, return as a comment/special type - extend types.ts if needed
+    private static parseObservable(text: string, match: RegExpMatchArray): ObservableSentence {
+        const moleculeStr = match[1].trim();
+        const observableName = match[2];
+
         return {
             id: uuidv4(),
             text,
-            type: 'COMMENT', // TODO: Add OBSERVABLE type
-            isValid: true
+            type: 'OBSERVABLE',
+            isValid: true,
+            molecule: { name: moleculeStr, stateConstraints: {} },
+            observableName
         };
     }
 

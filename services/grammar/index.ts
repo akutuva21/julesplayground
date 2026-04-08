@@ -23,6 +23,7 @@ export type {
   InteractionSentence,
   InitializationSentence,
   SimulationSentence,
+  ObservableSentence,
   CommentSentence,
   InvalidSentence,
   BioSentence,

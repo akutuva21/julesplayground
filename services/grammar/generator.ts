@@ -1,4 +1,4 @@
-import { BioSentence, InteractionSentence, DefinitionSentence, InitializationSentence, SimulationSentence } from './types';
+import { BioSentence, InteractionSentence, DefinitionSentence, InitializationSentence, SimulationSentence, ObservableSentence } from './types';
 import {
   ACTION_SITE_CONFIG,
   DEFAULT_PARAMETER_VALUES,
@@ -13,6 +13,7 @@ export class BNGLGenerator {
     const definitions = sentences.filter(s => s.type === 'DEFINITION' && s.isValid) as DefinitionSentence[];
     const interactions = sentences.filter(s => s.type === 'INTERACTION' && s.isValid) as InteractionSentence[];
     const initializations = sentences.filter(s => s.type === 'INITIALIZATION' && s.isValid) as InitializationSentence[];
+    const observables = sentences.filter(s => s.type === 'OBSERVABLE' && s.isValid) as ObservableSentence[];
     const simulation = sentences.find(s => s.type === 'SIMULATION' && s.isValid) as SimulationSentence | undefined;
 
     // Symbol Table: Track defined molecules and their sites/states
@@ -164,15 +165,38 @@ export class BNGLGenerator {
 
     // Observables
     lines.push('begin observables');
+
+    // Track observables to avoid duplicates
+    const emittedObservables = new Set<string>();
+
+    if (observables.length > 0) {
+      lines.push('  # User-defined observables');
+      observables.forEach((obs, idx) => {
+        const obsName = obs.observableName || `Obs_${obs.molecule.name}_${idx}`;
+        const pattern = obs.molecule.name;
+        lines.push(`  Molecules ${obsName} ${pattern}()`);
+        emittedObservables.add(obsName);
+        // Also add total to prevent auto-gen from creating a conflicting name if the user named it exactly
+        emittedObservables.add(`${pattern}_total`);
+      });
+    }
+
     lines.push('  # Auto-generated observables');
     moleculeMap.forEach((data, name) => {
-      lines.push(`  Molecules ${name}_total ${name}()`);
+      const defaultTotalName = `${name}_total`;
+      if (!emittedObservables.has(defaultTotalName)) {
+        lines.push(`  Molecules ${defaultTotalName} ${name}()`);
+      }
+
       // Add state-specific observables for modified sites
       data.sites.forEach(site => {
         const states = data.states[site];
         if (states && states.size > 1) {
           states.forEach(state => {
-            lines.push(`  Molecules ${name}_${site}_${state} ${name}(${site}~${state})`);
+            const stateObsName = `${name}_${site}_${state}`;
+            if (!emittedObservables.has(stateObsName)) {
+               lines.push(`  Molecules ${stateObsName} ${name}(${site}~${state})`);
+            }
           });
         }
       });

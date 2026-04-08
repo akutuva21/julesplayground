@@ -34,7 +34,7 @@ export type ParseError = {
   endColumn: number;
 };
 
-export type SentenceType = 'DEFINITION' | 'COMPARTMENT' | 'INTERACTION' | 'INITIALIZATION' | 'SIMULATION' | 'COMMENT' | 'INVALID';
+export type SentenceType = 'DEFINITION' | 'COMPARTMENT' | 'INTERACTION' | 'INITIALIZATION' | 'SIMULATION' | 'OBSERVABLE' | 'COMMENT' | 'INVALID';
 
 export interface BaseSentence {
   id: string; // unique ID for tracking (useful for React keys)
@@ -81,6 +81,12 @@ export interface SimulationSentence extends BaseSentence {
   steps: number; // n_steps
 }
 
+export interface ObservableSentence extends BaseSentence {
+  type: 'OBSERVABLE';
+  observableName?: string;
+  molecule: MoleculeInstance;
+}
+
 export interface CommentSentence extends BaseSentence {
   type: 'COMMENT';
 }
@@ -95,5 +101,6 @@ export type BioSentence =
   | InteractionSentence
   | InitializationSentence
   | SimulationSentence
+  | ObservableSentence
   | CommentSentence
   | InvalidSentence;
