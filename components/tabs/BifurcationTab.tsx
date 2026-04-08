@@ -96,6 +96,58 @@ export const BifurcationTab: React.FC<BifurcationTabProps> = ({
       // Dynamic import to avoid bundling engine in UI
       const engine = await import('@bngplayground/engine');
 
+      // Expand the network
+      const expandedModel = await engine.generateExpandedNetwork(model, () => {}, () => {});
+      const nSpecies = expandedModel.species.length;
+
+      // Build JIT-compatible reactions
+      const jitReactions = (expandedModel.reactions || []).map(rxn => {
+        const reactantIndices: number[] = [];
+        const reactantStoich: number[] = [];
+        const reactantCounts = new Map<string, number>();
+        for (const r of rxn.reactants) {
+          reactantCounts.set(r, (reactantCounts.get(r) || 0) + 1);
+        }
+        for (const [name, count] of reactantCounts) {
+          const idx = expandedModel.species.findIndex(s => s.name === name);
+          if (idx >= 0) {
+            reactantIndices.push(idx);
+            reactantStoich.push(count);
+          }
+        }
+
+        const productIndices: number[] = [];
+        const productStoich: number[] = [];
+        const productCounts = new Map<string, number>();
+        for (const p of rxn.products) {
+          productCounts.set(p, (productCounts.get(p) || 0) + 1);
+        }
+        for (const [name, count] of productCounts) {
+          const idx = expandedModel.species.findIndex(s => s.name === name);
+          if (idx >= 0) {
+            productIndices.push(idx);
+            productStoich.push(count);
+          }
+        }
+
+        let rateConstant: string | number = rxn.rateConstant;
+        if (typeof rxn.rate === 'string' && rxn.rate.trim().length > 0 && isNaN(Number(rxn.rate))) {
+            rateConstant = rxn.rate;
+        }
+
+        return {
+          reactantIndices,
+          reactantStoich,
+          productIndices,
+          productStoich,
+          rateConstant,
+          scalingVolume: 1,
+        };
+      });
+
+      const constantSpeciesMask = expandedModel.species.map(s => !!s.isConstant);
+      const compiledJit = engine.jitCompiler.compile(jitReactions, nSpecies, expandedModel.parameters, constantSpeciesMask);
+
       // First run a simulation to get initial steady state
       onSimulate({
         method: 'ode',
@@ -118,19 +170,17 @@ export const BifurcationTab: React.FC<BifurcationTabProps> = ({
 
       // Generate continuation points using the engine if available
       if (engine.continuation) {
-        const nSpecies = model.species.length;
-
         const initialState = new Float64Array(nSpecies);
-        model.species.forEach((s, i) => { initialState[i] = s.initialConcentration; });
+        expandedModel.species.forEach((s, i) => { initialState[i] = s.initialConcentration; });
 
         const result = engine.continuation({
           nSpecies,
-          rhsFn: (_y: Float64Array, _p: number, _dydt: Float64Array) => {
-            // TODO: Use engine.JITCompiler to generate real RHS from expanded model.
-            // For now, explicitly fail rather than returning meaningless results.
-            throw new Error(
-              'Bifurcation analysis is not yet implemented: RHS function is not available for continuation.'
-            );
+          rhsFn: (y: Float64Array, p: number, dydt: Float64Array) => {
+            if (compiledJit.updateParameters) {
+              const currentParams = { ...expandedModel.parameters, [selectedParam]: p };
+              compiledJit.updateParameters(currentParams);
+            }
+            compiledJit.evaluate(0, y, dydt);
           },
           initialState,
           parameterStart: startValue,
@@ -157,18 +207,21 @@ export const BifurcationTab: React.FC<BifurcationTabProps> = ({
 
       // Compute nullclines if two species are selected
       if (selectedSpecies1 && selectedSpecies2 && engine.computeNullclines) {
-        const nSpecies = model.species.length;
-        const idx1 = model.species.findIndex(s => s.name === selectedSpecies1);
-        const idx2 = model.species.findIndex(s => s.name === selectedSpecies2);
+        const idx1 = expandedModel.species.findIndex(s => s.name === selectedSpecies1);
+        const idx2 = expandedModel.species.findIndex(s => s.name === selectedSpecies2);
 
         if (idx1 >= 0 && idx2 >= 0) {
           const fixed = new Float64Array(nSpecies);
-          model.species.forEach((s, i) => { fixed[i] = s.initialConcentration; });
+          expandedModel.species.forEach((s, i) => { fixed[i] = s.initialConcentration; });
 
+          if (compiledJit.updateParameters) {
+            compiledJit.updateParameters(expandedModel.parameters);
+          }
           const ncResult = engine.computeNullclines({
-            rhsFn: (_state: Float64Array) => {
-              // TODO: Use engine.JITCompiler to generate real RHS from expanded model
-              return new Float64Array(2);
+            rhsFn: (state: Float64Array) => {
+              const dydt = new Float64Array(nSpecies);
+              compiledJit.evaluate(0, state, dydt);
+              return new Float64Array([dydt[idx1], dydt[idx2]]);
             },
             xRange: [0, fixed[idx1] * 3 || 10] as [number, number],
             yRange: [0, fixed[idx2] * 3 || 10] as [number, number],
