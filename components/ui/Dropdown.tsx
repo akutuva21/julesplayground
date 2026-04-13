@@ -112,7 +112,7 @@ export const Dropdown: React.FC<DropdownProps> = ({ trigger, children, direction
   return (
     <>
       <div className="inline-block" ref={triggerRef}>
-        {React.isValidElement<{ onClick?: React.MouseEventHandler }>(trigger)
+        {React.isValidElement<{ onClick?: React.MouseEventHandler, 'aria-expanded'?: boolean, 'aria-haspopup'?: string }>(trigger)
           ? React.cloneElement(trigger, {
               onClick: (e: React.MouseEvent) => {
                 setIsOpen(!isOpen);
