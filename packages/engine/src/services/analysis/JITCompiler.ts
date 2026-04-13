@@ -217,6 +217,10 @@ export class JITCompiler {
         return parameters ? Object.keys(parameters).sort() : [];
     }
 
+    private normalizeExpressionForValidation(expr: string): string {
+        return expr.replace(/\^/g, '**').replace(/\bMath\./g, '');
+    }
+
     private normalizeSpeciesIndex(
         rawIndex: number | string,
         nSpecies: number,
@@ -459,7 +463,8 @@ export class JITCompiler {
             } else {
                 const rxnStr = rxn.rateConstant.toString();
                 // Security check before translating and interpolating
-                if (!SafeExpressionEvaluator.isSafe(rxnStr.replace(/\^/g, '**'), parameterNames)) {
+                const exprForCheck = this.normalizeExpressionForValidation(rxnStr);
+                if (!SafeExpressionEvaluator.isSafe(exprForCheck, parameterNames)) {
                     throw new Error(`[JITCompiler] Security Error: Unsafe mathematical expression detected in rate: ${rxnStr}`);
                 }
                 rateExpr = `(${ExpressionTranslator.translate(rxnStr).replace(/\bt\b/g, '__t__')})`; // Expression in parentheses for safety
@@ -798,7 +803,8 @@ export class JITCompiler {
                     } else {
                         // Try to evaluate expression
                         const rxnStr = rxn.rateConstant.toString();
-                        if (!SafeExpressionEvaluator.isSafe(rxnStr.replace(/\^/g, '**'), paramKeys)) {
+                        const exprForCheck = this.normalizeExpressionForValidation(rxnStr);
+                        if (!SafeExpressionEvaluator.isSafe(exprForCheck, paramKeys)) {
                             throw new Error(`[JITCompiler] Security Error: Unsafe mathematical expression detected in rate: ${rxnStr}`);
                         }
                         const translated = ExpressionTranslator.translate(rxnStr);
@@ -1030,7 +1036,9 @@ export class JITCompiler {
         functions?: JITFunctionDefinition[]
     ): { bytecode: Uint8Array; usesParameters: boolean } | null {
         try {
-            const expandedExpr = this.expandZeroArgFunctions(expr, functions).replace(/\^/g, '**');
+            const expandedExpr = this.normalizeExpressionForValidation(
+                this.expandZeroArgFunctions(expr, functions)
+            );
             const ast = jsep(expandedExpr);
             const bytes: number[] = [];
             let usesParameters = false;
