@@ -52,7 +52,7 @@ type ZoomDomain = {
  * Standard TimeSeriesChart for BioNetGen simulation results.
  * Abstracted for UI consistency across the app.
  */
-export const TimeSeriesChart = React.memo<TimeSeriesChartProps>(({
+export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
   data,
   series,
   visibleSeries,
@@ -300,7 +300,7 @@ export const TimeSeriesChart = React.memo<TimeSeriesChartProps>(({
       )}
     </div>
   );
-});
+};
 
 const CustomTooltip = ({ active, payload, label, xAxisLabel, xAxisScale, yAxisScale }: any) => {
   if (active && payload && payload.length) {

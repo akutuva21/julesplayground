@@ -565,7 +565,7 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ results, model, isNF
       // Isolate just this one
       onVisibleSpeciesChange(new Set([name]));
     }
-  };
+  }, [visibleSpecies, speciesToPlot, onVisibleSpeciesChange]);
 
 
 
