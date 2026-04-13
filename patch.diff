@@ -1,0 +1,28 @@
+--- components/ResultsChart.tsx
++++ components/ResultsChart.tsx
+@@ -542,15 +542,15 @@
+
+   const chartMarginBottom = 36;
+
+-  const handleToggleSeries = (name: string) => {
++  const handleToggleSeries = useCallback((name: string) => {
+     const newVisibleSpecies = new Set(visibleSpecies);
+     if (newVisibleSpecies.has(name)) {
+       newVisibleSpecies.delete(name);
+     } else {
+       newVisibleSpecies.add(name);
+     }
+     onVisibleSpeciesChange(newVisibleSpecies);
+-  };
++  }, [visibleSpecies, onVisibleSpeciesChange]);
+
+-  const handleLegendHighlight = (name: string) => {
++  const handleLegendHighlight = useCallback((name: string) => {
+     // If only this one is currently visible, toggle back to showing all
+     if (visibleSpecies.size === 1 && visibleSpecies.has(name)) {
+       // Restore all from the current filtered list (or all available headers)
+@@ -559,3 +559,3 @@
+       onVisibleSpeciesChange(new Set([name]));
+     }
+-  };
++  }, [visibleSpecies, speciesToPlot, onVisibleSpeciesChange]);

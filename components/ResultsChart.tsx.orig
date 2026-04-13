@@ -204,7 +204,7 @@ function exportAsGDAT(results: SimulationResults | null) {
   const dataMap = (results.dataBySuffix && Object.keys(results.dataBySuffix).length > 0)
     ? results.dataBySuffix
     : { '__default__': results.data };
-  
+
   const headers = results.headers || [];
   const gdatHeaders = ['time', ...headers.filter(h => h !== 'time')];
   const headerLine = '#' + gdatHeaders.map(h => h.padStart(20)).join('');
@@ -316,10 +316,10 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ results, model, isNF
 
   useEffect(() => {
     if (!wrapperRef) return;
-    
-    setDimensions({ 
-      width: wrapperRef.offsetWidth, 
-      height: wrapperRef.offsetHeight 
+
+    setDimensions({
+      width: wrapperRef.offsetWidth,
+      height: wrapperRef.offsetHeight
     });
 
     const observer = new ResizeObserver(entries => {
@@ -366,10 +366,10 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ results, model, isNF
     if (model) {
       // Find seed parameters if we have access to the BNGL code
       // We'll prioritize the ones the user expects to see
-      // Note: VisualizationPanel already computes this for autocomplete, 
+      // Note: VisualizationPanel already computes this for autocomplete,
       // but we re-derive here for the computation logic.
       const seedParams = model.parameters ? Object.keys(model.parameters) : [];
-      
+
       for (const pName of seedParams) {
         paramsMap.set(pName, model.parameters[pName]);
       }
@@ -399,7 +399,7 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ results, model, isNF
       const newPoint: Record<string, any> = { ...point };
 
       // Build variables for math expression evaluation
-      const variables: Record<string, number> = { 
+      const variables: Record<string, number> = {
         time: point.time ?? 0,
         ...(model?.parameters ?? {})
       };
@@ -546,7 +546,7 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ results, model, isNF
 
   const chartMarginBottom = 36;
 
-  const handleToggleSeries = useCallback((name: string) => {
+  const handleToggleSeries = (name: string) => {
     const newVisibleSpecies = new Set(visibleSpecies);
     if (newVisibleSpecies.has(name)) {
       newVisibleSpecies.delete(name);
@@ -554,9 +554,9 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ results, model, isNF
       newVisibleSpecies.add(name);
     }
     onVisibleSpeciesChange(newVisibleSpecies);
-  }, [visibleSpecies, onVisibleSpeciesChange]);
+  };
 
-  const handleLegendHighlight = useCallback((name: string) => {
+  const handleLegendHighlight = (name: string) => {
     // If only this one is currently visible, toggle back to showing all
     if (visibleSpecies.size === 1 && visibleSpecies.has(name)) {
       // Restore all from the current filtered list (or all available headers)
@@ -587,10 +587,10 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ results, model, isNF
     if (abs >= 1e3) return (value / 1e3).toFixed(1) + 'K';
     if (abs > 0 && abs < 1e-3) return value.toExponential(2);
     if (abs < 0.01) return value.toPrecision(2);
-    
+
     // Check if it's an integer to avoid 1.00 or 2.00, but keep 1.50
     if (Number.isInteger(value)) return value.toString();
-    
+
     // For values between 0.01 and 1000, use up to 2 decimal places but trim unnecessary zeros
     const formatted = value.toFixed(2);
     return formatted.replace(/\.?0+$/, '');
@@ -688,7 +688,7 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ results, model, isNF
         </div>
       )}
 
-      <div 
+      <div
         ref={setWrapperRef}
         className="h-[clamp(300px,42vh,520px)] w-full relative text-slate-700 dark:text-slate-300"
         style={{ width: '100%' }}
@@ -848,7 +848,7 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ results, model, isNF
               className="ml-1 border border-slate-200 dark:border-slate-700 dark:border-slate-700 px-2 py-1 rounded text-xs bg-transparent dark:text-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
             />
           )}
-          
+
           {/* Scale toggles */}
           <div className="flex items-center gap-1 ml-2 pl-2 border-l border-slate-200 dark:border-slate-700 dark:border-slate-700">
             <span className="text-xs text-slate-500 dark:text-slate-400 mr-1">Scale:</span>
