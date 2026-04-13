@@ -30,7 +30,7 @@ export const Dropdown: React.FC<DropdownProps> = ({ trigger, children, direction
 
     const handleEsc = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsOpen(false);
+        setIsOpen(prev => prev ? false : prev);
       }
     };
 
@@ -112,13 +112,13 @@ export const Dropdown: React.FC<DropdownProps> = ({ trigger, children, direction
   return (
     <>
       <div className="inline-block" ref={triggerRef}>
-        {React.isValidElement(trigger)
-          ? React.cloneElement(trigger as React.ReactElement<any>, {
+        {React.isValidElement<{ onClick?: React.MouseEventHandler }>(trigger)
+          ? React.cloneElement(trigger, {
               onClick: (e: React.MouseEvent) => {
                 setIsOpen(!isOpen);
                 // Call the original onClick if it exists
-                if ((trigger as any).props.onClick) {
-                  (trigger as any).props.onClick(e);
+                if (trigger.props.onClick) {
+                  trigger.props.onClick(e);
                 }
               },
               'aria-expanded': isOpen,
