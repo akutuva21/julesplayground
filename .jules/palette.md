@@ -1,3 +1,0 @@
-## 2024-04-11 - Dynamic ARIA state handling for collapsible menus
-**Learning:** For components functioning as accordion toggles or dropdown menus (like `SimulationControls` and `ExpressionInputPanel`), the `aria-expanded` state must be dynamically bound to the same React state controlling the visual presence of the child content. Using `aria-haspopup="dialog"` is particularly appropriate for complex configuration menus containing multiple input types.
-**Action:** Always pair `aria-expanded` attributes with dynamic boolean state variables in React for toggle buttons to ensure screen readers accurately reflect the visual state.
