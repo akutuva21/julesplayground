@@ -1,0 +1,3 @@
+## 2026-04-17 - Prevent Sticky Focus Rings on Buttons
+**Learning:** Using Tailwind's standard `focus:` classes on buttons creates a persistent, visually distracting focus ring after a mouse click ("sticky focus"). This degraded the UX for mouse users while attempting to satisfy accessibility requirements.
+**Action:** Always use `focus-visible:` instead of `focus:` for focus states (e.g., `focus-visible:ring-2`, `focus-visible:outline-none`). This ensures focus indicators are only shown during keyboard navigation, satisfying both mouse users (clean UI) and keyboard users (accessibility). Applied this standard universally across all button variants in `components/ui/Button.tsx`.
