@@ -100,14 +100,19 @@ export function analyzeQSSA(
         speciesReactionMap[sp.name] = { fast: 0, slow: 0, reactions: [] };
     }
     
-    const paramValues = Object.entries(parameters).map(([name, val]) => ({
-        name,
-        value: typeof val === 'number' ? val : parseFloat(String(val)),
-    })).filter(p => Number.isFinite(p.value));
+    let maxRate = 1e-6;
+    let minRate = Infinity;
     
-    const rateValues = paramValues.map(p => p.value).filter(v => v > 0);
-    const maxRate = Math.max(...rateValues, 1e-6);
-    const minRate = Math.min(...rateValues.filter(v => v > 0), 1e-6);
+    for (const val of Object.values(parameters)) {
+        const numVal = typeof val === 'number' ? val : parseFloat(String(val));
+        if (Number.isFinite(numVal) && numVal > 0) {
+            if (numVal > maxRate) maxRate = numVal;
+            if (numVal < minRate) minRate = numVal;
+        }
+    }
+
+    if (minRate === Infinity) minRate = 1e-6;
+    else if (minRate > 1e-6) minRate = 1e-6; // Ensure minRate logic clamping to 1e-6
     for (const rule of reactionRules) {
         let rateValue: number;
         
