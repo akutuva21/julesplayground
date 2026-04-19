@@ -179,6 +179,29 @@ function parseSpeciesLine(line: string, model: BNGLModel, lineNum: number): void
 }
 
 /**
+ * Fast parser for comma-separated lists, avoiding split/map/filter allocations
+ */
+function parseList(str: string): string[] {
+  const result: string[] = [];
+  let start = 0;
+  for (let i = 0; i <= str.length; i++) {
+    if (i === str.length || str.charCodeAt(i) === 44) { // 44 is ','
+      let s = start;
+      let e = i - 1;
+      // trim
+      while (s <= e && str.charCodeAt(s) <= 32) s++;
+      while (e >= s && str.charCodeAt(e) <= 32) e--;
+
+      if (s <= e) {
+        result.push(str.substring(s, e + 1));
+      }
+      start = i + 1;
+    }
+  }
+  return result;
+}
+
+/**
  * Parse a reaction line: <index> <reactants> -> <products> <rate> [<label>]
  * Example: "1 S1,S2 S3 k1*S1*S2"
  * Example: "2 S3 S1,S2 k2*S3 #_reverse__R1"
@@ -202,8 +225,8 @@ function parseReactionLine(line: string, model: BNGLModel, lineNum: number): voi
     );
   }
 
-  const reactants = parts[1].split(',').map(s => s.trim()).filter(s => s);
-  const products = parts[2].split(',').map(s => s.trim()).filter(s => s);
+  const reactants = parseList(parts[1]);
+  const products = parseList(parts[2]);
   const rateExpr = parts[3];
   const label = parts.length > 4 ? parts.slice(4).join(' ').trim() : undefined;
 
