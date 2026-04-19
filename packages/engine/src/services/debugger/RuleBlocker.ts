@@ -55,9 +55,22 @@ const atomQueryString = (atom: Atom): string => {
 
 const collectAtomsFromPattern = (pattern: string): Atom[] => {
   const atoms: Atom[] = [];
-  const molecules = pattern.split('+').map((segment) => segment.trim()).filter(Boolean);
 
-  for (const molecule of molecules) {
+  let start = 0;
+  while (start < pattern.length) {
+    const plusIndex = pattern.indexOf('+', start);
+    let segment;
+    if (plusIndex === -1) {
+      segment = pattern.substring(start);
+      start = pattern.length;
+    } else {
+      segment = pattern.substring(start, plusIndex);
+      start = plusIndex + 1;
+    }
+
+    const molecule = segment.trim();
+    if (!molecule) continue;
+
     const match = molecule.match(/(\w+)\(([^)]*)\)/);
     if (!match) {
       atoms.push({ kind: 'molecule', molecule: molecule });
@@ -66,9 +79,21 @@ const collectAtomsFromPattern = (pattern: string): Atom[] => {
     const [, moleculeName, rawComponents] = match;
     atoms.push({ kind: 'molecule', molecule: moleculeName });
 
-    const componentParts = rawComponents.split(',').map((part) => part.trim()).filter(Boolean);
+    let compStart = 0;
+    while (compStart < rawComponents.length) {
+      const commaIndex = rawComponents.indexOf(',', compStart);
+      let compPart;
+      if (commaIndex === -1) {
+        compPart = rawComponents.substring(compStart);
+        compStart = rawComponents.length;
+      } else {
+        compPart = rawComponents.substring(compStart, commaIndex);
+        compStart = commaIndex + 1;
+      }
 
-    for (const component of componentParts) {
+      const component = compPart.trim();
+      if (!component) continue;
+
       const compMatch = component.match(COMPONENT_REGEX);
       if (!compMatch) {
         continue;
