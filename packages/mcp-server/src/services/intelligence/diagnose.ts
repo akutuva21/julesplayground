@@ -124,13 +124,19 @@ export async function diagnoseModelDeep(args: {
 
     const crosstalkWarnings = detectCrosstalk(reactionRules, model.moleculeTypes ?? []);
 
-    const rateConstants = reactionRules.map((rule) => {
-        if (rule.isFunctionalRate) return NaN;
+    const rateConstants = reactionRules.reduce<number[]>((acc, rule) => {
+        if (rule.isFunctionalRate) return acc;
         const paramValue = model.parameters[rule.rate];
-        if (Number.isFinite(paramValue)) return Number(paramValue);
+        if (Number.isFinite(paramValue)) {
+            acc.push(Number(paramValue));
+            return acc;
+        }
         const numericRate = Number(rule.rate);
-        return Number.isFinite(numericRate) ? numericRate : NaN;
-    }).filter((value) => Number.isFinite(value)) as number[];
+        if (Number.isFinite(numericRate)) {
+            acc.push(numericRate);
+        }
+        return acc;
+    }, []);
 
     const stiffness = analyzeModelStiffness(rateConstants, {
         hasFunctionalRates: reactionRules.some((rule) => rule.isFunctionalRate),
@@ -146,7 +152,11 @@ export async function diagnoseModelDeep(args: {
     });
 
     const timeSeries = simulation.structuredContent.data as Array<Record<string, number>>;
-    const observableNames = model.observables.map((obs) => obs.name).filter((name) => name in (timeSeries[0] ?? {}));
+    const firstRow = timeSeries[0] ?? {};
+    const observableNames = model.observables.reduce<string[]>((acc, obs) => {
+        if (obs.name in firstRow) acc.push(obs.name);
+        return acc;
+    }, []);
     const firstObservable = observableNames[0];
     const series = firstObservable ? timeSeries.map((row) => Number(row[firstObservable] ?? 0)) : [];
 
