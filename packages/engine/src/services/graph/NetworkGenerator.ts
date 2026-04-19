@@ -4489,7 +4489,6 @@ export class NetworkGenerator {
           for (let cIdx = 0; cIdx < currentMol.components.length; cIdx++) {
             const key = `${molIdx}.${cIdx}`;
             const [molStr, compStr] = [String(molIdx), String(cIdx)];
-            // const keyMolIdx = molIdx;
 
             const partnerKeys = reactantGraph.adjacency.get(key);
             if (!partnerKeys) continue;
@@ -4505,10 +4504,6 @@ export class NetworkGenerator {
                 const bondKey = endpointPairKey(endpointA, endpointB);
                 if (brokenBondPairs.has(bondKey)) {
                   // Skip this bond - it's being broken by the rule
-                  // Optimized: don't log inside tight loop unless debugging
-                  // if (shouldLogNetworkGenerator) {
-                  //   debugNetworkLog(`[buildProductGraph] Skipping broken bond at ${bondKey}`);
-                  // }
                   continue;
                 }
 
