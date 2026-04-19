@@ -237,11 +237,8 @@ export async function computeFIM(
       // works reliably in the browser and Web Workers. If EVD fails, fall back to Jacobi.
       try {
         const mat = new Matrix(F);
-        // @ts-expect-error - access to realEigenvalues and eigenvectorMatrix
         const evd = new EigenvalueDecomposition(mat);
-        // @ts-expect-error
         const vals: number[] = evd.realEigenvalues ? evd.realEigenvalues.slice() : [];
-        // @ts-expect-error
         const Vmat: Matrix | undefined = evd.eigenvectorMatrix;
         if (vals && Vmat) {
           const pairs = vals.map((v, i) => ({ val: v, vec: Vmat.getColumn(i) as number[] }));
@@ -328,11 +325,8 @@ export async function computeFIM(
       let corrVecs: number[][] = [];
       try {
         const corrMat = new Matrix(correlations);
-        // @ts-expect-error
         const evdCorr = new EigenvalueDecomposition(corrMat);
-        // @ts-expect-error
         corrVals = evdCorr.realEigenvalues ? evdCorr.realEigenvalues.slice() : [];
-        // @ts-expect-error
         const Vc: Matrix | undefined = evdCorr.eigenvectorMatrix;
         if (corrVals && Vc) {
           const pairs = corrVals.map((v, i) => ({ val: v, vec: Vc.getColumn(i) as number[] }));
