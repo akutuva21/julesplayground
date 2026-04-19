@@ -524,7 +524,12 @@ export class PLASimulator {
       
       let patterns = [obs.pattern];
       if (obs.pattern.includes(',') && !obs.pattern.includes('(')) {
-         patterns = obs.pattern.split(',').map(p => p.trim()).filter(Boolean);
+        const parts = obs.pattern.split(',');
+        patterns = [];
+        for (let i = 0; i < parts.length; i++) {
+          const p = parts[i].trim();
+          if (p) patterns.push(p);
+        }
       }
       
       for (let i = 0; i < numSpecies; i++) {
