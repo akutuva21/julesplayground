@@ -631,13 +631,20 @@ export function parseBNGLRegexDeprecated(code: string, options: ParseBNGLOptions
             while (j < chunk.length && /\s/.test(chunk[j])) j++;
             const remaining = chunk.substring(j);
             const startsWithKeyword = keywords.some(kw => remaining.startsWith(kw));
+            const currentTrimmed = current.trim();
+            const currentIsKeyword = keywords.some(kw => currentTrimmed.startsWith(kw));
             
-            if (startsWithKeyword && current.trim()) {
-              // Split here - current token ends, keyword starts
-              tokens.push(current.trim());
-              current = '';
+            if (currentTrimmed) {
+              if (startsWithKeyword || currentIsKeyword) {
+                // Split here - either current token ends and keyword starts,
+                // or current token WAS a keyword and regular expression starts
+                tokens.push(currentTrimmed);
+                current = '';
+              } else {
+                // Regular whitespace in expression, keep it
+                current += ch;
+              }
             } else {
-              // Regular whitespace in expression, keep it
               current += ch;
             }
           } else {
