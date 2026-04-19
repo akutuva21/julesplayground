@@ -4505,10 +4505,6 @@ export class NetworkGenerator {
                 const bondKey = endpointPairKey(endpointA, endpointB);
                 if (brokenBondPairs.has(bondKey)) {
                   // Skip this bond - it's being broken by the rule
-                  // Optimized: don't log inside tight loop unless debugging
-                  // if (shouldLogNetworkGenerator) {
-                  //   debugNetworkLog(`[buildProductGraph] Skipping broken bond at ${bondKey}`);
-                  // }
                   continue;
                 }
 
