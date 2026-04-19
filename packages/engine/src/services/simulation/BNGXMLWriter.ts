@@ -257,9 +257,24 @@ export class BNGXMLWriter {
         if (explicitComponents && explicitComponents.length > 0) {
           const componentTypesXml = explicitComponents
             .map((compRaw) => {
-              const parts = compRaw.split('~').map((s) => s.trim()).filter(Boolean);
-              const compName = parts[0];
-              const states = new Set<string>(parts.slice(1));
+              let compName: string | undefined;
+              const states = new Set<string>();
+              let currentStart = 0;
+              for (let i = 0; i <= compRaw.length; i++) {
+                if (i === compRaw.length || compRaw[i] === '~') {
+                  const part = compRaw.substring(currentStart, i).trim();
+                  if (part) {
+                    if (compName === undefined) {
+                      compName = part;
+                    } else {
+                      states.add(part);
+                    }
+                  }
+                  currentStart = i + 1;
+                }
+              }
+              if (compName === undefined) compName = ''; // Fallback
+
               const inferredStates = inferredCompMap.get(compName);
               inferredStates?.forEach((s) => states.add(s));
               const allowedStatesXml = states.size > 0
