@@ -20,6 +20,12 @@ import { containsRateLawMacro, evaluateFunctionalRate, expandRateLawMacros } fro
 import { formatSpeciesList } from '../parity/ParityService';
 import { isFunctionalRateExpr, countPatternMatches, isSpeciesMatch, removeCompartment, getCompartment } from '../parity/PatternMatcher';
 
+const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function isSafeObjectKey(key: string): boolean {
+    return !UNSAFE_OBJECT_KEYS.has(key);
+}
+
 /**
  * Main entry point for network generation.
  * Coordinates input parsing, rule expansion, and network generation.
@@ -175,7 +181,7 @@ export async function generateExpandedNetwork(
     // Reference: BNG2 RxnRule.pm – local function expansion.
     interface LocalFnDef {
         contextVar: string;
-        observablePatterns: Record<string, string>; // obsName -> pattern string
+        observablePatterns: Array<{ name: string; pattern: string }>;
         bodyTemplate: string; // expression with obsName(var) refs replaced by just obsName
     }
     const localFunctionMap = new Map<string, LocalFnDef>();
@@ -184,7 +190,7 @@ export async function generateExpandedNetwork(
             const contextVar = fn.args[0];
             const escapedCtx = contextVar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const obsCallRe = new RegExp(`\\b([A-Za-z_][A-Za-z0-9_]*)\\s*\\(\\s*${escapedCtx}\\s*\\)`, 'g');
-            const observablePatterns: Record<string, string> = {};
+            const observablePatterns: Array<{ name: string; pattern: string }> = [];
             let bodyTemplate = fn.expression;
             let callMatch: RegExpExecArray | null;
             // Reset lastIndex for global regex on each function
@@ -193,12 +199,15 @@ export async function generateExpandedNetwork(
                 const obsName = callMatch[1];
                 const obs = inputModel.observables.find((o) => o.name === obsName);
                 if (obs) {
-                    observablePatterns[obsName] = obs.pattern;
+                    if (!isSafeObjectKey(obsName)) {
+                        continue;
+                    }
+                    observablePatterns.push({ name: obsName, pattern: obs.pattern });
                     // strip the "(var)" from body template so result is just obsName
                     bodyTemplate = bodyTemplate.replace(callMatch[0], obsName);
                 }
             }
-            if (Object.keys(observablePatterns).length > 0) {
+            if (observablePatterns.length > 0) {
                 localFunctionMap.set(fn.name, { contextVar, observablePatterns, bodyTemplate });
             }
         }
@@ -525,9 +534,9 @@ export async function generateExpandedNetwork(
             const seedG = BNGLParser.parseSpeciesGraph(sp.name);
             const canon = GraphCanonicalizer.canonicalize(seedG);
             seedMap.set(canon, { isConstant: !!sp.isConstant });
-            if (VERBOSE_NETEXP_DEBUG) console.log(`[NetworkExpansion] Seed: '${sp.name}' -> Canonical: '${canon}', Constant: ${sp.isConstant}`);
+            if (VERBOSE_NETEXP_DEBUG) console.log('[NetworkExpansion] Seed:', sp.name, '-> Canonical:', canon, 'Constant:', !!sp.isConstant);
         } catch (e) {
-            console.warn(`[NetworkExpansion] Could not parse seed species '${sp.name}':`, e);
+            console.warn('[NetworkExpansion] Could not parse seed species:', sp.name, e);
         }
     }
 

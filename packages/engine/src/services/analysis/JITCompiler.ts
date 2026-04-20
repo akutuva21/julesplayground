@@ -800,8 +800,15 @@ export class JITCompiler {
             !!constantSpeciesMask && idx >= 0 && idx < constantSpeciesMask.length && !!constantSpeciesMask[idx];
 
         try {
+            if (!Number.isInteger(nSpecies) || nSpecies <= 0 || nSpecies > 1_000_000) {
+                return null;
+            }
+
             // 1. Prepare observables
             const nObservables = observables?.length || 0;
+            if (!Number.isInteger(nObservables) || nObservables < 0 || nObservables > 1_000_000) {
+                return null;
+            }
             const obsOffsets = new Int32Array(nObservables + 1);
             let totalObsEntries = 0;
             (observables || []).forEach(obs => totalObsEntries += obs.indices.length);
@@ -811,22 +818,39 @@ export class JITCompiler {
 
             let currentObsOffset = 0;
             (observables || []).forEach((obs, i) => {
+                if (i < 0 || i >= obsOffsets.length) {
+                    throw new Error(`[JITCompiler] obsOffsets index out of range: ${i}`);
+                }
                 obsOffsets[i] = currentObsOffset;
                 for (let j = 0; j < obs.indices.length; j++) {
+                    if (currentObsOffset < 0 || currentObsOffset >= obsSpeciesIdx.length || currentObsOffset >= obsCoeffs.length) {
+                        throw new Error(`[JITCompiler] observable entry index out of range: ${currentObsOffset}`);
+                    }
                     obsSpeciesIdx[currentObsOffset] = obs.indices[j];
                     obsCoeffs[currentObsOffset] = obs.coefficients[j];
                     currentObsOffset++;
                 }
             });
-            obsOffsets[nObservables] = currentObsOffset;
+            if (nObservables < 0 || nObservables >= obsOffsets.length) {
+                throw new Error(`[JITCompiler] obsOffsets index out of range: ${nObservables}`);
+            }
+            obsOffsets.set([currentObsOffset], nObservables);
 
             // Validate parameter keys to prevent object destructuring injection.
             // For parity robustness, ignore invalid keys instead of failing the whole JIT pass.
             const allParamKeys = Object.keys(parameters || {});
-            const paramKeys = allParamKeys.filter((key) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key));
-            const safeParameters: Record<string, number> = {};
+            const forbiddenParamKeys = new Set(['__proto__', 'prototype', 'constructor']);
+            const paramKeys = allParamKeys.filter(
+                (key) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) && !forbiddenParamKeys.has(key)
+            );
+            const safeParameters: Record<string, number> = Object.create(null) as Record<string, number>;
             for (const key of paramKeys) {
-                safeParameters[key] = (parameters as Record<string, number>)[key];
+                Object.defineProperty(safeParameters, key, {
+                    value: (parameters as Record<string, number>)[key],
+                    writable: true,
+                    enumerable: true,
+                    configurable: true,
+                });
             }
             if (allParamKeys.length !== paramKeys.length) {
                 console.warn(
@@ -910,6 +934,9 @@ export class JITCompiler {
                 reactantOffsets[i] = currentReactantOffset;
 
                 for (let j = 0; j < rxn.reactantIndices.length; j++) {
+                    if (currentReactantOffset < 0 || currentReactantOffset >= reactantIdx.length || currentReactantOffset >= reactantStoich.length) {
+                        throw new Error(`[JITCompiler] reactant entry index out of range: ${currentReactantOffset}`);
+                    }
                     reactantIdx[currentReactantOffset] = this.normalizeSpeciesIndex(rxn.reactantIndices[j], nSpecies, i, 'reactant', j);
                     reactantStoich[currentReactantOffset] = rxn.reactantStoich[j];
                     currentReactantOffset++;
@@ -951,10 +978,16 @@ export class JITCompiler {
             const speciesOffsets = new Int32Array(nSpecies + 1);
             let totalStoichEntries = 0;
             for (let s = 0; s < nSpecies; s++) {
+                if (s < 0 || s >= speciesOffsets.length) {
+                    throw new Error(`[JITCompiler] speciesOffsets index out of range: ${s}`);
+                }
                 speciesOffsets[s] = totalStoichEntries;
                 totalStoichEntries += speciesRxnEntries[s].length;
             }
-            speciesOffsets[nSpecies] = totalStoichEntries;
+            if (nSpecies < 0 || nSpecies >= speciesOffsets.length) {
+                throw new Error(`[JITCompiler] speciesOffsets terminal index out of range: ${nSpecies}`);
+            }
+            speciesOffsets.set([totalStoichEntries], nSpecies);
 
             const speciesRxnIdx = new Int32Array(totalStoichEntries);
             const speciesStoich = new Float64Array(totalStoichEntries);
@@ -962,6 +995,9 @@ export class JITCompiler {
             let currentStoichOffset = 0;
             for (let s = 0; s < nSpecies; s++) {
                 for (const entry of speciesRxnEntries[s]) {
+                    if (currentStoichOffset < 0 || currentStoichOffset >= speciesRxnIdx.length || currentStoichOffset >= speciesStoich.length) {
+                        throw new Error(`[JITCompiler] stoichiometry entry index out of range: ${currentStoichOffset}`);
+                    }
                     speciesRxnIdx[currentStoichOffset] = entry.rxnIdx;
                     speciesStoich[currentStoichOffset] = entry.stoich;
                     currentStoichOffset++;
@@ -1007,10 +1043,16 @@ export class JITCompiler {
             const jacRowPtr = new Int32Array(nSpecies + 1);
             let totalJacEntries = 0;
             for (let i = 0; i < nSpecies; i++) {
+                if (i < 0 || i >= jacRowPtr.length) {
+                    throw new Error(`[JITCompiler] jacRowPtr index out of range: ${i}`);
+                }
                 jacRowPtr[i] = totalJacEntries;
                 totalJacEntries += jacRows[i].size;
             }
-            jacRowPtr[nSpecies] = totalJacEntries;
+            if (nSpecies < 0 || nSpecies >= jacRowPtr.length) {
+                throw new Error(`[JITCompiler] jacRowPtr terminal index out of range: ${nSpecies}`);
+            }
+            jacRowPtr.set([totalJacEntries], nSpecies);
 
             const jacColIdx = new Int32Array(totalJacEntries);
             const jacContribOffsets = new Int32Array(totalJacEntries + 1);
@@ -1032,11 +1074,17 @@ export class JITCompiler {
                 const sortedCols = Array.from(rowMap.keys()).sort((a, b) => a - b);
 
                 for (const j of sortedCols) {
+                    if (currentJacEntry < 0 || currentJacEntry >= jacColIdx.length || currentJacEntry >= jacContribOffsets.length) {
+                        throw new Error(`[JITCompiler] Jacobian entry index out of range: ${currentJacEntry}`);
+                    }
                     jacColIdx[currentJacEntry] = j;
                     jacContribOffsets[currentJacEntry] = currentContribOffset;
 
                     const contribs = rowMap.get(j)!;
                     for (const contrib of contribs) {
+                        if (currentContribOffset < 0 || currentContribOffset >= jacContribRxnIdx.length || currentContribOffset >= jacContribCoeffs.length) {
+                            throw new Error(`[JITCompiler] Jacobian contribution index out of range: ${currentContribOffset}`);
+                        }
                         jacContribRxnIdx[currentContribOffset] = contrib.rxnIdx;
                         jacContribCoeffs[currentContribOffset] = contrib.coeff;
                         currentContribOffset++;
