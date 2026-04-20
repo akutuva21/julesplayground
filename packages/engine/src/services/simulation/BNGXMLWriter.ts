@@ -573,34 +573,11 @@ export class BNGXMLWriter {
     };
 
     const addStatesFromComponentString = (molName: string, comp: string) => {
-      let startIndex = 0;
-      let tildeIndex = comp.indexOf('~');
-
-      let isFirst = true;
-      let stateSet: Set<string> | null = null;
-
-      while (tildeIndex !== -1) {
-        const part = comp.substring(startIndex, tildeIndex).trim();
-        if (part) {
-          if (isFirst) {
-            stateSet = ensureComponent(molName, part);
-            isFirst = false;
-          } else {
-            stateSet!.add(part);
-          }
-        }
-        startIndex = tildeIndex + 1;
-        tildeIndex = comp.indexOf('~', startIndex);
-      }
-
-      const lastPart = comp.substring(startIndex).trim();
-      if (lastPart) {
-        if (isFirst) {
-          ensureComponent(molName, lastPart);
-        } else {
-          stateSet!.add(lastPart);
-        }
-      }
+      const parts = comp.split('~').map((s) => s.trim()).filter(Boolean);
+      if (parts.length === 0) return;
+      const compName = parts[0];
+      const stateSet = ensureComponent(molName, compName);
+      for (const state of parts.slice(1)) stateSet.add(state);
     };
 
     for (const mt of model.moleculeTypes || []) {
