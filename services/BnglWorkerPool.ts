@@ -164,7 +164,7 @@ export class BnglWorkerPool {
         const worker = this.workers[idx];
 
         return new Promise((resolve, reject) => {
-            const messageId = Math.floor(Math.random() * 1000000);
+            const messageId = crypto.getRandomValues(new Uint32Array(1))[0];
 
             const handler = (event: MessageEvent<WorkerResponse>) => {
                 const { id, type, payload } = event.data;
@@ -269,7 +269,7 @@ export class BnglWorkerPool {
 
     private prepareModelOnWorker(worker: Worker, model: BNGLModel): Promise<number> {
         return new Promise((resolve, reject) => {
-            const messageId = Math.floor(Math.random() * 1000000);
+            const messageId = crypto.getRandomValues(new Uint32Array(1))[0];
             const handler = (event: MessageEvent<WorkerResponse>) => {
                 const { id, type, payload } = event.data;
                 if (id !== messageId) return;
@@ -291,7 +291,7 @@ export class BnglWorkerPool {
 
     private simulateCachedOnWorker(worker: Worker, modelId: number, options: SimulationOptions): Promise<SimulationResults> {
         return new Promise((resolve, reject) => {
-            const messageId = Math.floor(Math.random() * 1000000);
+            const messageId = crypto.getRandomValues(new Uint32Array(1))[0];
             const handler = (event: MessageEvent<WorkerResponse>) => {
                 const { id, type, payload } = event.data;
                 if (id !== messageId) return;
@@ -318,7 +318,7 @@ export class BnglWorkerPool {
         sharedOutput: SharedSimulationOutputDescriptor
     ): Promise<void> {
         return new Promise((resolve, reject) => {
-            const messageId = Math.floor(Math.random() * 1000000);
+            const messageId = crypto.getRandomValues(new Uint32Array(1))[0];
             const handler = (event: MessageEvent<WorkerResponse>) => {
                 const { id, type, payload } = event.data;
                 if (id !== messageId) return;
@@ -344,7 +344,7 @@ export class BnglWorkerPool {
 
     private releaseModelOnWorker(worker: Worker, modelId: number): Promise<void> {
         return new Promise((resolve) => {
-            const messageId = Math.floor(Math.random() * 1000000);
+            const messageId = crypto.getRandomValues(new Uint32Array(1))[0];
             const handler = (event: MessageEvent<WorkerResponse>) => {
                 if (event.data.id !== messageId) return;
                 worker.removeEventListener('message', handler);
