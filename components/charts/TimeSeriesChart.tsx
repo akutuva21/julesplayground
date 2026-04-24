@@ -66,7 +66,8 @@ function buildEquidistantTicks(min: number, max: number, count = 6): number[] {
  * Standard TimeSeriesChart for BioNetGen simulation results.
  * Abstracted for UI consistency across the app.
  */
-export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
+// ⚡ Bolt: Wraps generic timeseries component in React.memo to prevent unnecessary Recharts re-renders
+export const TimeSeriesChart = React.memo<TimeSeriesChartProps>(({
   data,
   series,
   visibleSeries,
@@ -358,7 +359,7 @@ export const TimeSeriesChart: React.FC<TimeSeriesChartProps> = ({
       )}
     </div>
   );
-};
+});
 
 const CustomTooltip = ({ active, payload, label, xAxisLabel, xAxisScale, yAxisScale }: any) => {
   if (active && payload && payload.length) {

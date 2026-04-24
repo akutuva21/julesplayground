@@ -273,7 +273,8 @@ function exportAsCDAT(results: SimulationResults | null) {
   }
 }
 
-export const ResultsChart: React.FC<ResultsChartProps> = ({ results, model, isNFsim, visibleSpecies, onVisibleSpeciesChange, highlightedSeries = [], expressions = [] }) => {
+// ⚡ Bolt: Wraps data-heavy component in React.memo to prevent unnecessary Recharts re-renders
+export const ResultsChart = React.memo<ResultsChartProps>(({ results, model, isNFsim, visibleSpecies, onVisibleSpeciesChange, highlightedSeries = [], expressions = [] }) => {
   const [zoomHistory, setZoomHistory] = useState<ZoomDomain[]>([]);
   const [selection, setSelection] = useState<ZoomDomain | null>(null);
   const [filterMode, setFilterMode] = useState<'all' | 'search'>('all');
@@ -903,4 +904,4 @@ export const ResultsChart: React.FC<ResultsChartProps> = ({ results, model, isNF
       </div>
     </Card>
   );
-};
+});
