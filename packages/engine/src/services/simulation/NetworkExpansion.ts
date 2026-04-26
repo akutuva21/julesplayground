@@ -678,10 +678,27 @@ export async function generateExpandedNetwork(
     const molToSpecies = new Map<string, Set<number>>();
     generatedSpecies.forEach((s, idx) => {
         // Extract base molecule names from the string representation
-        const mols = s.name.split('.').map(m => {
-            const bare = m.replace(/^@[^:]+::?/, '').replace(/@[^@]+$/, '');
-            return bare.split('(')[0];
-        });
+        // ⚡ Bolt Optimization: Use fast index-based parsing instead of chained array
+        // methods (.split.map) and regular expressions to avoid allocation overhead in hot loops.
+        const parts = s.name.split('.');
+        const mols: string[] = [];
+        for (let i = 0; i < parts.length; i++) {
+            let m = parts[i];
+            const parenIdx = m.indexOf('(');
+            if (parenIdx !== -1) m = m.substring(0, parenIdx);
+
+            if (m.charCodeAt(0) === 64) { // '@'
+                const colonIdx = m.indexOf(':');
+                if (colonIdx !== -1) {
+                    m = m.charCodeAt(colonIdx + 1) === 58 ? m.substring(colonIdx + 2) : m.substring(colonIdx + 1);
+                }
+            }
+            const atIdx = m.lastIndexOf('@');
+            if (atIdx > 0) m = m.substring(0, atIdx);
+
+            if (m) mols.push(m);
+        }
+
         mols.forEach(m => {
             if (!molToSpecies.has(m)) molToSpecies.set(m, new Set());
             molToSpecies.get(m)!.add(idx);
@@ -721,7 +738,16 @@ export async function generateExpandedNetwork(
                 // Optimization Step 1: Filter Candidates
                 // Remove compartment tags to find base molecules required by the pattern.
                 const cleanPat = removeCompartment(trimmedPat);
-                const patMols = cleanPat.split('.').map(m => m.split('(')[0]).filter(Boolean);
+                // ⚡ Bolt Optimization: Replace .split.map.filter with a single pass
+                // to minimize intermediate array allocations.
+                const patParts = cleanPat.split('.');
+                const patMols: string[] = [];
+                for (let i = 0; i < patParts.length; i++) {
+                    let pm = patParts[i];
+                    const parenIdx = pm.indexOf('(');
+                    if (parenIdx !== -1) pm = pm.substring(0, parenIdx);
+                    if (pm) patMols.push(pm);
+                }
 
                 let candidates: Iterable<number> = generatedSpecies.keys();
 
