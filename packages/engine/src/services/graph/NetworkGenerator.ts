@@ -4652,7 +4652,6 @@ export class NetworkGenerator {
       const clone = this.cloneMoleculeStructure(sourceMol);
       clone._sourceKey = key; // Preserve source mapping (reactantIdx:molIdx)
 
-      // CRITICAL FIX: If molecule doesn't have its own compartment, inherit from its reactant graph
       // This ensures that when L@EC.R@PM unbinds, L gets EC and R gets PM (not both PM)
       if (!clone.compartment && reactantGraphs[r].compartment) {
         clone.compartment = reactantGraphs[r].compartment;
