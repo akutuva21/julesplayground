@@ -365,6 +365,179 @@ async function runPerturbation(
 // Main entry point
 // ---------------------------------------------------------------------------
 
+async function performRuleKnockouts(
+  config: PerturbationScreenConfig,
+  ruleLines: string[],
+  wildTypeTrajectory: Record<string, number[]>,
+  metric: string,
+  results: PerturbationResult[],
+  isCancelled: () => boolean,
+): Promise<{ total: number; failed: number }> {
+  let total = 0;
+  let failed = 0;
+  for (const ruleLine of ruleLines) {
+    if (isCancelled()) break;
+    const mutantCode = commentOutLineInBlock(config.code, 'reaction rules', ruleLine);
+    const result = await runPerturbation(
+      config,
+      mutantCode,
+      ruleLabel(ruleLine),
+      'rule_knockout',
+      wildTypeTrajectory,
+      metric,
+    );
+    total++;
+    if (!result.success) failed++;
+    results.push(result);
+  }
+  return { total, failed };
+}
+
+async function performSpeciesKnockdowns(
+  config: PerturbationScreenConfig,
+  speciesLines: string[],
+  knockdownFraction: number,
+  wildTypeTrajectory: Record<string, number[]>,
+  metric: string,
+  results: PerturbationResult[],
+  isCancelled: () => boolean,
+): Promise<{ total: number; failed: number }> {
+  let total = 0;
+  let failed = 0;
+  for (const speciesLine of speciesLines) {
+    if (isCancelled()) break;
+    const mutantCode = replaceSpeciesConcentration(
+      config.code,
+      speciesLine,
+      knockdownFraction,
+    );
+    const result = await runPerturbation(
+      config,
+      mutantCode,
+      speciesLabel(speciesLine),
+      'species_knockdown',
+      wildTypeTrajectory,
+      metric,
+    );
+    total++;
+    if (!result.success) failed++;
+    results.push(result);
+  }
+  return { total, failed };
+}
+
+async function performMoleculeKnockouts(
+  config: PerturbationScreenConfig,
+  moleculeTypeLines: string[],
+  wildTypeTrajectory: Record<string, number[]>,
+  metric: string,
+  results: PerturbationResult[],
+  isCancelled: () => boolean,
+): Promise<{ total: number; failed: number }> {
+  let total = 0;
+  let failed = 0;
+  for (const mtLine of moleculeTypeLines) {
+    if (isCancelled()) break;
+    const mtName = moleculeTypeName(mtLine);
+    let mutantCode = commentOutLinesContaining(config.code, 'reaction rules', mtName);
+    mutantCode = zeroSpeciesContaining(mutantCode, mtName);
+    const result = await runPerturbation(
+      config,
+      mutantCode,
+      mtName,
+      'molecule_knockout',
+      wildTypeTrajectory,
+      metric,
+    );
+    total++;
+    if (!result.success) failed++;
+    results.push(result);
+  }
+  return { total, failed };
+}
+
+async function performPairwiseRuleKnockouts(
+  config: PerturbationScreenConfig,
+  ruleLines: string[],
+  maxPairwise: number,
+  wildTypeTrajectory: Record<string, number[]>,
+  metric: string,
+  results: PerturbationResult[],
+  isCancelled: () => boolean,
+): Promise<{ total: number; failed: number; syntheticPairs: SyntheticLethalPair[] }> {
+  let total = 0;
+  let failed = 0;
+  const syntheticPairs: SyntheticLethalPair[] = [];
+
+  // Collect individual rule knockout results (already computed in step 3)
+  const ruleResults = results.filter((r) => r.type === 'rule_knockout' && r.success);
+  // Sort by score descending and take top-N for pairwise
+  const topRules = [...ruleResults].sort((a, b) => b.aggregateScore - a.aggregateScore);
+
+  // Build the score lookup
+  const individualScores = new Map<string, number>();
+  for (const r of topRules) {
+    individualScores.set(r.target, r.aggregateScore);
+  }
+
+  // Generate pairs from the top rules, capped at maxPairwise simulations
+  let pairCount = 0;
+  const pairRuleLines = topRules
+    .map((r) => {
+      // Find the original rule line matching this label
+      return ruleLines.find((rl) => ruleLabel(rl) === r.target)!;
+    })
+    .filter(Boolean);
+
+  for (let i = 0; i < pairRuleLines.length && pairCount < maxPairwise; i++) {
+    for (let j = i + 1; j < pairRuleLines.length && pairCount < maxPairwise; j++) {
+      if (isCancelled()) break;
+
+      let mutantCode = commentOutLineInBlock(config.code, 'reaction rules', pairRuleLines[i]);
+      mutantCode = commentOutLineInBlock(mutantCode, 'reaction rules', pairRuleLines[j]);
+
+      const label1 = ruleLabel(pairRuleLines[i]);
+      const label2 = ruleLabel(pairRuleLines[j]);
+      const pairTarget = `${label1} + ${label2}`;
+
+      const result = await runPerturbation(
+        config,
+        mutantCode,
+        pairTarget,
+        'pairwise_rules',
+        wildTypeTrajectory,
+        metric,
+      );
+      total++;
+      pairCount++;
+      if (!result.success) {
+        failed++;
+        continue;
+      }
+      results.push(result);
+
+      const individual1Score = individualScores.get(label1) ?? 0;
+      const individual2Score = individualScores.get(label2) ?? 0;
+      const synergy = result.aggregateScore - Math.max(individual1Score, individual2Score);
+
+      syntheticPairs.push({
+        target1: label1,
+        target2: label2,
+        combinedScore: result.aggregateScore,
+        individual1Score,
+        individual2Score,
+        synergy,
+      });
+    }
+    if (isCancelled()) break;
+  }
+
+  // Sort by synergy descending
+  syntheticPairs.sort((a, b) => b.synergy - a.synergy);
+
+  return { total, failed, syntheticPairs };
+}
+
 export async function perturbationScreen(
   config: PerturbationScreenConfig,
 ): Promise<PerturbationScreenResult> {
@@ -412,148 +585,63 @@ export async function perturbationScreen(
 
   // ---- 3. Rule knockouts --------------------------------------------------
   if (config.perturbations.includes('rule_knockout') || config.perturbations.includes('pairwise_rules')) {
-    for (const ruleLine of ruleLines) {
-      if (isCancelled()) break;
-      const mutantCode = commentOutLineInBlock(config.code, 'reaction rules', ruleLine);
-      const result = await runPerturbation(
-        config,
-        mutantCode,
-        ruleLabel(ruleLine),
-        'rule_knockout',
-        wildTypeTrajectory,
-        metric,
-      );
-      totalSimulations++;
-      if (!result.success) failedSimulations++;
-      results.push(result);
-    }
+    const { total, failed } = await performRuleKnockouts(
+      config,
+      ruleLines,
+      wildTypeTrajectory,
+      metric,
+      results,
+      isCancelled,
+    );
+    totalSimulations += total;
+    failedSimulations += failed;
   }
 
   // ---- 4. Species knockdowns ----------------------------------------------
   if (config.perturbations.includes('species_knockdown')) {
-    for (const speciesLine of speciesLines) {
-      if (isCancelled()) break;
-      const mutantCode = replaceSpeciesConcentration(
-        config.code,
-        speciesLine,
-        knockdownFraction,
-      );
-      const result = await runPerturbation(
-        config,
-        mutantCode,
-        speciesLabel(speciesLine),
-        'species_knockdown',
-        wildTypeTrajectory,
-        metric,
-      );
-      totalSimulations++;
-      if (!result.success) failedSimulations++;
-      results.push(result);
-    }
+    const { total, failed } = await performSpeciesKnockdowns(
+      config,
+      speciesLines,
+      knockdownFraction,
+      wildTypeTrajectory,
+      metric,
+      results,
+      isCancelled,
+    );
+    totalSimulations += total;
+    failedSimulations += failed;
   }
 
   // ---- 5. Molecule-type knockouts -----------------------------------------
   if (config.perturbations.includes('molecule_knockout')) {
-    for (const mtLine of moleculeTypeLines) {
-      if (isCancelled()) break;
-      const mtName = moleculeTypeName(mtLine);
-      let mutantCode = commentOutLinesContaining(config.code, 'reaction rules', mtName);
-      mutantCode = zeroSpeciesContaining(mutantCode, mtName);
-      const result = await runPerturbation(
-        config,
-        mutantCode,
-        mtName,
-        'molecule_knockout',
-        wildTypeTrajectory,
-        metric,
-      );
-      totalSimulations++;
-      if (!result.success) failedSimulations++;
-      results.push(result);
-    }
+    const { total, failed } = await performMoleculeKnockouts(
+      config,
+      moleculeTypeLines,
+      wildTypeTrajectory,
+      metric,
+      results,
+      isCancelled,
+    );
+    totalSimulations += total;
+    failedSimulations += failed;
   }
 
   // ---- 6. Pairwise rule knockouts -----------------------------------------
   let syntheticPairs: SyntheticLethalPair[] | undefined;
 
   if (config.perturbations.includes('pairwise_rules')) {
-    syntheticPairs = [];
-
-    // Collect individual rule knockout results (already computed in step 3)
-    const ruleResults = results.filter((r) => r.type === 'rule_knockout' && r.success);
-    // Sort by score descending and take top-N for pairwise
-    const topRules = [...ruleResults]
-      .sort((a, b) => b.aggregateScore - a.aggregateScore);
-
-    // Build the score lookup
-    const individualScores = new Map<string, number>();
-    for (const r of topRules) {
-      individualScores.set(r.target, r.aggregateScore);
-    }
-
-    // Generate pairs from the top rules, capped at maxPairwise simulations
-    let pairCount = 0;
-    const pairRuleLines = topRules.map((r) => {
-      // Find the original rule line matching this label
-      return ruleLines.find(
-        (rl) => ruleLabel(rl) === r.target,
-      )!;
-    }).filter(Boolean);
-
-    for (let i = 0; i < pairRuleLines.length && pairCount < maxPairwise; i++) {
-      for (let j = i + 1; j < pairRuleLines.length && pairCount < maxPairwise; j++) {
-        if (isCancelled()) break;
-
-        let mutantCode = commentOutLineInBlock(
-          config.code,
-          'reaction rules',
-          pairRuleLines[i],
-        );
-        mutantCode = commentOutLineInBlock(
-          mutantCode,
-          'reaction rules',
-          pairRuleLines[j],
-        );
-
-        const label1 = ruleLabel(pairRuleLines[i]);
-        const label2 = ruleLabel(pairRuleLines[j]);
-        const pairTarget = `${label1} + ${label2}`;
-
-        const result = await runPerturbation(
-          config,
-          mutantCode,
-          pairTarget,
-          'pairwise_rules',
-          wildTypeTrajectory,
-          metric,
-        );
-        totalSimulations++;
-        pairCount++;
-        if (!result.success) {
-          failedSimulations++;
-          continue;
-        }
-        results.push(result);
-
-        const individual1Score = individualScores.get(label1) ?? 0;
-        const individual2Score = individualScores.get(label2) ?? 0;
-        const synergy =
-          result.aggregateScore - Math.max(individual1Score, individual2Score);
-
-        syntheticPairs.push({
-          target1: label1,
-          target2: label2,
-          combinedScore: result.aggregateScore,
-          individual1Score,
-          individual2Score,
-          synergy,
-        });
-      }
-      if (isCancelled()) break;
-    }
-
-    // Sort by synergy descending
-    syntheticPairs.sort((a, b) => b.synergy - a.synergy);
+    const res = await performPairwiseRuleKnockouts(
+      config,
+      ruleLines,
+      maxPairwise,
+      wildTypeTrajectory,
+      metric,
+      results,
+      isCancelled,
+    );
+    totalSimulations += res.total;
+    failedSimulations += res.failed;
+    syntheticPairs = res.syntheticPairs;
   }
 
   return {
