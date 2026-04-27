@@ -586,7 +586,7 @@ export async function simulate(
     speciesVolumes[idx] = vol;
   });
 
-  // PARITY FIX: Pre-calculate reacting volumes for each reaction.
+  // PARITY: Pre-calculate reacting volumes for each reaction.
   // BioNetGen scales ODE rates by an anchor compartment volume. For mixed-dimension
   // reactants (e.g. 3D + 2D), anchoring to the lower-dimensional compartment yields
   // closer parity with cBNGL transport/binding models.
@@ -742,7 +742,7 @@ export async function simulate(
   const stateValueToSpeciesOutput = (value: number, speciesIdx: number): number =>
     (isOde && odeUsesAmountState) ? (value / speciesVolumes[speciesIdx]) : value;
 
-  // PARITY FIX: Concentration cache for saveConcentrations/resetConcentrations (BNG2 Cache semantics)
+  // PARITY: Concentration cache for saveConcentrations/resetConcentrations (BNG2 Cache semantics)
   // BNG2 uses a label-based cache. Default label resets to initial seed species values.
   const DEFAULT_CONC_LABEL = '__DEFAULT__';
   const concentrationCache = new Map<string, Float64Array>();
@@ -1022,7 +1022,7 @@ export async function simulate(
 
             setSafeNumericField(model.parameters as Record<string, number>, change.parameter, newVal);
 
-            // PARITY FIX: If a parameter is explicitly set, we should stop re-evaluating it 
+            // PARITY: If a parameter is explicitly set, we should stop re-evaluating it
             // from its original expression (if it had one). 
             if (model.paramExpressions) {
               const oldExpr = model.paramExpressions[change.parameter];
@@ -1232,7 +1232,7 @@ export async function simulate(
 
         let a = rate * rxn.propensityFactor;
 
-        // PARITY FIX: For SSA, bimolecular rates (k_molar) must be scaled by 1/V
+        // PARITY: For SSA, bimolecular rates (k_molar) must be scaled by 1/V
         // to convert to propensity in reciprocal molecule-counts.
         // n=0: a = k*V
         // n=1: a = k*N
@@ -1268,7 +1268,7 @@ export async function simulate(
           if (change.afterPhaseIndex !== phaseIdx - 1) continue;
           const mode = change.mode ?? 'set';
 
-          // PARITY FIX: Handle saveConcentrations / resetConcentrations (BNG2 Cache semantics)
+          // PARITY: Handle saveConcentrations / resetConcentrations (BNG2 Cache semantics)
           if (mode === 'save') {
             const label = change.label ?? DEFAULT_CONC_LABEL;
             concentrationCache.set(label, new Float64Array(state));
@@ -1383,7 +1383,7 @@ export async function simulate(
 
             let a = rate * rxn.propensityFactor;
 
-            // PARITY FIX: Scale SSA propensities by volume (matches BNG2/Network3 semantics)
+            // PARITY: Scale SSA propensities by volume (matches BNG2/Network3 semantics)
             if (n === 0) {
               a *= reactionReactingVolumes[i]; // Zero-order: k * V
             } else if (n === 2) {
@@ -1524,7 +1524,7 @@ export async function simulate(
             callbacks.checkCancelled();
             if (recordThisPhase) {
               const outT = toBngGridTime(globalTime, phaseTEnd, phaseNSteps, nextOutIdx);
-              // PARITY FIX: Use 'state' (the SSA state vector), not 'y' (which is undefined here).
+              // PARITY: Use 'state' (the SSA state vector), not 'y' (which is undefined here).
               const obsValues = evaluateObservablesFast(state);
               // Debug: log early outputs (capture t<=0.6 to inspect early dynamics)
               try {
@@ -1920,7 +1920,7 @@ export async function simulate(
               rate = rxn.rateConstant;
             }
 
-            // FIX: 'rate' is already the rate constant (for mass action) or the evaluated rate.
+            // 'rate' is already the rate constant (for mass action) or the evaluated rate.
             // Do NOT multiply by rxn.rateConstant again.
             // Scale velocity to "Amount" units for mass conservation across compartments
             // Rate in nM/s * Vol_Reacting = Amount_Rate in counts/s or moles/s
@@ -2761,7 +2761,7 @@ export async function simulate(
         if (change.afterPhaseIndex !== phaseIdx - 1) continue;
         const mode = change.mode ?? 'set';
 
-        // PARITY FIX: Handle saveConcentrations / resetConcentrations (BNG2 Cache semantics)
+        // PARITY: Handle saveConcentrations / resetConcentrations (BNG2 Cache semantics)
         if (mode === 'save') {
           const label = change.label ?? DEFAULT_CONC_LABEL;
           concentrationCache.set(label, new Float64Array(y));
