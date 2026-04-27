@@ -52,13 +52,7 @@ export interface PEtabObservable {
   noiseDistribution: 'normal' | 'laplace';
 }
 
-interface PEtabMeasurementRow {
-  observableId: string;
-  simulationConditionId: string;
-  time: number;
-  measurement: number;
-  noiseParameters?: string;
-}
+
 
 function parseSimpleYAML(text: string): Record<string, unknown> {
   const result: Record<string, unknown> = {};
@@ -135,25 +129,7 @@ function parseTSV(text: string): Record<string, string>[] {
   return rows;
 }
 
-export function parsePEtab(files: Map<string, string>): PEtabProblem {
-  const warnings: string[] = [];
-
-  const findFile = (suffix: string): string | undefined => {
-    for (const [name, content] of files) {
-      if (name.toLowerCase().endsWith(suffix.toLowerCase())) return content;
-    }
-    return undefined;
-  };
-
-  const yamlContent = findFile('.yaml') ?? findFile('.yml');
-  if (yamlContent) {
-    try {
-      parseSimpleYAML(yamlContent);
-    } catch {
-      warnings.push('Failed to parse YAML problem file; using filename heuristics.');
-    }
-  }
-
+function extractParameters(findFile: (suffix: string) => string | undefined): PEtabParameter[] {
   const paramText = findFile('parameters.tsv') ?? findFile('_parameters.tsv');
   if (!paramText) {
     throw new Error(
@@ -184,7 +160,18 @@ export function parsePEtab(files: Map<string, string>): PEtabProblem {
       priorParameters: row.objectivePriorParameters || row.initializationPriorParameters,
     });
   }
+  return parameters;
+}
 
+interface PEtabMeasurementRow {
+  observableId: string;
+  simulationConditionId: string;
+  time: number;
+  measurement: number;
+  noiseParameters?: string;
+}
+
+function extractMeasurements(findFile: (suffix: string) => string | undefined): ExperimentalDataPoint[] {
   const measText = findFile('measurements.tsv') ?? findFile('_measurements.tsv');
   if (!measText) {
     throw new Error(
@@ -230,7 +217,10 @@ export function parsePEtab(files: Map<string, string>): PEtabProblem {
     }
     measurements.push({ time: t, values });
   }
+  return measurements;
+}
 
+function extractConditions(findFile: (suffix: string) => string | undefined): Map<string, Record<string, number>> {
   const conditions = new Map<string, Record<string, number>>();
   const condText = findFile('conditions.tsv') ?? findFile('_conditions.tsv');
   if (condText) {
@@ -248,7 +238,10 @@ export function parsePEtab(files: Map<string, string>): PEtabProblem {
       conditions.set(condId, overrides);
     }
   }
+  return conditions;
+}
 
+function extractObservables(findFile: (suffix: string) => string | undefined): PEtabObservable[] {
   const observables: PEtabObservable[] = [];
   const obsText = findFile('observables.tsv') ?? findFile('_observables.tsv');
   if (obsText) {
@@ -265,7 +258,10 @@ export function parsePEtab(files: Map<string, string>): PEtabProblem {
       });
     }
   }
+  return observables;
+}
 
+function extractParamBounds(parameters: PEtabParameter[], warnings: string[]): ParamBounds[] {
   const paramBounds: ParamBounds[] = parameters
     .filter((p) => p.estimate)
     .map((p) => ({
@@ -278,6 +274,33 @@ export function parsePEtab(files: Map<string, string>): PEtabProblem {
   if (paramBounds.length === 0) {
     warnings.push('No parameters marked for estimation (estimate=1). All parameters are fixed.');
   }
+  return paramBounds;
+}
+
+export function parsePEtab(files: Map<string, string>): PEtabProblem {
+  const warnings: string[] = [];
+
+  const findFile = (suffix: string): string | undefined => {
+    for (const [name, content] of files) {
+      if (name.toLowerCase().endsWith(suffix.toLowerCase())) return content;
+    }
+    return undefined;
+  };
+
+  const yamlContent = findFile('.yaml') ?? findFile('.yml');
+  if (yamlContent) {
+    try {
+      parseSimpleYAML(yamlContent);
+    } catch {
+      warnings.push('Failed to parse YAML problem file; using filename heuristics.');
+    }
+  }
+
+  const parameters = extractParameters(findFile);
+  const measurements = extractMeasurements(findFile);
+  const conditions = extractConditions(findFile);
+  const observables = extractObservables(findFile);
+  const paramBounds = extractParamBounds(parameters, warnings);
 
   return {
     parameters,
