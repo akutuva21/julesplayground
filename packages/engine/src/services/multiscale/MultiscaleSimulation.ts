@@ -163,29 +163,10 @@ function massActionRHS(
 }
 
 // ---------------------------------------------------------------------------
-// multiscaleSimulation – main entry point
+// Initialization Helpers
 // ---------------------------------------------------------------------------
 
-export function multiscaleSimulation(
-  config: MultiscaleConfig,
-  onProgress?: (fraction: number) => void,
-): MultiscaleResult {
-  const rng = new SimpleRNG(config.seed ?? 42);
-
-  // ---- Build cell-type lookup ----
-  const cellTypeDefs = new Map<string, CellTypeDefinition>();
-  const cellTypeRates = new Map<string, MassActionRates>();
-
-  for (const ct of config.cellTypes) {
-    cellTypeDefs.set(ct.name, ct);
-    // Default: zero production, zero degradation (can be overridden later)
-    cellTypeRates.set(ct.name, {
-      production: new Float64Array(0),
-      degradation: new Float64Array(0),
-    });
-  }
-
-  // ---- Extracellular grid ----
+function initializeGrid(config: MultiscaleConfig): ExtracellularGrid {
   const gridRes: [number, number, number] = [20, 20, 20]; // default resolution
   const gridConfig: ExtracellularGridConfig = {
     domainSize: config.domain.size,
@@ -201,11 +182,16 @@ export function multiscaleSimulation(
         : config.domain.boundaryCondition === 'absorbing' ? 'dirichlet'
         : 'neumann',
   };
-  const grid = new ExtracellularGrid(gridConfig);
+  return new ExtracellularGrid(gridConfig);
+}
 
-  // ---- Initialise cells ----
+function initializeCells(
+  config: MultiscaleConfig,
+  cellTypeDefs: Map<string, CellTypeDefinition>,
+  rng: SimpleRNG,
+): { cells: CellState[]; lineage: MultiscaleResult['cellLineage']; nextCellId: number } {
   let nextCellId = 0;
-  let cells: CellState[] = [];
+  const cells: CellState[] = [];
   const lineage: MultiscaleResult['cellLineage'] = [];
 
   for (const init of config.initialCells) {
@@ -232,6 +218,274 @@ export function multiscaleSimulation(
     }
   }
 
+  return { cells, lineage, nextCellId };
+}
+
+function stepIntracellular(
+  cells: CellState[],
+  cellTypeRates: Map<string, MassActionRates>,
+  dtStep: number,
+  dtIntracellular: number,
+  t: number,
+): void {
+  for (const cell of cells) {
+    if (cell.phase === 'dead') continue;
+    const rates = cellTypeRates.get(cell.cellType);
+    if (!rates || cell.intracellularState.length === 0) continue;
+    const rhs = massActionRHS(rates);
+    const nSubSteps = Math.max(1, Math.ceil(dtStep / dtIntracellular));
+    const subDt = dtStep / nSubSteps;
+    let tLocal = t - dtStep;
+    for (let s = 0; s < nSubSteps; s++) {
+      rk4Step(rhs, tLocal, cell.intracellularState, subDt);
+      tLocal += subDt;
+    }
+    cell.age += dtStep;
+  }
+}
+
+function evaluateDecisions(
+  cells: CellState[],
+  cellTypeDefs: Map<string, CellTypeDefinition>,
+  rng: SimpleRNG,
+): Array<{ cell: CellState; action: CellAction }> {
+  const actions: Array<{ cell: CellState; action: CellAction }> = [];
+  for (const cell of cells) {
+    if (cell.phase === 'dead') continue;
+    const typeDef = cellTypeDefs.get(cell.cellType);
+    if (!typeDef) continue;
+    for (const rule of typeDef.decisionRules) {
+      if (evaluateCondition(cell, rule.condition)) {
+        const prob = rule.probability ?? 1;
+        if (rng.next() < prob) {
+          actions.push({ cell, action: rule.action });
+          break; // first matching rule wins
+        }
+      }
+    }
+  }
+  return actions;
+}
+
+function executeActions(
+  cells: CellState[],
+  actions: Array<{ cell: CellState; action: CellAction }>,
+  lineage: MultiscaleResult['cellLineage'],
+  cellTypeDefs: Map<string, CellTypeDefinition>,
+  grid: ExtracellularGrid,
+  rng: SimpleRNG,
+  dtStep: number,
+  t: number,
+  maxCells: number,
+  nextCellIdRef: { value: number },
+): void {
+  const newCells: CellState[] = [];
+  for (const { cell, action } of actions) {
+    switch (action.type) {
+      case 'divide': {
+        if (cells.filter((c) => c.phase !== 'dead').length >= maxCells) break;
+        cell.phase = 'dividing';
+        const daughter = divideCell(cell, nextCellIdRef.value, rng);
+        cell.phase = 'active';
+        daughter.phase = 'active';
+        newCells.push(daughter);
+
+        lineage.push({
+          cellId: nextCellIdRef.value,
+          parentId: cell.id,
+          cellType: cell.cellType,
+          birthTime: t,
+          deathTime: null,
+          divisionTimes: [],
+        });
+        const parentLin = lineage.find((l) => l.cellId === cell.id);
+        if (parentLin) parentLin.divisionTimes.push(t);
+        nextCellIdRef.value++;
+        break;
+      }
+      case 'die': {
+        cell.phase = 'dead';
+        const lin = lineage.find((l) => l.cellId === cell.id);
+        if (lin) lin.deathTime = t;
+        break;
+      }
+      case 'migrate': {
+        const speed = action.speed * dtStep;
+        if (action.direction === 'chemotaxis' && action.chemotaxisTarget) {
+          const grad = grid.getGradient(cell.position, action.chemotaxisTarget);
+          moveCell(cell, 'chemotaxis', speed, grad);
+        } else {
+          moveCell(cell, 'random', speed);
+        }
+        break;
+      }
+      case 'secrete': {
+        setSafeNumberField(cell.secretionRates, action.species, action.rate);
+        break;
+      }
+      case 'stop_secrete': {
+        if (isSafeObjectKey(action.species)) {
+          delete cell.secretionRates[action.species];
+        }
+        break;
+      }
+      case 'change_type': {
+        cell.cellType = action.newType;
+        break;
+      }
+      case 'set_parameter': {
+        setSafeNumberField(cell.observables, action.parameter, action.value);
+        break;
+      }
+    }
+  }
+  cells.push(...newCells);
+
+  for (const cell of cells) {
+    if (cell.phase === 'dead') continue;
+    const typeDef = cellTypeDefs.get(cell.cellType);
+    if (typeDef && typeDef.motility > 0) {
+      moveCell(cell, 'random', typeDef.motility * dtStep);
+    }
+  }
+}
+
+function stepExtracellular(
+  grid: ExtracellularGrid,
+  cells: CellState[],
+  dtStep: number,
+): void {
+  grid.clearSourcesSinks();
+  for (const cell of cells) {
+    if (cell.phase === 'dead') continue;
+    for (const [species, rate] of Object.entries(cell.secretionRates)) {
+      if (rate > 0) grid.addSource(cell.position, species, rate);
+    }
+    for (const [species, rate] of Object.entries(cell.uptakeRates)) {
+      if (rate > 0) grid.addSink(cell.position, species, rate);
+    }
+  }
+  grid.step(dtStep);
+}
+
+function coupleCells(
+  cells: CellState[],
+  cellTypeDefs: Map<string, CellTypeDefinition>,
+  grid: ExtracellularGrid,
+): void {
+  for (const cell of cells) {
+    if (cell.phase === 'dead') continue;
+    const typeDef = cellTypeDefs.get(cell.cellType);
+    if (!typeDef) continue;
+
+    if (typeDef.uptake) {
+      for (const u of typeDef.uptake) {
+        const conc = grid.getConcentration(cell.position, u.species);
+        setSafeNumberField(cell.observables, u.intracellularParameter, conc * u.scalingFactor);
+      }
+    }
+
+    if (typeDef.secretion) {
+      for (const s of typeDef.secretion) {
+        const obsVal = cell.observables[s.intracellularObservable] ?? 0;
+        setSafeNumberField(cell.secretionRates, s.species, obsVal * s.scalingFactor);
+      }
+    }
+  }
+}
+
+function takeSimulationSnapshot(
+  time: number,
+  config: MultiscaleConfig,
+  cells: CellState[],
+  snapshots: MultiscaleSnapshot[],
+  popTs: MultiscaleResult['populationTimeSeries'],
+): void {
+  const popCounts: Record<string, number> = Object.create(null) as Record<string, number>;
+  const obsAccum: Record<string, Record<string, number>> = Object.create(null) as Record<string, Record<string, number>>;
+  const obsCounts: Record<string, number> = Object.create(null) as Record<string, number>;
+
+  for (const ct of config.cellTypes) {
+    if (!isSafeObjectKey(ct.name)) continue;
+    setSafeNumberField(popCounts, ct.name, 0);
+    Object.defineProperty(obsAccum, ct.name, {
+      value: Object.create(null) as Record<string, number>,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+    setSafeNumberField(obsCounts, ct.name, 0);
+  }
+
+  for (const cell of cells) {
+    if (cell.phase === 'dead') continue;
+    if (!isSafeObjectKey(cell.cellType)) continue;
+    setSafeNumberField(popCounts, cell.cellType, (popCounts[cell.cellType] ?? 0) + 1);
+    setSafeNumberField(obsCounts, cell.cellType, (obsCounts[cell.cellType] ?? 0) + 1);
+    if (!obsAccum[cell.cellType]) obsAccum[cell.cellType] = Object.create(null) as Record<string, number>;
+    for (const [key, val] of Object.entries(cell.observables)) {
+      if (!isSafeObjectKey(key)) continue;
+      setSafeNumberField(obsAccum[cell.cellType], key, (obsAccum[cell.cellType][key] ?? 0) + val);
+    }
+  }
+
+  const meanObs: Record<string, Record<string, number>> = Object.create(null) as Record<string, Record<string, number>>;
+  for (const [ct, accum] of Object.entries(obsAccum)) {
+    meanObs[ct] = Object.create(null) as Record<string, number>;
+    const n = obsCounts[ct] || 1;
+    for (const [key, sum] of Object.entries(accum)) {
+      setSafeNumberField(meanObs[ct], key, sum / n);
+    }
+  }
+
+  snapshots.push({
+    time,
+    cells: cells
+      .filter((c) => c.phase !== 'dead')
+      .map((c) => ({ ...c, position: [...c.position] as [number, number, number] })),
+    populationCounts: popCounts,
+    meanObservables: meanObs,
+  });
+
+  popTs.time.push(time);
+  for (const ct of config.cellTypes) {
+    if (ct.name === '__proto__' || ct.name === 'constructor' || ct.name === 'prototype') continue;
+    popTs.counts[ct.name].push(popCounts[ct.name] ?? 0);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// multiscaleSimulation – main entry point
+// ---------------------------------------------------------------------------
+
+export function multiscaleSimulation(
+  config: MultiscaleConfig,
+  onProgress?: (fraction: number) => void,
+): MultiscaleResult {
+  const rng = new SimpleRNG(config.seed ?? 42);
+
+  // ---- Build cell-type lookup ----
+  const cellTypeDefs = new Map<string, CellTypeDefinition>();
+  const cellTypeRates = new Map<string, MassActionRates>();
+
+  for (const ct of config.cellTypes) {
+    cellTypeDefs.set(ct.name, ct);
+    // Default: zero production, zero degradation (can be overridden later)
+    cellTypeRates.set(ct.name, {
+      production: new Float64Array(0),
+      degradation: new Float64Array(0),
+    });
+  }
+
+  // ---- Extracellular grid ----
+  const grid = initializeGrid(config);
+
+  // ---- Initialise cells ----
+  const initResult = initializeCells(config, cellTypeDefs, rng);
+  let cells = initResult.cells;
+  const lineage = initResult.lineage;
+  const nextCellId = initResult.nextCellId;
+
   // ---- Output bookkeeping ----
   const snapshots: MultiscaleSnapshot[] = [];
   const outputInterval = config.tEnd / Math.max(1, config.nOutput);
@@ -244,222 +498,49 @@ export function multiscaleSimulation(
     setSafeNumberArrayField(popTs.counts, ct.name, []);
   }
 
-  // ---- Helper: take a snapshot ----
-  function takeSnapshot(time: number) {
-    const popCounts: Record<string, number> = Object.create(null) as Record<string, number>;
-    const obsAccum: Record<string, Record<string, number>> = Object.create(null) as Record<string, Record<string, number>>;
-    const obsCounts: Record<string, number> = Object.create(null) as Record<string, number>;
-
-    for (const ct of config.cellTypes) {
-      if (!isSafeObjectKey(ct.name)) continue;
-      setSafeNumberField(popCounts, ct.name, 0);
-      Object.defineProperty(obsAccum, ct.name, {
-        value: Object.create(null) as Record<string, number>,
-        writable: true,
-        enumerable: true,
-        configurable: true,
-      });
-      setSafeNumberField(obsCounts, ct.name, 0);
-    }
-
-    for (const cell of cells) {
-      if (cell.phase === 'dead') continue;
-      if (!isSafeObjectKey(cell.cellType)) continue;
-      setSafeNumberField(popCounts, cell.cellType, (popCounts[cell.cellType] ?? 0) + 1);
-      setSafeNumberField(obsCounts, cell.cellType, (obsCounts[cell.cellType] ?? 0) + 1);
-      if (!obsAccum[cell.cellType]) obsAccum[cell.cellType] = Object.create(null) as Record<string, number>;
-      for (const [key, val] of Object.entries(cell.observables)) {
-        if (!isSafeObjectKey(key)) continue;
-        setSafeNumberField(obsAccum[cell.cellType], key, (obsAccum[cell.cellType][key] ?? 0) + val);
-      }
-    }
-
-    const meanObs: Record<string, Record<string, number>> = Object.create(null) as Record<string, Record<string, number>>;
-    for (const [ct, accum] of Object.entries(obsAccum)) {
-      meanObs[ct] = Object.create(null) as Record<string, number>;
-      const n = obsCounts[ct] || 1;
-      for (const [key, sum] of Object.entries(accum)) {
-        setSafeNumberField(meanObs[ct], key, sum / n);
-      }
-    }
-
-    snapshots.push({
-      time,
-      cells: cells
-        .filter((c) => c.phase !== 'dead')
-        .map((c) => ({ ...c, position: [...c.position] as [number, number, number] })),
-      populationCounts: popCounts,
-      meanObservables: meanObs,
-    });
-
-    popTs.time.push(time);
-    for (const ct of config.cellTypes) {
-      if (ct.name === '__proto__' || ct.name === 'constructor' || ct.name === 'prototype') continue;
-      popTs.counts[ct.name].push(popCounts[ct.name] ?? 0);
-    }
-  }
-
   // Initial snapshot
-  takeSnapshot(0);
+  takeSimulationSnapshot(0, config, cells, snapshots, popTs);
   nextOutputTime += outputInterval;
 
   // ---- Main simulation loop ----
   const maxCells = config.maxCells ?? 100000;
   let t = 0;
+  // Use a ref object for nextCellId so it can be mutated by executeActions
+  const nextCellIdRef = { value: nextCellId };
 
   while (t < config.tEnd - 1e-12) {
     const dtStep = Math.min(config.dtDecision, config.tEnd - t);
     t += dtStep;
 
-    // 1. INTRACELLULAR: advance each cell's internal ODE
-    for (const cell of cells) {
-      if (cell.phase === 'dead') continue;
-      const rates = cellTypeRates.get(cell.cellType);
-      if (!rates || cell.intracellularState.length === 0) continue;
-      const rhs = massActionRHS(rates);
-      const nSubSteps = Math.max(1, Math.ceil(dtStep / config.dtIntracellular));
-      const subDt = dtStep / nSubSteps;
-      let tLocal = t - dtStep;
-      for (let s = 0; s < nSubSteps; s++) {
-        rk4Step(rhs, tLocal, cell.intracellularState, subDt);
-        tLocal += subDt;
-      }
-      cell.age += dtStep;
-    }
+    // 1. INTRACELLULAR
+    stepIntracellular(cells, cellTypeRates, dtStep, config.dtIntracellular, t);
 
-    // 2. DECISIONS: evaluate decision rules
-    const actions: Array<{ cell: CellState; action: CellAction }> = [];
-    for (const cell of cells) {
-      if (cell.phase === 'dead') continue;
-      const typeDef = cellTypeDefs.get(cell.cellType);
-      if (!typeDef) continue;
-      for (const rule of typeDef.decisionRules) {
-        if (evaluateCondition(cell, rule.condition)) {
-          // Stochastic gating
-          const prob = rule.probability ?? 1;
-          if (rng.next() < prob) {
-            actions.push({ cell, action: rule.action });
-            break; // first matching rule wins
-          }
-        }
-      }
-    }
+    // 2. DECISIONS
+    const actions = evaluateDecisions(cells, cellTypeDefs, rng);
 
     // 3. EXECUTE ACTIONS
-    const newCells: CellState[] = [];
-    for (const { cell, action } of actions) {
-      switch (action.type) {
-        case 'divide': {
-          if (cells.filter((c) => c.phase !== 'dead').length >= maxCells) break;
-          cell.phase = 'dividing';
-          const daughter = divideCell(cell, nextCellId, rng);
-          cell.phase = 'active';
-          daughter.phase = 'active';
-          newCells.push(daughter);
+    executeActions(
+      cells,
+      actions,
+      lineage,
+      cellTypeDefs,
+      grid,
+      rng,
+      dtStep,
+      t,
+      maxCells,
+      nextCellIdRef,
+    );
 
-          // Lineage
-          lineage.push({
-            cellId: nextCellId,
-            parentId: cell.id,
-            cellType: cell.cellType,
-            birthTime: t,
-            deathTime: null,
-            divisionTimes: [],
-          });
-          const parentLin = lineage.find((l) => l.cellId === cell.id);
-          if (parentLin) parentLin.divisionTimes.push(t);
-          nextCellId++;
-          break;
-        }
-        case 'die': {
-          cell.phase = 'dead';
-          const lin = lineage.find((l) => l.cellId === cell.id);
-          if (lin) lin.deathTime = t;
-          break;
-        }
-        case 'migrate': {
-          const speed = action.speed * dtStep;
-          if (action.direction === 'chemotaxis' && action.chemotaxisTarget) {
-            const grad = grid.getGradient(cell.position, action.chemotaxisTarget);
-            moveCell(cell, 'chemotaxis', speed, grad);
-          } else {
-            moveCell(cell, 'random', speed);
-          }
-          break;
-        }
-        case 'secrete': {
-          setSafeNumberField(cell.secretionRates, action.species, action.rate);
-          break;
-        }
-        case 'stop_secrete': {
-          if (isSafeObjectKey(action.species)) {
-            delete cell.secretionRates[action.species];
-          }
-          break;
-        }
-        case 'change_type': {
-          cell.cellType = action.newType;
-          break;
-        }
-        case 'set_parameter': {
-          // Store as observable for simplicity
-          setSafeNumberField(cell.observables, action.parameter, action.value);
-          break;
-        }
-      }
-    }
-    cells.push(...newCells);
+    // 4. EXTRACELLULAR
+    stepExtracellular(grid, cells, dtStep);
 
-    // Apply default motility to all active cells
-    for (const cell of cells) {
-      if (cell.phase === 'dead') continue;
-      const typeDef = cellTypeDefs.get(cell.cellType);
-      if (typeDef && typeDef.motility > 0) {
-        moveCell(cell, 'random', typeDef.motility * dtStep);
-      }
-    }
-
-    // 4. EXTRACELLULAR: add cell sources/sinks, advance PDE
-    grid.clearSourcesSinks();
-    for (const cell of cells) {
-      if (cell.phase === 'dead') continue;
-      // Secretion
-      for (const [species, rate] of Object.entries(cell.secretionRates)) {
-        if (rate > 0) grid.addSource(cell.position, species, rate);
-      }
-      // Uptake
-      for (const [species, rate] of Object.entries(cell.uptakeRates)) {
-        if (rate > 0) grid.addSink(cell.position, species, rate);
-      }
-    }
-    grid.step(dtStep);
-
-    // 5. COUPLE: update intracellular parameters from extracellular
-    for (const cell of cells) {
-      if (cell.phase === 'dead') continue;
-      const typeDef = cellTypeDefs.get(cell.cellType);
-      if (!typeDef) continue;
-
-      // Uptake coupling: set intracellular parameter from local concentration
-      if (typeDef.uptake) {
-        for (const u of typeDef.uptake) {
-          const conc = grid.getConcentration(cell.position, u.species);
-          setSafeNumberField(cell.observables, u.intracellularParameter, conc * u.scalingFactor);
-        }
-      }
-
-      // Secretion coupling: set secretion rate from intracellular observable
-      if (typeDef.secretion) {
-        for (const s of typeDef.secretion) {
-          const obsVal = cell.observables[s.intracellularObservable] ?? 0;
-          setSafeNumberField(cell.secretionRates, s.species, obsVal * s.scalingFactor);
-        }
-      }
-    }
+    // 5. COUPLE
+    coupleCells(cells, cellTypeDefs, grid);
 
     // 6. RECORD snapshot
     if (t >= nextOutputTime - 1e-12) {
-      takeSnapshot(t);
+      takeSimulationSnapshot(t, config, cells, snapshots, popTs);
       nextOutputTime += outputInterval;
     }
 
@@ -476,7 +557,7 @@ export function multiscaleSimulation(
 
   // Ensure final snapshot
   if (snapshots.length === 0 || snapshots[snapshots.length - 1].time < config.tEnd - 1e-6) {
-    takeSnapshot(config.tEnd);
+    takeSimulationSnapshot(config.tEnd, config, cells, snapshots, popTs);
   }
 
   return {
