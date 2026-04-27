@@ -311,127 +311,106 @@ export function findConservationLaws(
  * @param nSpecies - Total number of species in the full system.
  * @returns An object containing the reduced size and bidirectional state mapping functions.
  */
-export function createReducedSystem(
-  analysis: ConservationAnalysis,
-  nSpecies: number
-): {
-  /** Number of independent species */
-  reducedSize: number;
-  /** Map full state y to reduced state y_r */
-  reduce: (y: Float64Array) => Float64Array;
-  /** Map reduced state y_r to full state y */
-  expand: (y_r: Float64Array) => Float64Array;
-  /** Transform full derivative function to reduced form */
-  transformDerivatives: (
-    fullDerivatives: (y: Float64Array, dydt: Float64Array) => void
-  ) => (y_r: Float64Array, dydt_r: Float64Array) => void;
-  /** Transform full Jacobian function to reduced form */
-  transformJacobian: (
-    fullJacobian: (y: Float64Array, J: Float64Array) => void,
-    columnMajor?: boolean
-  ) => (y_r: Float64Array, J_r: Float64Array) => void;
-} {
-  const { laws, independentSpecies, dependentSpecies } = analysis;
-  const reducedSize = independentSpecies.length;
 
-  const solveLinearSystem = (Ain: number[][], bin: number[]): number[] | null => {
-    const n = bin.length;
-    // Defensive copies (small systems: typically <= 50)
-    const A = Ain.map(row => row.slice());
-    const b = bin.slice();
-    const EPS = 1e-14;
 
-    for (let col = 0; col < n; col++) {
-      // Partial pivot
-      let pivotRow = col;
-      let maxAbs = Math.abs(A[col][col]);
-      for (let r = col + 1; r < n; r++) {
-        const v = Math.abs(A[r][col]);
-        if (v > maxAbs) {
-          maxAbs = v;
-          pivotRow = r;
-        }
-      }
-      if (maxAbs < EPS) return null;
+function solveLinearSystem(Ain: number[][], bin: number[]): number[] | null {
+  const n = bin.length;
+  // Defensive copies (small systems: typically <= 50)
+  const A = Ain.map(row => row.slice());
+  const b = bin.slice();
+  const EPS = 1e-14;
 
-      if (pivotRow !== col) {
-        [A[col], A[pivotRow]] = [A[pivotRow], A[col]];
-        [b[col], b[pivotRow]] = [b[pivotRow], b[col]];
-      }
-
-      const pivot = A[col][col];
-      for (let c = col; c < n; c++) A[col][c] /= pivot;
-      b[col] /= pivot;
-
-      for (let r = 0; r < n; r++) {
-        if (r === col) continue;
-        const factor = A[r][col];
-        if (Math.abs(factor) < EPS) continue;
-        for (let c = col; c < n; c++) A[r][c] -= factor * A[col][c];
-        b[r] -= factor * b[col];
+  for (let col = 0; col < n; col++) {
+    // Partial pivot
+    let pivotRow = col;
+    let maxAbs = Math.abs(A[col][col]);
+    for (let r = col + 1; r < n; r++) {
+      const v = Math.abs(A[r][col]);
+      if (v > maxAbs) {
+        maxAbs = v;
+        pivotRow = r;
       }
     }
+    if (maxAbs < EPS) return null;
 
-    return b;
-  };
+    if (pivotRow !== col) {
+      [A[col], A[pivotRow]] = [A[pivotRow], A[col]];
+      [b[col], b[pivotRow]] = [b[pivotRow], b[col]];
+    }
 
-  // Precompute index mappings
-  const fullToReduced = new Int32Array(nSpecies).fill(-1);
-  for (let i = 0; i < independentSpecies.length; i++) {
-    fullToReduced[independentSpecies[i]] = i;
+    const pivot = A[col][col];
+    for (let c = col; c < n; c++) A[col][c] /= pivot;
+    b[col] /= pivot;
+
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const factor = A[r][col];
+      if (Math.abs(factor) < EPS) continue;
+      for (let c = col; c < n; c++) A[r][c] -= factor * A[col][c];
+      b[r] -= factor * b[col];
+    }
   }
 
-  // For each dependent species, compute: y[dep] = (total - sum(coef[j]*y[j] for j != dep)) / coef[dep]
-  const dependentCoefs = laws.map(law => {
-    const dep = law.dependentSpecies;
-    const coef = law.coefficients[dep];
-    return { dep, coef, law };
-  });
+  return b;
+}
 
-  // Precompute a coupled linear system for dependent reconstruction.
-  // Each conservation law provides one equation; we solve all dependent species together:
-  //   sum_{d in dependent} coef_d * y_d = total - sum_{i in independent} coef_i * y_i
+
+interface DepSystem {
+  A: number[][];
+  bTotals: Float64Array;
+  indepTerms: Array<Array<{ idx: number; coef: number }>>;
+  m: number;
+}
+
+function precomputeDependentSystem(
+  laws: ConservationLaw[],
+  dependentSpecies: number[],
+  nSpecies: number
+): DepSystem | null {
+  const m = dependentSpecies.length;
+  if (m === 0) return null;
+
   const depIndex = new Map<number, number>();
   for (let i = 0; i < dependentSpecies.length; i++) depIndex.set(dependentSpecies[i], i);
 
-  const depSystem = (() => {
-    const m = dependentSpecies.length;
-    if (m === 0) return null;
+  // Build constant A and coefficient lists for b (independent contributions)
+  const A: number[][] = Array.from({ length: m }, () => Array(m).fill(0));
+  const bTotals = new Float64Array(m);
+  const indepTerms: Array<Array<{ idx: number; coef: number }>> = Array.from({ length: m }, () => []);
 
-    // Build constant A and coefficient lists for b (independent contributions)
-    const A: number[][] = Array.from({ length: m }, () => Array(m).fill(0));
-    const bTotals = new Float64Array(m);
-    const indepTerms: Array<Array<{ idx: number; coef: number }>> = Array.from({ length: m }, () => []);
+  // We expect one law per dependent species.
+  for (let row = 0; row < laws.length; row++) {
+    const law = laws[row];
+    const dep = law.dependentSpecies;
+    const rowIdx = depIndex.get(dep);
+    if (rowIdx === undefined) continue;
 
-    // We expect one law per dependent species.
-    for (let row = 0; row < laws.length; row++) {
-      const law = laws[row];
-      const dep = law.dependentSpecies;
-      const rowIdx = depIndex.get(dep);
-      if (rowIdx === undefined) continue;
+    bTotals[rowIdx] = law.total;
 
-      bTotals[rowIdx] = law.total;
-
-      // Dependent coefficients become A entries; independent coefficients contribute to b.
-      for (let j = 0; j < nSpecies; j++) {
-        const c = law.coefficients[j];
-        if (Math.abs(c) < 1e-15) continue;
-        const dj = depIndex.get(j);
-        if (dj !== undefined) {
-          A[rowIdx][dj] += c;
-        } else {
-          // Independent or otherwise not eliminated
-          indepTerms[rowIdx].push({ idx: j, coef: c });
-        }
+    // Dependent coefficients become A entries; independent coefficients contribute to b.
+    for (let j = 0; j < nSpecies; j++) {
+      const c = law.coefficients[j];
+      if (Math.abs(c) < 1e-15) continue;
+      const dj = depIndex.get(j);
+      if (dj !== undefined) {
+        A[rowIdx][dj] += c;
+      } else {
+        // Independent or otherwise not eliminated
+        indepTerms[rowIdx].push({ idx: j, coef: c });
       }
     }
+  }
 
-    return { A, bTotals, indepTerms, m };
-  })();
+  return { A, bTotals, indepTerms, m };
+}
 
-  // Precompute reconstruction matrix Q (N x reducedSize)
-  // y = Q * y_r + constant_offset
-  // dy/dy_r = Q
+function precomputeReconstructionMatrix(
+  reducedSize: number,
+  nSpecies: number,
+  independentSpecies: number[],
+  dependentSpecies: number[],
+  depSystem: DepSystem | null
+): Float64Array {
   const Q = new Float64Array(nSpecies * reducedSize);
   for (let j = 0; j < reducedSize; j++) {
     // Identity part for independent species
@@ -455,8 +434,16 @@ export function createReducedSystem(
       }
     }
   }
+  return Q;
+}
 
-  const reconstructDependentSpecies = (y: Float64Array) => {
+function buildDependentReconstructor(
+  dependentCoefs: Array<{ dep: number; coef: number; law: ConservationLaw }>,
+  depSystem: DepSystem | null,
+  nSpecies: number,
+  dependentSpecies: number[]
+): (y: Float64Array) => void {
+  return (y: Float64Array) => {
     if (!depSystem) {
       // Fall back to sequential reconstruction (historical behavior)
       for (const { dep, coef, law } of dependentCoefs) {
@@ -504,6 +491,50 @@ export function createReducedSystem(
       if (y[idx] < 0) y[idx] = 0;
     }
   };
+}
+
+export function createReducedSystem(
+  analysis: ConservationAnalysis,
+  nSpecies: number
+): {
+  /** Number of independent species */
+  reducedSize: number;
+  /** Map full state y to reduced state y_r */
+  reduce: (y: Float64Array) => Float64Array;
+  /** Map reduced state y_r to full state y */
+  expand: (y_r: Float64Array) => Float64Array;
+  /** Transform full derivative function to reduced form */
+  transformDerivatives: (
+    fullDerivatives: (y: Float64Array, dydt: Float64Array) => void
+  ) => (y_r: Float64Array, dydt_r: Float64Array) => void;
+  /** Transform full Jacobian function to reduced form */
+  transformJacobian: (
+    fullJacobian: (y: Float64Array, J: Float64Array) => void,
+    columnMajor?: boolean
+  ) => (y_r: Float64Array, J_r: Float64Array) => void;
+} {
+  const { laws, independentSpecies, dependentSpecies } = analysis;
+  const reducedSize = independentSpecies.length;
+
+
+  // Precompute index mappings
+  const fullToReduced = new Int32Array(nSpecies).fill(-1);
+  for (let i = 0; i < independentSpecies.length; i++) {
+    fullToReduced[independentSpecies[i]] = i;
+  }
+
+  // For each dependent species, compute: y[dep] = (total - sum(coef[j]*y[j] for j != dep)) / coef[dep]
+  const dependentCoefs = laws.map(law => {
+    const dep = law.dependentSpecies;
+    const coef = law.coefficients[dep];
+    return { dep, coef, law };
+  });
+
+  const depSystem = precomputeDependentSystem(laws, dependentSpecies, nSpecies);
+
+  const Q = precomputeReconstructionMatrix(reducedSize, nSpecies, independentSpecies, dependentSpecies, depSystem);
+
+  const reconstructDependentSpecies = buildDependentReconstructor(dependentCoefs, depSystem, nSpecies, dependentSpecies);
 
   return {
     reducedSize,
