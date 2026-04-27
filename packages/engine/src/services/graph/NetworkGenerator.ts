@@ -5036,8 +5036,6 @@ export class NetworkGenerator {
     // 1. First, map wildcard components (!+) to bound product components
     // 2. Then, map unbound pattern components to unbound product components
     // 3. Finally, map new-bond pattern components to remaining unbound product components
-    // CRITICAL FIX: Build reverse lookup from product pattern molecule to reactant pattern molecule
-    // This allows us to use the matcher's componentMap for exact component identification
     const productToReactantPattern = new Map<number, {
       reactantIdx: number,
       reactantPatternMolIdx: number
