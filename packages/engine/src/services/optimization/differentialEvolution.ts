@@ -118,6 +118,96 @@ class PRNG {
   }
 }
 
+// --- Helpers for DE Algorithm -----------------------------------------------
+
+function initializePopulation(
+  x0: number[],
+  NP: number,
+  n: number,
+  lb: number[],
+  ub: number[],
+  rng: PRNG,
+): number[][] {
+  const pop: number[][] = new Array(NP);
+  // First member = initial guess (clamped to bounds)
+  pop[0] = x0.map((v, i) => Math.max(lb[i], Math.min(ub[i], v)));
+
+  // Rest = random in [lb, ub]
+  for (let i = 1; i < NP; i++) {
+    pop[i] = new Array(n);
+    for (let j = 0; j < n; j++) {
+      pop[i][j] = lb[j] + rng.random() * (ub[j] - lb[j]);
+    }
+  }
+  return pop;
+}
+
+function generateTrialVectors(
+  pop: number[][],
+  NP: number,
+  n: number,
+  F: number,
+  CR: number,
+  lb: number[],
+  ub: number[],
+  rng: PRNG,
+): number[][] {
+  const trials: number[][] = new Array(NP);
+  for (let i = 0; i < NP; i++) {
+    // Pick 3 distinct indices != i
+    let a: number;
+    let b: number;
+    let c: number;
+    do {
+      a = rng.randInt(NP);
+    } while (a === i);
+    do {
+      b = rng.randInt(NP);
+    } while (b === i || b === a);
+    do {
+      c = rng.randInt(NP);
+    } while (c === i || c === a || c === b);
+
+    // Mutation: v = pop[a] + F * (pop[b] - pop[c])
+    // Binomial crossover: trial[j] = v[j] if rand < CR or j == jrand
+    const jrand = rng.randInt(n);
+    const trial = new Array<number>(n);
+    for (let j = 0; j < n; j++) {
+      if (rng.random() < CR || j === jrand) {
+        let v = pop[a][j] + F * (pop[b][j] - pop[c][j]);
+        // Bounce-back reflection into bounds
+        if (v < lb[j]) v = lb[j] + rng.random() * (pop[i][j] - lb[j]);
+        if (v > ub[j]) v = ub[j] - rng.random() * (ub[j] - pop[i][j]);
+        // Final clamp (safety)
+        trial[j] = Math.max(lb[j], Math.min(ub[j], v));
+      } else {
+        trial[j] = pop[i][j];
+      }
+    }
+    trials[i] = trial;
+  }
+  return trials;
+}
+
+function updatePopulation(
+  pop: number[][],
+  fitness: Float64Array,
+  trials: number[][],
+  trialFitness: Float64Array,
+  NP: number,
+  bestIdx: number,
+): number {
+  let newBestIdx = bestIdx;
+  for (let i = 0; i < NP; i++) {
+    if (trialFitness[i] <= fitness[i]) {
+      pop[i] = trials[i];
+      fitness[i] = trialFitness[i];
+      if (fitness[i] < fitness[newBestIdx]) newBestIdx = i;
+    }
+  }
+  return newBestIdx;
+}
+
 // --- Core algorithm ----------------------------------------------------------
 
 /**
@@ -149,19 +239,8 @@ export async function differentialEvolution(
 
   // --- Initialize population ------------------------------------------------
 
-  const pop: number[][] = new Array(NP);
+  const pop = initializePopulation(x0, NP, n, lb, ub, rng);
   const fitness = new Float64Array(NP);
-
-  // First member = initial guess (clamped to bounds)
-  pop[0] = x0.map((v, i) => Math.max(lb[i], Math.min(ub[i], v)));
-
-  // Rest = random in [lb, ub]
-  for (let i = 1; i < NP; i++) {
-    pop[i] = new Array(n);
-    for (let j = 0; j < n; j++) {
-      pop[i][j] = lb[j] + rng.random() * (ub[j] - lb[j]);
-    }
-  }
 
   // Evaluate initial population (parallel batches)
   let nEval = 0;
@@ -182,53 +261,14 @@ export async function differentialEvolution(
     if (signal?.aborted) return abortResult();
 
     // Build trial vectors for the entire population
-    const trials: number[][] = new Array(NP);
-    for (let i = 0; i < NP; i++) {
-      // Pick 3 distinct indices != i
-      let a: number;
-      let b: number;
-      let c: number;
-      do {
-        a = rng.randInt(NP);
-      } while (a === i);
-      do {
-        b = rng.randInt(NP);
-      } while (b === i || b === a);
-      do {
-        c = rng.randInt(NP);
-      } while (c === i || c === a || c === b);
-
-      // Mutation: v = pop[a] + F * (pop[b] - pop[c])
-      // Binomial crossover: trial[j] = v[j] if rand < CR or j == jrand
-      const jrand = rng.randInt(n);
-      const trial = new Array<number>(n);
-      for (let j = 0; j < n; j++) {
-        if (rng.random() < CR || j === jrand) {
-          let v = pop[a][j] + F * (pop[b][j] - pop[c][j]);
-          // Bounce-back reflection into bounds
-          if (v < lb[j]) v = lb[j] + rng.random() * (pop[i][j] - lb[j]);
-          if (v > ub[j]) v = ub[j] - rng.random() * (ub[j] - pop[i][j]);
-          // Final clamp (safety)
-          trial[j] = Math.max(lb[j], Math.min(ub[j], v));
-        } else {
-          trial[j] = pop[i][j];
-        }
-      }
-      trials[i] = trial;
-    }
+    const trials = generateTrialVectors(pop, NP, n, F, CR, lb, ub, rng);
 
     // Evaluate all trials (parallel batches)
     const trialFitness = new Float64Array(NP);
     await evaluateBatch(trials, trialFitness, 0, NP);
 
     // Selection: keep trial if it's at least as good
-    for (let i = 0; i < NP; i++) {
-      if (trialFitness[i] <= fitness[i]) {
-        pop[i] = trials[i];
-        fitness[i] = trialFitness[i];
-        if (fitness[i] < fitness[bestIdx]) bestIdx = i;
-      }
-    }
+    bestIdx = updatePopulation(pop, fitness, trials, trialFitness, NP, bestIdx);
 
     generation++;
 
