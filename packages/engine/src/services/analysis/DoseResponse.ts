@@ -417,43 +417,14 @@ function detectBifurcationPoints(
   return bifurcations;
 }
 
-// ── Main entry point ───────────────────────────────────────────────
 
-/**
- * Compute dose-response curves for the given observables by sweeping
- * the input parameter across the specified range and finding the
- * steady state at each dose.
- */
-export function computeDoseResponse(
-  config: DoseResponseConfig,
-): DoseResponseResult {
-  const {
-    model,
-    reactions,
-    species,
-    inputParameter,
-    inputRange,
-    nPoints = 50,
-    logScale = true,
-    observables,
-    tolerance = 1e-6,
-    detectBifurcations: detectBif = false,
-  } = config;
+// ── Extracted Helper Functions ─────────────────────────────────────
 
-  const n = species.length;
-
-  // Build stoichiometry matrix (constant across doses).
-  const S = buildStoichiometryMatrix(species, reactions);
-
-  // Generate dose points.
-  const doses = generateDosePoints(
-    inputRange.min,
-    inputRange.max,
-    nPoints,
-    logScale,
-  );
-
-  // Resolve observable mappings.
+function resolveObservableMappings(
+  observables: string[],
+  model: BNGLModel,
+  species: BNGLSpecies[],
+): Array<{ name: string; mapping: ObservableMapping }> {
   const obsMappings: Array<{ name: string; mapping: ObservableMapping }> = [];
   for (const obsName of observables) {
     const mapping = resolveObservable(obsName, model, species);
@@ -461,8 +432,20 @@ export function computeDoseResponse(
       obsMappings.push({ name: obsName, mapping });
     }
   }
+  return obsMappings;
+}
 
-  // Storage for results per observable.
+function sweepDoses(
+  doses: number[],
+  model: BNGLModel,
+  species: BNGLSpecies[],
+  reactions: BNGLReaction[],
+  inputParameter: string,
+  S: number[][],
+  tolerance: number,
+  obsMappings: Array<{ name: string; mapping: ObservableMapping }>,
+) {
+  const n = species.length;
   const responseArrays: Map<string, number[]> = new Map();
   const doseArrays: Map<string, number[]> = new Map();
   for (const obs of obsMappings) {
@@ -473,24 +456,17 @@ export function computeDoseResponse(
   const failedDoses: number[] = [];
   const steadyStates: Array<SteadyState | null> = [];
 
-  // Initial guess from species initial concentrations.
   let currentGuess = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     currentGuess[i] = species[i].initialConcentration;
   }
 
-  // Sweep through each dose.
   for (let d = 0; d < doses.length; d++) {
     const dose = doses[d];
-
-    // Clone parameters and set the input parameter to the current dose.
     const params: Record<string, number> = { ...model.parameters };
     params[inputParameter] = dose;
 
-    // Build RHS with updated parameters.
     const rhsFn = buildRhsFn(species, reactions, S, params);
-
-    // Build steady-state config.
     const ssConfig: SteadyStateConfig = {
       nSpecies: n,
       parameters: params,
@@ -503,11 +479,9 @@ export function computeDoseResponse(
       const ss = findSteadyState(ssConfig, currentGuess);
 
       if (ss.converged) {
-        // Warm start: use this result as initial guess for next dose.
         currentGuess = new Float64Array(ss.y);
         steadyStates.push(ss);
 
-        // Evaluate each observable.
         for (const obs of obsMappings) {
           const value = evaluateObservable(ss.y, obs.mapping);
           responseArrays.get(obs.name)!.push(value);
@@ -523,8 +497,18 @@ export function computeDoseResponse(
     }
   }
 
-  // Build curves (Hill fitting is async, so we build the result
-  // synchronously and attach Hill fits later via an internal wrapper).
+  return { doseArrays, responseArrays, failedDoses, steadyStates };
+}
+
+
+function buildCurves(
+  obsMappings: Array<{ name: string; mapping: ObservableMapping }>,
+  doseArrays: Map<string, number[]>,
+  responseArrays: Map<string, number[]>,
+  detectBif: boolean,
+  doses: number[],
+  steadyStates: Array<SteadyState | null>,
+): DoseResponseCurve[] {
   const curves: DoseResponseCurve[] = [];
 
   for (const obs of obsMappings) {
@@ -537,7 +521,6 @@ export function computeDoseResponse(
       responses: curveResponses,
     };
 
-    // Detect bifurcation points if requested.
     if (detectBif) {
       curve.bifurcationPoints = detectBifurcationPoints(
         doses,
@@ -549,10 +532,10 @@ export function computeDoseResponse(
     curves.push(curve);
   }
 
-  // Fit Hill equations synchronously by running the async nelderMead
-  // in a blocking fashion.  Since nelderMead's objective is purely
-  // computational (no I/O), we build the fits eagerly here.
-  // We attach them after construction.
+  return curves;
+}
+
+function applyHillFits(curves: DoseResponseCurve[]) {
   const fitPromises: Array<Promise<void>> = [];
   for (const curve of curves) {
     if (curve.doses.length >= 4) {
@@ -581,6 +564,61 @@ export function computeDoseResponse(
       curve.hillFit = fitHillEquationSync(curve.doses, curve.responses);
     }
   }
+}
+
+// ── Main entry point ───────────────────────────────────────────────
+
+/**
+ * Compute dose-response curves for the given observables by sweeping
+ * the input parameter across the specified range and finding the
+ * steady state at each dose.
+ */
+export function computeDoseResponse(
+  config: DoseResponseConfig,
+): DoseResponseResult {
+  const {
+    model,
+    reactions,
+    species,
+    inputParameter,
+    inputRange,
+    nPoints = 50,
+    logScale = true,
+    observables,
+    tolerance = 1e-6,
+    detectBifurcations: detectBif = false,
+  } = config;
+
+  const S = buildStoichiometryMatrix(species, reactions);
+  const doses = generateDosePoints(
+    inputRange.min,
+    inputRange.max,
+    nPoints,
+    logScale,
+  );
+
+  const obsMappings = resolveObservableMappings(observables, model, species);
+  const { doseArrays, responseArrays, failedDoses, steadyStates } = sweepDoses(
+    doses,
+    model,
+    species,
+    reactions,
+    inputParameter,
+    S,
+    tolerance,
+    obsMappings,
+  );
+
+  const curves = buildCurves(
+    obsMappings,
+    doseArrays,
+    responseArrays,
+    detectBif,
+    doses,
+    steadyStates,
+  );
+
+  applyHillFits(curves);
 
   return {
     inputParameter,
