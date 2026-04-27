@@ -163,7 +163,6 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
     // Assign resolved values to model
     Object.assign(this.parameters, resolvedParams);
 
-    // PARITY FIX: Remove truly constant parameters from paramExpressions.
     // If a parameter doesn't depend on other parameters (evaluates with empty map),
     // it shouldn't be in paramExpressions because SimulationLoop.ts uses that list
     // to "revert" parameter changes back to their original BNGL definitions.
