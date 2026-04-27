@@ -1022,8 +1022,6 @@ export async function simulate(
 
             setSafeNumericField(model.parameters as Record<string, number>, change.parameter, newVal);
 
-            // PARITY FIX: If a parameter is explicitly set, we should stop re-evaluating it 
-            // from its original expression (if it had one). 
             if (model.paramExpressions) {
               const oldExpr = model.paramExpressions[change.parameter];
               if (oldExpr) {
