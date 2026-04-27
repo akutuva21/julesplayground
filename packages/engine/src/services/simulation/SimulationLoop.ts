@@ -742,7 +742,6 @@ export async function simulate(
   const stateValueToSpeciesOutput = (value: number, speciesIdx: number): number =>
     (isOde && odeUsesAmountState) ? (value / speciesVolumes[speciesIdx]) : value;
 
-  // PARITY FIX: Concentration cache for saveConcentrations/resetConcentrations (BNG2 Cache semantics)
   // BNG2 uses a label-based cache. Default label resets to initial seed species values.
   const DEFAULT_CONC_LABEL = '__DEFAULT__';
   const concentrationCache = new Map<string, Float64Array>();
@@ -1268,7 +1267,6 @@ export async function simulate(
           if (change.afterPhaseIndex !== phaseIdx - 1) continue;
           const mode = change.mode ?? 'set';
 
-          // PARITY FIX: Handle saveConcentrations / resetConcentrations (BNG2 Cache semantics)
           if (mode === 'save') {
             const label = change.label ?? DEFAULT_CONC_LABEL;
             concentrationCache.set(label, new Float64Array(state));
@@ -2761,7 +2759,6 @@ export async function simulate(
         if (change.afterPhaseIndex !== phaseIdx - 1) continue;
         const mode = change.mode ?? 'set';
 
-        // PARITY FIX: Handle saveConcentrations / resetConcentrations (BNG2 Cache semantics)
         if (mode === 'save') {
           const label = change.label ?? DEFAULT_CONC_LABEL;
           concentrationCache.set(label, new Float64Array(y));
