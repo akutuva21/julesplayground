@@ -773,6 +773,375 @@ export class JITCompiler {
      * Compile a reaction network into a compact bytecode representation for WASM interpretation.
      * Returns null if any reaction uses a complex rate expression that cannot be pre-evaluated.
      */
+private prepareObservables(observables: Array<{ name: string; indices: Int32Array | number[]; coefficients: Float64Array | number[]; }> | undefined) {
+        const nObservables = observables?.length || 0;
+        if (!Number.isInteger(nObservables) || nObservables < 0 || nObservables > 1_000_000) {
+            return null;
+        }
+        const obsOffsets = new Int32Array(nObservables + 1);
+        let totalObsEntries = 0;
+        (observables || []).forEach(obs => totalObsEntries += obs.indices.length);
+
+        const obsSpeciesIdx = new Int32Array(totalObsEntries);
+        const obsCoeffs = new Float64Array(totalObsEntries);
+
+        let currentObsOffset = 0;
+        (observables || []).forEach((obs, i) => {
+            if (i < 0 || i >= obsOffsets.length) {
+                throw new Error(`[JITCompiler] obsOffsets index out of range: ${i}`);
+            }
+            obsOffsets[i] = currentObsOffset;
+            for (let j = 0; j < obs.indices.length; j++) {
+                if (currentObsOffset < 0 || currentObsOffset >= obsSpeciesIdx.length || currentObsOffset >= obsCoeffs.length) {
+                    throw new Error(`[JITCompiler] observable entry index out of range: ${currentObsOffset}`);
+                }
+                obsSpeciesIdx[currentObsOffset] = obs.indices[j];
+                obsCoeffs[currentObsOffset] = obs.coefficients[j];
+                currentObsOffset++;
+            }
+        });
+        if (nObservables < 0 || nObservables >= obsOffsets.length) {
+            throw new Error(`[JITCompiler] obsOffsets index out of range: ${nObservables}`);
+        }
+        obsOffsets.set([currentObsOffset], nObservables);
+
+        return { nObservables, obsOffsets, obsSpeciesIdx, obsCoeffs };
+    }
+
+    private prepareSafeParameters(parameters?: Record<string, number>): { safeParameters: Record<string, number>; paramKeys: string[] } {
+        const allParamKeys = Object.keys(parameters || {});
+        const forbiddenParamKeys = new Set(['__proto__', 'prototype', 'constructor']);
+        const paramKeys = allParamKeys.filter(
+            (key) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) && !forbiddenParamKeys.has(key)
+        );
+        const safeParameters: Record<string, number> = Object.create(null) as Record<string, number>;
+        for (const key of paramKeys) {
+            Object.defineProperty(safeParameters, key, {
+                value: (parameters as Record<string, number>)[key],
+                writable: true,
+                enumerable: true,
+                configurable: true,
+            });
+        }
+        if (allParamKeys.length !== paramKeys.length) {
+            console.warn(
+                `[JITCompiler] Ignoring ${allParamKeys.length - paramKeys.length} invalid parameter key(s) during bytecode compilation`
+            );
+        }
+        return { safeParameters, paramKeys };
+    }
+
+    private prepareReactions(
+        reactions: Array<{
+            reactantIndices: Array<number | string>;
+            reactantStoich: number[];
+            productIndices: Array<number | string>;
+            productStoich: number[];
+            rateConstant: number | string;
+            scalingVolume?: number;
+            statisticalFactor?: number;
+            totalRate?: boolean;
+        }>,
+        nSpecies: number,
+        safeParameters: Record<string, number>,
+        paramKeys: string[],
+        speciesNames?: string[],
+        observables?: Array<{
+            name: string;
+            indices: Int32Array | number[];
+            coefficients: Float64Array | number[];
+        }>,
+        functions?: JITFunctionDefinition[]
+    ) {
+        const nReactions = reactions.length;
+        const rateConstants = new Float64Array(nReactions);
+        const nReactantsPerRxn = new Int32Array(nReactions);
+        const scalingVolumes = new Float64Array(nReactions);
+
+        // Bytecode storage
+        const exprBytecodeOffsets = new Int32Array(nReactions + 1);
+        const bytecodeChunks: Uint8Array[] = [];
+        let totalBytecodeLen = 0;
+        let requiresParameterRebuild = false;
+
+        let totalReactantEntries = 0;
+        for (const rxn of reactions) {
+            totalReactantEntries += rxn.reactantIndices.length;
+        }
+
+        const reactantOffsets = new Int32Array(nReactions + 1);
+        const reactantIdx = new Int32Array(totalReactantEntries);
+        const reactantStoich = new Int32Array(totalReactantEntries);
+
+        let currentReactantOffset = 0;
+        for (let i = 0; i < nReactions; i++) {
+            const rxn = reactions[i];
+            exprBytecodeOffsets[i] = totalBytecodeLen;
+            let hasExpressionBytecode = false;
+
+            // Check for functional or parameterized rate bytecode
+            if (typeof rxn.rateConstant === 'string') {
+                const bc = this.compileExpressionToBytecode(
+                    rxn.rateConstant,
+                    safeParameters,
+                    speciesNames || [],
+                    (observables || []).map(o => o.name),
+                    functions
+                );
+                if (bc) {
+                    bytecodeChunks.push(bc.bytecode);
+                    totalBytecodeLen += bc.bytecode.length;
+                    requiresParameterRebuild ||= bc.usesParameters;
+                    hasExpressionBytecode = true;
+                }
+            }
+
+            // Pre-evaluate rate constant (for mass-action part or simple constants)
+            let k: number;
+            if (typeof rxn.rateConstant === 'number') {
+                k = rxn.rateConstant;
+            } else {
+                if (hasExpressionBytecode) {
+                    k = 0;
+                } else {
+                    // Try to evaluate expression
+                    const rxnStr = rxn.rateConstant.toString();
+                    this.assertSafeRateExpression(rxnStr, paramKeys);
+                    const normalizedExpr = rxnStr.replace(/\bMath\./g, '');
+
+                    try {
+                        const evaluator = SafeExpressionEvaluator.compile(normalizedExpr, paramKeys);
+                        k = evaluator(safeParameters);
+                        if (Number.isNaN(k) || !Number.isFinite(k)) throw new Error('Invalid rate');
+                    } catch {
+                        throw new Error('Invalid rate'); // Contains y[i] or other non-constant terms
+                    }
+                }
+            }
+
+            if (rxn.statisticalFactor && rxn.statisticalFactor !== 1) {
+                k *= rxn.statisticalFactor;
+            }
+
+            rateConstants[i] = k;
+            nReactantsPerRxn[i] = rxn.reactantIndices.length;
+            scalingVolumes[i] = rxn.scalingVolume || 1.0;
+            reactantOffsets[i] = currentReactantOffset;
+
+            for (let j = 0; j < rxn.reactantIndices.length; j++) {
+                if (currentReactantOffset < 0 || currentReactantOffset >= reactantIdx.length || currentReactantOffset >= reactantStoich.length) {
+                    throw new Error(`[JITCompiler] reactant entry index out of range: ${currentReactantOffset}`);
+                }
+                reactantIdx[currentReactantOffset] = this.normalizeSpeciesIndex(rxn.reactantIndices[j], nSpecies, i, 'reactant', j);
+                reactantStoich[currentReactantOffset] = rxn.reactantStoich[j];
+                currentReactantOffset++;
+            }
+        }
+        exprBytecodeOffsets[nReactions] = totalBytecodeLen;
+        reactantOffsets[nReactions] = currentReactantOffset;
+
+        const exprBytecode = new Uint8Array(totalBytecodeLen);
+        let currentByteOffset = 0;
+        for (const chunk of bytecodeChunks) {
+            exprBytecode.set(chunk, currentByteOffset);
+            currentByteOffset += chunk.length;
+        }
+
+        return {
+            nReactions,
+            rateConstants,
+            nReactantsPerRxn,
+            scalingVolumes,
+            reactantOffsets,
+            reactantIdx,
+            reactantStoich,
+            exprBytecodeOffsets,
+            exprBytecode,
+            requiresParameterRebuild
+        };
+    }
+
+    private prepareStoichiometry(
+        reactions: Array<{
+            reactantIndices: Array<number | string>;
+            reactantStoich: number[];
+            productIndices: Array<number | string>;
+            productStoich: number[];
+        }>,
+        nReactions: number,
+        nSpecies: number,
+        isConstant: (idx: number) => boolean
+    ) {
+        // Stoichiometry matrix conversion (CSC-like)
+        const speciesRxnEntries: Array<{ rxnIdx: number; stoich: number }>[] = Array.from({ length: nSpecies }, () => []);
+        for (let r = 0; r < nReactions; r++) {
+            const rxn = reactions[r];
+            // Reactants
+            for (let j = 0; j < rxn.reactantIndices.length; j++) {
+                const s = this.normalizeSpeciesIndex(rxn.reactantIndices[j], nSpecies, r, 'reactant', j);
+                if (isConstant(s)) continue;
+                const st = rxn.reactantStoich[j];
+                const existing = speciesRxnEntries[s].find(e => e.rxnIdx === r);
+                if (existing) {
+                    existing.stoich -= st;
+                } else {
+                    speciesRxnEntries[s].push({ rxnIdx: r, stoich: -st });
+                }
+            }
+            // Products
+            for (let j = 0; j < rxn.productIndices.length; j++) {
+                const s = this.normalizeSpeciesIndex(rxn.productIndices[j], nSpecies, r, 'product', j);
+                if (isConstant(s)) continue;
+                const st = rxn.productStoich[j];
+                const existing = speciesRxnEntries[s].find(e => e.rxnIdx === r);
+                if (existing) {
+                    existing.stoich += st;
+                } else {
+                    speciesRxnEntries[s].push({ rxnIdx: r, stoich: st });
+                }
+            }
+        }
+
+        const speciesOffsets = new Int32Array(nSpecies + 1);
+        let totalStoichEntries = 0;
+        for (let s = 0; s < nSpecies; s++) {
+            if (s < 0 || s >= speciesOffsets.length) {
+                throw new Error(`[JITCompiler] speciesOffsets index out of range: ${s}`);
+            }
+            speciesOffsets[s] = totalStoichEntries;
+            totalStoichEntries += speciesRxnEntries[s].length;
+        }
+        if (nSpecies < 0 || nSpecies >= speciesOffsets.length) {
+            throw new Error(`[JITCompiler] speciesOffsets terminal index out of range: ${nSpecies}`);
+        }
+        speciesOffsets.set([totalStoichEntries], nSpecies);
+
+        const speciesRxnIdx = new Int32Array(totalStoichEntries);
+        const speciesStoich = new Float64Array(totalStoichEntries);
+
+        let currentStoichOffset = 0;
+        for (let s = 0; s < nSpecies; s++) {
+            for (const entry of speciesRxnEntries[s]) {
+                if (currentStoichOffset < 0 || currentStoichOffset >= speciesRxnIdx.length || currentStoichOffset >= speciesStoich.length) {
+                    throw new Error(`[JITCompiler] stoichiometry entry index out of range: ${currentStoichOffset}`);
+                }
+                speciesRxnIdx[currentStoichOffset] = entry.rxnIdx;
+                speciesStoich[currentStoichOffset] = entry.stoich;
+                currentStoichOffset++;
+            }
+        }
+
+        return { speciesOffsets, speciesRxnIdx, speciesStoich, speciesRxnEntries };
+    }
+
+    private prepareJacobian(
+        reactions: Array<{
+            reactantIndices: Array<number | string>;
+            reactantStoich: number[];
+            productIndices: Array<number | string>;
+            productStoich: number[];
+        }>,
+        nReactions: number,
+        nSpecies: number,
+        speciesRxnEntries: Array<{ rxnIdx: number; stoich: number }>[]
+    ) {
+        // Analytical Jacobian Bytecode Generation
+        // d(dydt[i])/dy[j] = sum_r (speciesStoich[i,r] * d(rate[r])/dy[j]) / speciesVolumes[i]
+        // d(rate[r])/dy[j] = (rate[r] * reactantStoich[r,j]) / y[j] -- for mass action
+        const jacRows = Array.from({ length: nSpecies }, () => new Map<number, { rxnIdx: number; coeff: number }[]>());
+
+        // Map: reaction index -> species affected (non-zero net stoichiometry)
+        const rxnToAffectedSpecies: number[][] = reactions.map((_, r) => {
+            const affected: number[] = [];
+            for (let s = 0; s < nSpecies; s++) {
+                const entries = speciesRxnEntries[s];
+                if (!entries) continue;
+                const entry = entries.find(e => e.rxnIdx === r);
+                if (entry && entry.stoich !== 0) affected.push(s);
+            }
+            return affected;
+        });
+
+        for (let r = 0; r < nReactions; r++) {
+            const rxn = reactions[r];
+            const affectedSpecies = rxnToAffectedSpecies[r];
+
+            for (let i_r = 0; i_r < rxn.reactantIndices.length; i_r++) {
+                const j = this.normalizeSpeciesIndex(rxn.reactantIndices[i_r], nSpecies, r, 'reactant', i_r); // Species the rate depends on
+                const reactantStoichJ = rxn.reactantStoich[i_r];
+
+                for (const s of affectedSpecies) {
+                    if (!jacRows[s].has(j)) {
+                        jacRows[s].set(j, []);
+                    }
+                    // We store the contribution from reaction r to J[s][j]
+                    const netStoichI = speciesRxnEntries[s].find(e => e.rxnIdx === r)!.stoich;
+                    jacRows[s].get(j)!.push({ rxnIdx: r, coeff: netStoichI * reactantStoichJ });
+                }
+            }
+        }
+
+        const jacRowPtr = new Int32Array(nSpecies + 1);
+        let totalJacEntries = 0;
+        for (let i = 0; i < nSpecies; i++) {
+            if (i < 0 || i >= jacRowPtr.length) {
+                throw new Error(`[JITCompiler] jacRowPtr index out of range: ${i}`);
+            }
+            jacRowPtr[i] = totalJacEntries;
+            totalJacEntries += jacRows[i].size;
+        }
+        if (nSpecies < 0 || nSpecies >= jacRowPtr.length) {
+            throw new Error(`[JITCompiler] jacRowPtr terminal index out of range: ${nSpecies}`);
+        }
+        jacRowPtr.set([totalJacEntries], nSpecies);
+
+        const jacColIdx = new Int32Array(totalJacEntries);
+        const jacContribOffsets = new Int32Array(totalJacEntries + 1);
+
+        let totalContribEntries = 0;
+        for (let i = 0; i < nSpecies; i++) {
+            const rowMap = jacRows[i];
+            totalContribEntries += Array.from(rowMap.values()).reduce((sum, list) => sum + list.length, 0);
+        }
+
+        const jacContribRxnIdx = new Int32Array(totalContribEntries);
+        const jacContribCoeffs = new Float64Array(totalContribEntries);
+
+        let currentJacEntry = 0;
+        let currentContribOffset = 0;
+
+        for (let i = 0; i < nSpecies; i++) {
+            const rowMap = jacRows[i];
+            const sortedCols = Array.from(rowMap.keys()).sort((a, b) => a - b);
+
+            for (const j of sortedCols) {
+                if (currentJacEntry < 0 || currentJacEntry >= jacColIdx.length || currentJacEntry >= jacContribOffsets.length) {
+                    throw new Error(`[JITCompiler] Jacobian entry index out of range: ${currentJacEntry}`);
+                }
+                jacColIdx[currentJacEntry] = j;
+                jacContribOffsets[currentJacEntry] = currentContribOffset;
+
+                const contribs = rowMap.get(j)!;
+                for (const contrib of contribs) {
+                    if (currentContribOffset < 0 || currentContribOffset >= jacContribRxnIdx.length || currentContribOffset >= jacContribCoeffs.length) {
+                        throw new Error(`[JITCompiler] Jacobian contribution index out of range: ${currentContribOffset}`);
+                    }
+                    jacContribRxnIdx[currentContribOffset] = contrib.rxnIdx;
+                    jacContribCoeffs[currentContribOffset] = contrib.coeff;
+                    currentContribOffset++;
+                }
+                currentJacEntry++;
+            }
+        }
+        jacContribOffsets[totalJacEntries] = currentContribOffset;
+
+        return { jacRowPtr, jacColIdx, jacContribOffsets, jacContribRxnIdx, jacContribCoeffs };
+    }
+
+    /**
+     * Compile a reaction network into a compact bytecode representation for WASM interpretation.
+     * Returns null if any reaction uses a complex rate expression that cannot be pre-evaluated.
+     */
     public compileToByteCode(
         reactions: Array<{
             reactantIndices: Array<number | string>;
@@ -796,340 +1165,72 @@ export class JITCompiler {
         speciesNames?: string[],
         functions?: JITFunctionDefinition[]
     ): NetworkByteCode | null {
-        const isConstant = (idx: number): boolean =>
-            !!constantSpeciesMask && idx >= 0 && idx < constantSpeciesMask.length && !!constantSpeciesMask[idx];
-
         try {
             if (!Number.isInteger(nSpecies) || nSpecies <= 0 || nSpecies > 1_000_000) {
                 return null;
             }
 
-            // 1. Prepare observables
-            const nObservables = observables?.length || 0;
-            if (!Number.isInteger(nObservables) || nObservables < 0 || nObservables > 1_000_000) {
-                return null;
-            }
-            const obsOffsets = new Int32Array(nObservables + 1);
-            let totalObsEntries = 0;
-            (observables || []).forEach(obs => totalObsEntries += obs.indices.length);
+            const obsData = this.prepareObservables(observables);
+            if (!obsData) return null;
 
-            const obsSpeciesIdx = new Int32Array(totalObsEntries);
-            const obsCoeffs = new Float64Array(totalObsEntries);
+            const { safeParameters, paramKeys } = this.prepareSafeParameters(parameters);
 
-            let currentObsOffset = 0;
-            (observables || []).forEach((obs, i) => {
-                if (i < 0 || i >= obsOffsets.length) {
-                    throw new Error(`[JITCompiler] obsOffsets index out of range: ${i}`);
-                }
-                obsOffsets[i] = currentObsOffset;
-                for (let j = 0; j < obs.indices.length; j++) {
-                    if (currentObsOffset < 0 || currentObsOffset >= obsSpeciesIdx.length || currentObsOffset >= obsCoeffs.length) {
-                        throw new Error(`[JITCompiler] observable entry index out of range: ${currentObsOffset}`);
-                    }
-                    obsSpeciesIdx[currentObsOffset] = obs.indices[j];
-                    obsCoeffs[currentObsOffset] = obs.coefficients[j];
-                    currentObsOffset++;
-                }
-            });
-            if (nObservables < 0 || nObservables >= obsOffsets.length) {
-                throw new Error(`[JITCompiler] obsOffsets index out of range: ${nObservables}`);
-            }
-            obsOffsets.set([currentObsOffset], nObservables);
-
-            // Validate parameter keys to prevent object destructuring injection.
-            // For parity robustness, ignore invalid keys instead of failing the whole JIT pass.
-            const allParamKeys = Object.keys(parameters || {});
-            const forbiddenParamKeys = new Set(['__proto__', 'prototype', 'constructor']);
-            const paramKeys = allParamKeys.filter(
-                (key) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) && !forbiddenParamKeys.has(key)
+            const rxnData = this.prepareReactions(
+                reactions,
+                nSpecies,
+                safeParameters,
+                paramKeys,
+                speciesNames,
+                observables,
+                functions
             );
-            const safeParameters: Record<string, number> = Object.create(null) as Record<string, number>;
-            for (const key of paramKeys) {
-                Object.defineProperty(safeParameters, key, {
-                    value: (parameters as Record<string, number>)[key],
-                    writable: true,
-                    enumerable: true,
-                    configurable: true,
-                });
-            }
-            if (allParamKeys.length !== paramKeys.length) {
-                console.warn(
-                    `[JITCompiler] Ignoring ${allParamKeys.length - paramKeys.length} invalid parameter key(s) during bytecode compilation`
-                );
-            }
 
-            const nReactions = reactions.length;
-            const rateConstants = new Float64Array(nReactions);
-            const nReactantsPerRxn = new Int32Array(nReactions);
-            const scalingVolumes = new Float64Array(nReactions);
+            const isConstant = (idx: number): boolean =>
+                !!constantSpeciesMask && idx >= 0 && idx < constantSpeciesMask.length && !!constantSpeciesMask[idx];
 
-            // Bytecode storage
-            const exprBytecodeOffsets = new Int32Array(nReactions + 1);
-            const bytecodeChunks: Uint8Array[] = [];
-            let totalBytecodeLen = 0;
-            let requiresParameterRebuild = false;
+            const stoichData = this.prepareStoichiometry(
+                reactions,
+                rxnData.nReactions,
+                nSpecies,
+                isConstant
+            );
 
-            let totalReactantEntries = 0;
-            for (const rxn of reactions) {
-                totalReactantEntries += rxn.reactantIndices.length;
-            }
-
-            const reactantOffsets = new Int32Array(nReactions + 1);
-            const reactantIdx = new Int32Array(totalReactantEntries);
-            const reactantStoich = new Int32Array(totalReactantEntries);
-
-            let currentReactantOffset = 0;
-            for (let i = 0; i < nReactions; i++) {
-                const rxn = reactions[i];
-                exprBytecodeOffsets[i] = totalBytecodeLen;
-                let hasExpressionBytecode = false;
-
-                // Check for functional or parameterized rate bytecode
-                if (typeof rxn.rateConstant === 'string') {
-                    const bc = this.compileExpressionToBytecode(
-                        rxn.rateConstant,
-                        safeParameters,
-                        speciesNames || [],
-                        (observables || []).map(o => o.name),
-                        functions
-                    );
-                    if (bc) {
-                        bytecodeChunks.push(bc.bytecode);
-                        totalBytecodeLen += bc.bytecode.length;
-                        requiresParameterRebuild ||= bc.usesParameters;
-                        hasExpressionBytecode = true;
-                    }
-                }
-
-                // Pre-evaluate rate constant (for mass-action part or simple constants)
-                let k: number;
-                if (typeof rxn.rateConstant === 'number') {
-                    k = rxn.rateConstant;
-                } else {
-                    if (hasExpressionBytecode) {
-                        k = 0;
-                    } else {
-                        // Try to evaluate expression
-                        const rxnStr = rxn.rateConstant.toString();
-                        this.assertSafeRateExpression(rxnStr, paramKeys);
-                        const normalizedExpr = rxnStr.replace(/\bMath\./g, '');
-
-                        try {
-                            const evaluator = SafeExpressionEvaluator.compile(normalizedExpr, paramKeys);
-                            k = evaluator(safeParameters);
-                            if (Number.isNaN(k) || !Number.isFinite(k)) return null;
-                        } catch {
-                            return null; // Contains y[i] or other non-constant terms
-                        }
-                    }
-                }
-
-                if (rxn.statisticalFactor && rxn.statisticalFactor !== 1) {
-                    k *= rxn.statisticalFactor;
-                }
-
-                rateConstants[i] = k;
-                nReactantsPerRxn[i] = rxn.reactantIndices.length;
-                scalingVolumes[i] = rxn.scalingVolume || 1.0;
-                reactantOffsets[i] = currentReactantOffset;
-
-                for (let j = 0; j < rxn.reactantIndices.length; j++) {
-                    if (currentReactantOffset < 0 || currentReactantOffset >= reactantIdx.length || currentReactantOffset >= reactantStoich.length) {
-                        throw new Error(`[JITCompiler] reactant entry index out of range: ${currentReactantOffset}`);
-                    }
-                    reactantIdx[currentReactantOffset] = this.normalizeSpeciesIndex(rxn.reactantIndices[j], nSpecies, i, 'reactant', j);
-                    reactantStoich[currentReactantOffset] = rxn.reactantStoich[j];
-                    currentReactantOffset++;
-                }
-            }
-            exprBytecodeOffsets[nReactions] = totalBytecodeLen;
-            reactantOffsets[nReactions] = currentReactantOffset;
-
-            // Stoichiometry matrix conversion (CSC-like)
-            const speciesRxnEntries: Array<{ rxnIdx: number; stoich: number }>[] = Array.from({ length: nSpecies }, () => []);
-            for (let r = 0; r < nReactions; r++) {
-                const rxn = reactions[r];
-                // Reactants
-                for (let j = 0; j < rxn.reactantIndices.length; j++) {
-                    const s = this.normalizeSpeciesIndex(rxn.reactantIndices[j], nSpecies, r, 'reactant', j);
-                    if (isConstant(s)) continue;
-                    const st = rxn.reactantStoich[j];
-                    const existing = speciesRxnEntries[s].find(e => e.rxnIdx === r);
-                    if (existing) {
-                        existing.stoich -= st;
-                    } else {
-                        speciesRxnEntries[s].push({ rxnIdx: r, stoich: -st });
-                    }
-                }
-                // Products
-                for (let j = 0; j < rxn.productIndices.length; j++) {
-                    const s = this.normalizeSpeciesIndex(rxn.productIndices[j], nSpecies, r, 'product', j);
-                    if (isConstant(s)) continue;
-                    const st = rxn.productStoich[j];
-                    const existing = speciesRxnEntries[s].find(e => e.rxnIdx === r);
-                    if (existing) {
-                        existing.stoich += st;
-                    } else {
-                        speciesRxnEntries[s].push({ rxnIdx: r, stoich: st });
-                    }
-                }
-            }
-
-            const speciesOffsets = new Int32Array(nSpecies + 1);
-            let totalStoichEntries = 0;
-            for (let s = 0; s < nSpecies; s++) {
-                if (s < 0 || s >= speciesOffsets.length) {
-                    throw new Error(`[JITCompiler] speciesOffsets index out of range: ${s}`);
-                }
-                speciesOffsets[s] = totalStoichEntries;
-                totalStoichEntries += speciesRxnEntries[s].length;
-            }
-            if (nSpecies < 0 || nSpecies >= speciesOffsets.length) {
-                throw new Error(`[JITCompiler] speciesOffsets terminal index out of range: ${nSpecies}`);
-            }
-            speciesOffsets.set([totalStoichEntries], nSpecies);
-
-            const speciesRxnIdx = new Int32Array(totalStoichEntries);
-            const speciesStoich = new Float64Array(totalStoichEntries);
-
-            let currentStoichOffset = 0;
-            for (let s = 0; s < nSpecies; s++) {
-                for (const entry of speciesRxnEntries[s]) {
-                    if (currentStoichOffset < 0 || currentStoichOffset >= speciesRxnIdx.length || currentStoichOffset >= speciesStoich.length) {
-                        throw new Error(`[JITCompiler] stoichiometry entry index out of range: ${currentStoichOffset}`);
-                    }
-                    speciesRxnIdx[currentStoichOffset] = entry.rxnIdx;
-                    speciesStoich[currentStoichOffset] = entry.stoich;
-                    currentStoichOffset++;
-                }
-            }
-
-            // Analytical Jacobian Bytecode Generation
-            // d(dydt[i])/dy[j] = sum_r (speciesStoich[i,r] * d(rate[r])/dy[j]) / speciesVolumes[i]
-            // d(rate[r])/dy[j] = (rate[r] * reactantStoich[r,j]) / y[j] -- for mass action
-            const jacRows = Array.from({ length: nSpecies }, () => new Map<number, { rxnIdx: number; coeff: number }[]>());
-
-            // Map: reaction index -> species affected (non-zero net stoichiometry)
-            const rxnToAffectedSpecies: number[][] = reactions.map((_, r) => {
-                const affected: number[] = [];
-                for (let s = 0; s < nSpecies; s++) {
-                    const entries = speciesRxnEntries[s];
-                    if (!entries) continue;
-                    const entry = entries.find(e => e.rxnIdx === r);
-                    if (entry && entry.stoich !== 0) affected.push(s);
-                }
-                return affected;
-            });
-
-            for (let r = 0; r < nReactions; r++) {
-                const rxn = reactions[r];
-                const affectedSpecies = rxnToAffectedSpecies[r];
-
-                for (let i_r = 0; i_r < rxn.reactantIndices.length; i_r++) {
-                    const j = this.normalizeSpeciesIndex(rxn.reactantIndices[i_r], nSpecies, r, 'reactant', i_r); // Species the rate depends on
-                    const reactantStoichJ = rxn.reactantStoich[i_r];
-
-                    for (const s of affectedSpecies) {
-                        if (!jacRows[s].has(j)) {
-                            jacRows[s].set(j, []);
-                        }
-                        // We store the contribution from reaction r to J[s][j]
-                        const netStoichI = speciesRxnEntries[s].find(e => e.rxnIdx === r)!.stoich;
-                        jacRows[s].get(j)!.push({ rxnIdx: r, coeff: netStoichI * reactantStoichJ });
-                    }
-                }
-            }
-
-            const jacRowPtr = new Int32Array(nSpecies + 1);
-            let totalJacEntries = 0;
-            for (let i = 0; i < nSpecies; i++) {
-                if (i < 0 || i >= jacRowPtr.length) {
-                    throw new Error(`[JITCompiler] jacRowPtr index out of range: ${i}`);
-                }
-                jacRowPtr[i] = totalJacEntries;
-                totalJacEntries += jacRows[i].size;
-            }
-            if (nSpecies < 0 || nSpecies >= jacRowPtr.length) {
-                throw new Error(`[JITCompiler] jacRowPtr terminal index out of range: ${nSpecies}`);
-            }
-            jacRowPtr.set([totalJacEntries], nSpecies);
-
-            const jacColIdx = new Int32Array(totalJacEntries);
-            const jacContribOffsets = new Int32Array(totalJacEntries + 1);
-
-            let totalContribEntries = 0;
-            for (let i = 0; i < nSpecies; i++) {
-                const rowMap = jacRows[i];
-                totalContribEntries += Array.from(rowMap.values()).reduce((sum, list) => sum + list.length, 0);
-            }
-
-            const jacContribRxnIdx = new Int32Array(totalContribEntries);
-            const jacContribCoeffs = new Float64Array(totalContribEntries);
-
-            let currentJacEntry = 0;
-            let currentContribOffset = 0;
-
-            for (let i = 0; i < nSpecies; i++) {
-                const rowMap = jacRows[i];
-                const sortedCols = Array.from(rowMap.keys()).sort((a, b) => a - b);
-
-                for (const j of sortedCols) {
-                    if (currentJacEntry < 0 || currentJacEntry >= jacColIdx.length || currentJacEntry >= jacContribOffsets.length) {
-                        throw new Error(`[JITCompiler] Jacobian entry index out of range: ${currentJacEntry}`);
-                    }
-                    jacColIdx[currentJacEntry] = j;
-                    jacContribOffsets[currentJacEntry] = currentContribOffset;
-
-                    const contribs = rowMap.get(j)!;
-                    for (const contrib of contribs) {
-                        if (currentContribOffset < 0 || currentContribOffset >= jacContribRxnIdx.length || currentContribOffset >= jacContribCoeffs.length) {
-                            throw new Error(`[JITCompiler] Jacobian contribution index out of range: ${currentContribOffset}`);
-                        }
-                        jacContribRxnIdx[currentContribOffset] = contrib.rxnIdx;
-                        jacContribCoeffs[currentContribOffset] = contrib.coeff;
-                        currentContribOffset++;
-                    }
-                    currentJacEntry++;
-                }
-            }
-            jacContribOffsets[totalJacEntries] = currentContribOffset;
-
-            const exprBytecode = new Uint8Array(totalBytecodeLen);
-            let currentByteOffset = 0;
-            for (const chunk of bytecodeChunks) {
-                exprBytecode.set(chunk, currentByteOffset);
-                currentByteOffset += chunk.length;
-            }
-
+            const jacData = this.prepareJacobian(
+                reactions,
+                rxnData.nReactions,
+                nSpecies,
+                stoichData.speciesRxnEntries
+            );
 
             return {
-                nReactions,
+                nReactions: rxnData.nReactions,
                 nSpecies,
-                rateConstants,
-                nReactantsPerRxn,
-                reactantOffsets,
-                reactantIdx,
-                reactantStoich,
-                scalingVolumes,
-                speciesOffsets,
-                speciesRxnIdx,
-                speciesStoich,
+                rateConstants: rxnData.rateConstants,
+                nReactantsPerRxn: rxnData.nReactantsPerRxn,
+                reactantOffsets: rxnData.reactantOffsets,
+                reactantIdx: rxnData.reactantIdx,
+                reactantStoich: rxnData.reactantStoich,
+                scalingVolumes: rxnData.scalingVolumes,
+                speciesOffsets: stoichData.speciesOffsets,
+                speciesRxnIdx: stoichData.speciesRxnIdx,
+                speciesStoich: stoichData.speciesStoich,
                 speciesVolumes: speciesVolumes || new Float64Array(nSpecies).fill(1.0),
-                jacRowPtr,
-                jacColIdx,
-                jacContribOffsets,
-                jacContribRxnIdx,
-                jacContribCoeffs,
-                nObservables,
-                obsOffsets,
-                obsSpeciesIdx,
-                obsCoeffs,
-                exprBytecodeOffsets,
-                exprBytecode,
+                jacRowPtr: jacData.jacRowPtr,
+                jacColIdx: jacData.jacColIdx,
+                jacContribOffsets: jacData.jacContribOffsets,
+                jacContribRxnIdx: jacData.jacContribRxnIdx,
+                jacContribCoeffs: jacData.jacContribCoeffs,
+                nObservables: obsData.nObservables,
+                obsOffsets: obsData.obsOffsets,
+                obsSpeciesIdx: obsData.obsSpeciesIdx,
+                obsCoeffs: obsData.obsCoeffs,
+                exprBytecodeOffsets: rxnData.exprBytecodeOffsets,
+                exprBytecode: rxnData.exprBytecode,
                 exprConstants: new Float64Array(0),
-                requiresParameterRebuild
+                requiresParameterRebuild: rxnData.requiresParameterRebuild
             };
         } catch (error) {
+            if (error instanceof Error && error.message === 'Invalid rate') return null;
             console.error('[JITCompiler] Failed to compile bytecode:', error);
             return null;
         }
