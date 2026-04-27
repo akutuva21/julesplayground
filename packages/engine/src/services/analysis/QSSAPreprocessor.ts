@@ -56,18 +56,18 @@ const DEFAULT_OPTIONS: Required<QSSAOptions> = {
     generateReducedModel: false,
 };
 
-function findMatchingSpeciesName(pattern: string, availableSpecies: string[]): string | undefined {
+function findMatchingSpeciesName(pattern: string, availableSpecies: string[], availableSpeciesSet: Set<string>): string | undefined {
+    // ⚡ Bolt Optimization: Fast path: O(1) lookup for exact string match first
+    if (availableSpeciesSet.has(pattern)) return pattern;
+
     // Attempt multiple resolution strategies to match canonical strings
     const graph = BNGLParser.parseSpeciesGraph(pattern, false);
     const toStringMatch = graph.toString();
-    if (availableSpecies.includes(toStringMatch)) return toStringMatch;
+    if (availableSpeciesSet.has(toStringMatch)) return toStringMatch;
 
     // Canonical form
     const canonMatch = GraphCanonicalizer.canonicalize(graph);
-    if (availableSpecies.includes(canonMatch)) return canonMatch;
-
-    // Direct match (maybe exact string)
-    if (availableSpecies.includes(pattern)) return pattern;
+    if (availableSpeciesSet.has(canonMatch)) return canonMatch;
 
     // Check against canonical forms of available species to be completely safe
     for (const sp of availableSpecies) {
@@ -111,6 +111,10 @@ export function analyzeQSSA(
             if (numVal < minRate) minRate = numVal;
         }
     }
+
+    const speciesKeys = Object.keys(speciesReactionMap);
+    const speciesSet = new Set(speciesKeys);
+
     for (const rule of reactionRules) {
         let rateValue: number;
         
@@ -130,7 +134,7 @@ export function analyzeQSSA(
         
         const allMols = [...rule.reactants, ...rule.products];
         for (const molExpr of allMols) {
-            const canonicalMatch = findMatchingSpeciesName(molExpr, Object.keys(speciesReactionMap));
+            const canonicalMatch = findMatchingSpeciesName(molExpr, speciesKeys, speciesSet);
             if (canonicalMatch && speciesReactionMap[canonicalMatch]) {
                 if (isFast) {
                     speciesReactionMap[canonicalMatch].fast++;
@@ -233,6 +237,7 @@ export function applyQSSAReduction(
     
     // Build stoichiometric matrix from reactions
     const speciesNames = (model.species ?? []).map(s => s.name);
+    const speciesSet = new Set(speciesNames);
     const speciesIndex = new Map(speciesNames.map((name, i) => [name, i]));
     const nSpecies = speciesNames.length;
     
@@ -247,7 +252,7 @@ export function applyQSSAReduction(
         
         // Products add to stoichiometry
         for (const prod of rule.products) {
-            const spName = findMatchingSpeciesName(prod, speciesNames);
+            const spName = findMatchingSpeciesName(prod, speciesNames, speciesSet);
             if (spName !== undefined) {
                 const idx = speciesIndex.get(spName);
                 if (idx !== undefined) {
@@ -258,7 +263,7 @@ export function applyQSSAReduction(
         
         // Reactants subtract from stoichiometry
         for (const reac of rule.reactants) {
-            const spName = findMatchingSpeciesName(reac, speciesNames);
+            const spName = findMatchingSpeciesName(reac, speciesNames, speciesSet);
             if (spName !== undefined) {
                 const idx = speciesIndex.get(spName);
                 if (idx !== undefined) {
@@ -290,11 +295,11 @@ export function applyQSSAReduction(
     
     for (const rule of reactions) {
         const hasEliminatedReactant = rule.reactants.some(r => {
-            const spName = findMatchingSpeciesName(r, speciesNames);
+            const spName = findMatchingSpeciesName(r, speciesNames, speciesSet);
             return spName && eliminatedSet.has(spName);
         });
         const hasEliminatedProduct = rule.products.some(p => {
-            const spName = findMatchingSpeciesName(p, speciesNames);
+            const spName = findMatchingSpeciesName(p, speciesNames, speciesSet);
             return spName && eliminatedSet.has(spName);
         });
         
