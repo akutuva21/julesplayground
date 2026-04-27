@@ -500,7 +500,7 @@ export class JITCompiler {
             for (let j = 0; j < rxn.reactantIndices.length; j++) {
                 const idx = this.normalizeSpeciesIndex(rxn.reactantIndices[j], nSpecies, i, 'reactant', j);
                 const stoich = rxn.reactantStoich[j];
-                // PARITY FIX: BNG2 mass-action assumes rates are scaled by V_anchor.
+                // BNG2 mass-action assumes rates are scaled by V_anchor.
                 // Reactant concentrations must be converted from native (N/Vi) to anchor-relative (N/Vanchor).
                 const vAnchor = rxn.scalingVolume || 1.0;
                 // Use bracket notation for y and speciesVolumes to handle non-numeric/complex species names properly in source
@@ -522,30 +522,12 @@ export class JITCompiler {
             }
 
             // Apply reacting volume anchor (matches BNG2 compartmental mass-action scaling)
-            // PARITY FIX: For concentration-based ODEs (y in M), the rate expression should 
+            // For concentration-based ODEs (y in M), the rate expression should
             // represent TOTAL FLUX (Amount/Time) to be correctly distributed into 
             // compartment-specific dydt (d[C]/dt = Flux / Vol_C).
             // Flux = k * [A]^n * [B]^m * Vol_Anchor
             if (rxn.scalingVolume && rxn.scalingVolume !== 1) {
-                const n = rxn.reactantIndices.length;
-                if (n === 0) {
-                    // Zero-order synthesis: Rate = k * V_anchor
-                    rateExpr = `(${rateExpr}) * ${rxn.scalingVolume}`;
-                } else if (n === 1) {
-                    // Unimolecular: Flux = k * [A] * V_anchor
-                    // (Previous implementation skipped this, leading to errors in transport/unimolecular)
-                    rateExpr = `(${rateExpr}) * ${rxn.scalingVolume}`;
-                } else if (n === 2) {
-                    // Bimolecular: Flux = k * [A] * [B] * V_anchor
-                    // (Previous implementation incorrectly divided by V_anchor here)
-                    rateExpr = `(${rateExpr}) * ${rxn.scalingVolume}`;
-                } else if (n === 3) {
-                    // Ternary: Flux = k * [A] * [B] * [C] * V_anchor
-                    rateExpr = `(${rateExpr}) * ${rxn.scalingVolume}`;
-                } else {
-                    // Higher-order: Flux = k * [Patterns] * V_anchor
-                    rateExpr = `(${rateExpr}) * ${rxn.scalingVolume}`;
-                }
+                rateExpr = `(${rateExpr}) * ${rxn.scalingVolume}`;
             }
 
             source += `const r${i} = ${rateExpr};\n`;
