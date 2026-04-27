@@ -1506,7 +1506,7 @@ class VF2State {
         }
       } else if (this.corePattern.has(partnerMolIdx)) {
         // The bond partner's molecule is already matched in corePattern.
-        // CRITICAL FIX: Instead of requiring the frozen componentMatches to satisfy the bond,
+        // Instead of requiring the frozen componentMatches to satisfy the bond,
         // we check if SOME component of the target partner molecule could satisfy this bond.
         // This is essential for finding multiple symmetric embeddings (e.g., BAB).
         const targetPartnerMolIdx = this.corePattern.get(partnerMolIdx)!;
