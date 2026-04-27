@@ -118,8 +118,8 @@ export function continuation(
   if (onProgress) onProgress(startPoint, 0);
 
   // Previous tangent for predictor
-  let prevTangentY = new Float64Array(nSpecies);
-  let prevTangentP = 1.0;
+  const prevTangentY = new Float64Array(nSpecies);
+  let prevTangentP;
 
   // Compute initial tangent: solve J * dy/dp = -df/dp
   {
@@ -141,76 +141,30 @@ export function continuation(
     // ── Predictor ──
     const yPred = new Float64Array(nSpecies);
     for (let i = 0; i < nSpecies; i++) yPred[i] = y[i] + ds * prevTangentY[i];
-    let pPred = p + ds * prevTangentP;
+    const pPred = p + ds * prevTangentP;
 
     // ── Corrector (Newton on augmented system) ──
-    const yCor = new Float64Array(yPred);
-    let pCor = pPred;
+    const correctorResult = runCorrector(
+      config,
+      y,
+      p,
+      yPred,
+      pPred,
+      prevTangentY,
+      prevTangentP,
+      ds,
+      tolerance,
+      maxCorrectorIterations
+    );
 
-    let corrected = false;
-    for (let newtonIter = 0; newtonIter < maxCorrectorIterations; newtonIter++) {
-      // Evaluate f(yCor, pCor)
-      const f = new Float64Array(nSpecies);
-      rhsFn(yCor, pCor, f);
-
-      // Arclength constraint: N(y,p) = tangentY.(y-yPred) + tangentP*(p-pPred) = 0
-      // (where we use the predicted tangent direction)
-      let arcConstraint = prevTangentP * (pCor - p) - ds;
-      for (let i = 0; i < nSpecies; i++) {
-        arcConstraint += prevTangentY[i] * (yCor[i] - y[i]);
-      }
-
-      // Check convergence
-      let rNorm = 0;
-      for (let i = 0; i < nSpecies; i++) rNorm += f[i] * f[i];
-      rNorm = Math.sqrt(rNorm + arcConstraint * arcConstraint);
-
-      if (rNorm < tolerance) {
-        corrected = true;
-        break;
-      }
-
-      // Jacobian of augmented system: (nSpecies+1) x (nSpecies+1)
-      const Jy = computeJacobian(config, yCor, pCor);
-      const fp = numericalDfDp(rhsFn, yCor, pCor, nSpecies);
-
-      // Build augmented system
-      const dim = nSpecies + 1;
-      const A = new Float64Array(dim * dim);
-      const rhs = new Float64Array(dim);
-
-      // Top-left: Jy
-      for (let i = 0; i < nSpecies; i++) {
-        for (let j = 0; j < nSpecies; j++) {
-          A[i * dim + j] = Jy[i * nSpecies + j];
-        }
-        // Top-right: df/dp
-        A[i * dim + nSpecies] = fp[i];
-        // RHS: -f
-        rhs[i] = -f[i];
-      }
-
-      // Bottom row: tangent direction
-      for (let j = 0; j < nSpecies; j++) {
-        A[nSpecies * dim + j] = prevTangentY[j];
-      }
-      A[nSpecies * dim + nSpecies] = prevTangentP;
-      rhs[nSpecies] = -arcConstraint;
-
-      // Solve
-      const delta = solveLU(A, dim, rhs);
-
-      // Update
-      for (let i = 0; i < nSpecies; i++) yCor[i] += delta[i];
-      pCor += delta[nSpecies];
-    }
-
-    if (!corrected) {
+    if (!correctorResult.corrected) {
       // Reduce step size and retry
       ds *= 0.5;
       if (Math.abs(ds) < minStepSize) break;
       continue;
     }
+
+    const { yCor, pCor } = correctorResult;
 
     // Compute eigenvalues at corrected point
     const Jnew = computeJacobian(config, yCor, pCor);
@@ -240,22 +194,9 @@ export function continuation(
     p = pCor;
 
     // Update tangent for next predictor
-    {
-      const fp = numericalDfDp(rhsFn, y, p, nSpecies);
-      for (let i = 0; i < nSpecies; i++) fp[i] = -fp[i];
-      const dydp = solveLU(Jnew, nSpecies, fp);
-      const tangentNorm = Math.sqrt(vecDot(dydp, dydp) + 1);
-      const newTangentY = new Float64Array(nSpecies);
-      for (let i = 0; i < nSpecies; i++) newTangentY[i] = dydp[i] / tangentNorm;
-      const newTangentP = 1.0 / tangentNorm;
-
-      // Ensure consistent orientation with previous tangent
-      let dot = newTangentP * prevTangentP;
-      for (let i = 0; i < nSpecies; i++) dot += newTangentY[i] * prevTangentY[i];
-      const sign = dot >= 0 ? 1 : -1;
-      for (let i = 0; i < nSpecies; i++) prevTangentY[i] = sign * newTangentY[i];
-      prevTangentP = sign * newTangentP;
-    }
+    const newTangent = calculateNextTangent(config, y, p, Jnew, prevTangentY, prevTangentP);
+    for (let i = 0; i < nSpecies; i++) prevTangentY[i] = newTangent.tangentY[i];
+    prevTangentP = newTangent.tangentP;
 
     // Adaptive step size
     ds = Math.sign(ds) * Math.min(Math.abs(ds) * 1.1, maxStepSize);
@@ -357,6 +298,110 @@ export function detectBifurcation(
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
+
+function calculateNextTangent(
+  config: ContinuationConfig,
+  y: Float64Array,
+  p: number,
+  Jnew: Float64Array,
+  prevTangentY: Float64Array,
+  prevTangentP: number,
+): { tangentY: Float64Array; tangentP: number } {
+  const { nSpecies, rhsFn } = config;
+  const fp = numericalDfDp(rhsFn, y, p, nSpecies);
+  for (let i = 0; i < nSpecies; i++) fp[i] = -fp[i];
+  const dydp = solveLU(Jnew, nSpecies, fp);
+  const tangentNorm = Math.sqrt(vecDot(dydp, dydp) + 1);
+  const newTangentY = new Float64Array(nSpecies);
+  for (let i = 0; i < nSpecies; i++) newTangentY[i] = dydp[i] / tangentNorm;
+  const newTangentP = 1.0 / tangentNorm;
+
+  // Ensure consistent orientation with previous tangent
+  let dot = newTangentP * prevTangentP;
+  for (let i = 0; i < nSpecies; i++) dot += newTangentY[i] * prevTangentY[i];
+  const sign = dot >= 0 ? 1 : -1;
+  const finalTangentY = new Float64Array(nSpecies);
+  for (let i = 0; i < nSpecies; i++) finalTangentY[i] = sign * newTangentY[i];
+  const finalTangentP = sign * newTangentP;
+
+  return { tangentY: finalTangentY, tangentP: finalTangentP };
+}
+
+function runCorrector(
+  config: ContinuationConfig,
+  y: Float64Array,
+  p: number,
+  yPred: Float64Array,
+  pPred: number,
+  prevTangentY: Float64Array,
+  prevTangentP: number,
+  ds: number,
+  tolerance: number,
+  maxCorrectorIterations: number,
+): { corrected: boolean; yCor: Float64Array; pCor: number } {
+  const { nSpecies, rhsFn } = config;
+  const yCor = new Float64Array(yPred);
+  let pCor = pPred;
+  let corrected = false;
+
+  for (let newtonIter = 0; newtonIter < maxCorrectorIterations; newtonIter++) {
+    // Evaluate f(yCor, pCor)
+    const f = new Float64Array(nSpecies);
+    rhsFn(yCor, pCor, f);
+
+    // Arclength constraint: N(y,p) = tangentY.(y-yPred) + tangentP*(p-pPred) = 0
+    let arcConstraint = prevTangentP * (pCor - p) - ds;
+    for (let i = 0; i < nSpecies; i++) {
+      arcConstraint += prevTangentY[i] * (yCor[i] - y[i]);
+    }
+
+    // Check convergence
+    let rNorm = 0;
+    for (let i = 0; i < nSpecies; i++) rNorm += f[i] * f[i];
+    rNorm = Math.sqrt(rNorm + arcConstraint * arcConstraint);
+
+    if (rNorm < tolerance) {
+      corrected = true;
+      break;
+    }
+
+    // Jacobian of augmented system: (nSpecies+1) x (nSpecies+1)
+    const Jy = computeJacobian(config, yCor, pCor);
+    const fp = numericalDfDp(rhsFn, yCor, pCor, nSpecies);
+
+    // Build augmented system
+    const dim = nSpecies + 1;
+    const A = new Float64Array(dim * dim);
+    const rhs = new Float64Array(dim);
+
+    // Top-left: Jy
+    for (let i = 0; i < nSpecies; i++) {
+      for (let j = 0; j < nSpecies; j++) {
+        A[i * dim + j] = Jy[i * nSpecies + j];
+      }
+      // Top-right: df/dp
+      A[i * dim + nSpecies] = fp[i];
+      // RHS: -f
+      rhs[i] = -f[i];
+    }
+
+    // Bottom row: tangent direction
+    for (let j = 0; j < nSpecies; j++) {
+      A[nSpecies * dim + j] = prevTangentY[j];
+    }
+    A[nSpecies * dim + nSpecies] = prevTangentP;
+    rhs[nSpecies] = -arcConstraint;
+
+    // Solve
+    const delta = solveLU(A, dim, rhs);
+
+    // Update
+    for (let i = 0; i < nSpecies; i++) yCor[i] += delta[i];
+    pCor += delta[nSpecies];
+  }
+
+  return { corrected, yCor, pCor };
+}
 
 function findComplexPairs(
   eigenvalues: Array<ComplexNumber>,
