@@ -120,6 +120,104 @@ class PRNG {
 
 // --- Core algorithm ----------------------------------------------------------
 
+async function evaluateBatch(
+  f: (x: number[]) => Promise<number>,
+  vectors: number[][],
+  out: Float64Array,
+  start: number,
+  count: number,
+  maxParallel: number,
+  signal?: AbortSignal,
+): Promise<number> {
+  let evals = 0;
+  // Process in chunks of maxParallel to avoid overwhelming worker pools
+  for (let offset = 0; offset < count; offset += maxParallel) {
+    if (signal?.aborted) return evals;
+    const batchEnd = Math.min(offset + maxParallel, count);
+    const promises: Promise<number>[] = [];
+    for (let i = offset; i < batchEnd; i++) {
+      promises.push(f(vectors[start + i]));
+    }
+    const results = await Promise.all(promises);
+    for (let i = 0; i < results.length; i++) {
+      out[start + offset + i] = Number.isFinite(results[i]) ? results[i] : 1e12;
+    }
+    evals += results.length;
+  }
+  return evals;
+}
+
+function buildTrialVectors(
+  pop: number[][],
+  n: number,
+  NP: number,
+  lb: number[],
+  ub: number[],
+  F: number,
+  CR: number,
+  rng: PRNG,
+): number[][] {
+  const trials: number[][] = new Array(NP);
+  for (let i = 0; i < NP; i++) {
+    // Pick 3 distinct indices != i
+    let a: number;
+    let b: number;
+    let c: number;
+    do {
+      a = rng.randInt(NP);
+    } while (a === i);
+    do {
+      b = rng.randInt(NP);
+    } while (b === i || b === a);
+    do {
+      c = rng.randInt(NP);
+    } while (c === i || c === a || c === b);
+
+    // Mutation: v = pop[a] + F * (pop[b] - pop[c])
+    // Binomial crossover: trial[j] = v[j] if rand < CR or j == jrand
+    const jrand = rng.randInt(n);
+    const trial = new Array<number>(n);
+    for (let j = 0; j < n; j++) {
+      if (rng.random() < CR || j === jrand) {
+        let v = pop[a][j] + F * (pop[b][j] - pop[c][j]);
+        // Bounce-back reflection into bounds
+        if (v < lb[j]) v = lb[j] + rng.random() * (pop[i][j] - lb[j]);
+        if (v > ub[j]) v = ub[j] - rng.random() * (ub[j] - pop[i][j]);
+        // Final clamp (safety)
+        trial[j] = Math.max(lb[j], Math.min(ub[j], v));
+      } else {
+        trial[j] = pop[i][j];
+      }
+    }
+    trials[i] = trial;
+  }
+  return trials;
+}
+
+function initializePopulation(
+  x0: number[],
+  n: number,
+  NP: number,
+  lb: number[],
+  ub: number[],
+  rng: PRNG,
+): number[][] {
+  const pop: number[][] = new Array(NP);
+
+  // First member = initial guess (clamped to bounds)
+  pop[0] = x0.map((v, i) => Math.max(lb[i], Math.min(ub[i], v)));
+
+  // Rest = random in [lb, ub]
+  for (let i = 1; i < NP; i++) {
+    pop[i] = new Array(n);
+    for (let j = 0; j < n; j++) {
+      pop[i][j] = lb[j] + rng.random() * (ub[j] - lb[j]);
+    }
+  }
+
+  return pop;
+}
+
 /**
  * Minimize an async function using Differential Evolution (DE/rand/1/bin).
  *
@@ -149,23 +247,12 @@ export async function differentialEvolution(
 
   // --- Initialize population ------------------------------------------------
 
-  const pop: number[][] = new Array(NP);
+  const pop: number[][] = initializePopulation(x0, n, NP, lb, ub, rng);
   const fitness = new Float64Array(NP);
-
-  // First member = initial guess (clamped to bounds)
-  pop[0] = x0.map((v, i) => Math.max(lb[i], Math.min(ub[i], v)));
-
-  // Rest = random in [lb, ub]
-  for (let i = 1; i < NP; i++) {
-    pop[i] = new Array(n);
-    for (let j = 0; j < n; j++) {
-      pop[i][j] = lb[j] + rng.random() * (ub[j] - lb[j]);
-    }
-  }
 
   // Evaluate initial population (parallel batches)
   let nEval = 0;
-  await evaluateBatch(pop, fitness, 0, NP);
+  nEval += await evaluateBatch(f, pop, fitness, 0, NP, maxParallel, signal);
 
   let bestIdx = 0;
   for (let i = 1; i < NP; i++) {
@@ -179,47 +266,23 @@ export async function differentialEvolution(
   // --- Main loop ------------------------------------------------------------
 
   while (nEval < maxEval) {
-    if (signal?.aborted) return abortResult();
+    if (signal?.aborted) {
+      return {
+        x: [...pop[bestIdx]],
+        value: fitness[bestIdx],
+        nEval,
+        generations: generation,
+        converged: false,
+        stopReason: 'aborted',
+      };
+    }
 
     // Build trial vectors for the entire population
-    const trials: number[][] = new Array(NP);
-    for (let i = 0; i < NP; i++) {
-      // Pick 3 distinct indices != i
-      let a: number;
-      let b: number;
-      let c: number;
-      do {
-        a = rng.randInt(NP);
-      } while (a === i);
-      do {
-        b = rng.randInt(NP);
-      } while (b === i || b === a);
-      do {
-        c = rng.randInt(NP);
-      } while (c === i || c === a || c === b);
-
-      // Mutation: v = pop[a] + F * (pop[b] - pop[c])
-      // Binomial crossover: trial[j] = v[j] if rand < CR or j == jrand
-      const jrand = rng.randInt(n);
-      const trial = new Array<number>(n);
-      for (let j = 0; j < n; j++) {
-        if (rng.random() < CR || j === jrand) {
-          let v = pop[a][j] + F * (pop[b][j] - pop[c][j]);
-          // Bounce-back reflection into bounds
-          if (v < lb[j]) v = lb[j] + rng.random() * (pop[i][j] - lb[j]);
-          if (v > ub[j]) v = ub[j] - rng.random() * (ub[j] - pop[i][j]);
-          // Final clamp (safety)
-          trial[j] = Math.max(lb[j], Math.min(ub[j], v));
-        } else {
-          trial[j] = pop[i][j];
-        }
-      }
-      trials[i] = trial;
-    }
+    const trials = buildTrialVectors(pop, n, NP, lb, ub, F, CR, rng);
 
     // Evaluate all trials (parallel batches)
     const trialFitness = new Float64Array(NP);
-    await evaluateBatch(trials, trialFitness, 0, NP);
+    nEval += await evaluateBatch(f, trials, trialFitness, 0, NP, maxParallel, signal);
 
     // Selection: keep trial if it's at least as good
     for (let i = 0; i < NP; i++) {
@@ -271,39 +334,4 @@ export async function differentialEvolution(
     converged: false,
     stopReason: 'maxeval',
   };
-
-  // --- Helpers --------------------------------------------------------------
-
-  async function evaluateBatch(
-    vectors: number[][],
-    out: Float64Array,
-    start: number,
-    count: number,
-  ): Promise<void> {
-    // Process in chunks of maxParallel to avoid overwhelming worker pools
-    for (let offset = 0; offset < count; offset += maxParallel) {
-      if (signal?.aborted) return;
-      const batchEnd = Math.min(offset + maxParallel, count);
-      const promises: Promise<number>[] = [];
-      for (let i = offset; i < batchEnd; i++) {
-        promises.push(f(vectors[start + i]));
-      }
-      const results = await Promise.all(promises);
-      for (let i = 0; i < results.length; i++) {
-        out[start + offset + i] = Number.isFinite(results[i]) ? results[i] : 1e12;
-      }
-      nEval += results.length;
-    }
-  }
-
-  function abortResult(): DEResult {
-    return {
-      x: [...pop[bestIdx]],
-      value: fitness[bestIdx],
-      nEval,
-      generations: generation,
-      converged: false,
-      stopReason: 'aborted',
-    };
-  }
 }
