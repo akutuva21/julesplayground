@@ -1383,7 +1383,6 @@ export async function simulate(
 
             let a = rate * rxn.propensityFactor;
 
-            // PARITY FIX: Scale SSA propensities by volume (matches BNG2/Network3 semantics)
             if (n === 0) {
               a *= reactionReactingVolumes[i]; // Zero-order: k * V
             } else if (n === 2) {
