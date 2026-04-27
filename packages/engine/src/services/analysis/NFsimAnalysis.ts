@@ -203,23 +203,263 @@ function parseSpeciesString(speciesStr: string): ParsedSpecies {
 }
 
 // ---------------------------------------------------------------------------
-// Analysis entry point
+// Internal analysis helpers
 // ---------------------------------------------------------------------------
 
-export function analyzeNFsimOutput(config: NFsimAnalysisConfig): NFsimAnalysisResult {
-  // Clear parse cache for fresh analysis
-  parseCache.clear();
+interface AnalysisMetadata {
+  bondComponents: Array<{ moleculeType: string; component: string }>;
+  stateComponents: Array<{
+    moleculeType: string;
+    component: string;
+    possibleStates: string[];
+  }>;
+  molTypeNames: string[];
+}
 
-  const { speciesTimeSeries, moleculeTypes } = config;
+interface TimeSeriesData {
+  complexSizes: ComplexSizeDistribution[];
+  bondTimeSeries: Map<string, Array<{ time: number; fractionBound: number }>>;
+  stateTimeSeries: Map<string, Map<string, Array<{ time: number; fraction: number }>>>;
+  molPerComplexTimeSeries: Map<string, Array<{ time: number; mean: number }>>;
+}
 
-  // Build a set of known molecule types and their stateful components
-  const molTypeMap = new Map<string, NFsimMoleculeType>();
-  for (const mt of moleculeTypes) {
-    molTypeMap.set(mt.name, mt);
+interface TimePointAccumulators {
+  sizeHistogram: Map<number, number>;
+  totalComplexes: number;
+  sumSize: number;
+  maxSize: number;
+  bondTotal: Map<string, number>;
+  bondBound: Map<string, number>;
+  stateCount: Map<string, Map<string, number>>;
+  stateTotal: Map<string, number>;
+  molCountSum: Map<string, number>;
+  molComplexCount: Map<string, number>;
+}
+
+function initializeTimeSeriesData(metadata: AnalysisMetadata): TimeSeriesData {
+  const { bondComponents, stateComponents, molTypeNames } = metadata;
+
+  const complexSizes: ComplexSizeDistribution[] = [];
+  const bondTimeSeries = new Map<string, Array<{ time: number; fractionBound: number }>>();
+  const stateTimeSeries = new Map<
+    string,
+    Map<string, Array<{ time: number; fraction: number }>>
+  >();
+  const molPerComplexTimeSeries = new Map<string, Array<{ time: number; mean: number }>>();
+
+  for (const bc of bondComponents) {
+    bondTimeSeries.set(`${bc.moleculeType}:${bc.component}`, []);
   }
 
-  // Collect all unique (moleculeType, component) pairs that have bonds
-  // and all that have states, from the molecule type definitions
+  for (const sc of stateComponents) {
+    const stateMap = new Map<string, Array<{ time: number; fraction: number }>>();
+    for (const s of sc.possibleStates) {
+      stateMap.set(s, []);
+    }
+    stateTimeSeries.set(`${sc.moleculeType}:${sc.component}`, stateMap);
+  }
+
+  for (const name of molTypeNames) {
+    molPerComplexTimeSeries.set(name, []);
+  }
+
+  return { complexSizes, bondTimeSeries, stateTimeSeries, molPerComplexTimeSeries };
+}
+
+function createTimePointAccumulators(metadata: AnalysisMetadata): TimePointAccumulators {
+  const { bondComponents, stateComponents, molTypeNames } = metadata;
+
+  const sizeHistogram = new Map<number, number>();
+  const totalComplexes = 0;
+  const sumSize = 0;
+  const maxSize = 0;
+
+  const bondTotal = new Map<string, number>();
+  const bondBound = new Map<string, number>();
+  for (const bc of bondComponents) {
+    const key = `${bc.moleculeType}:${bc.component}`;
+    bondTotal.set(key, 0);
+    bondBound.set(key, 0);
+  }
+
+  const stateCount = new Map<string, Map<string, number>>();
+  const stateTotal = new Map<string, number>();
+  for (const sc of stateComponents) {
+    const key = `${sc.moleculeType}:${sc.component}`;
+    stateTotal.set(key, 0);
+    const counts = new Map<string, number>();
+    for (const s of sc.possibleStates) {
+      counts.set(s, 0);
+    }
+    stateCount.set(key, counts);
+  }
+
+  const molCountSum = new Map<string, number>();
+  const molComplexCount = new Map<string, number>();
+  for (const name of molTypeNames) {
+    molCountSum.set(name, 0);
+    molComplexCount.set(name, 0);
+  }
+
+  return {
+    sizeHistogram,
+    totalComplexes,
+    sumSize,
+    maxSize,
+    bondTotal,
+    bondBound,
+    stateCount,
+    stateTotal,
+    molCountSum,
+    molComplexCount,
+  };
+}
+
+function updateAccumulatorsForSpecies(
+  specStr: string,
+  count: number,
+  accumulators: TimePointAccumulators
+): void {
+  if (count === 0) return;
+
+  const parsed = parseSpeciesString(specStr);
+  const numMolecules = parsed.molecules.length;
+
+  // Complex size
+  accumulators.sizeHistogram.set(numMolecules, (accumulators.sizeHistogram.get(numMolecules) || 0) + count);
+  accumulators.totalComplexes += count;
+  accumulators.sumSize += numMolecules * count;
+  if (numMolecules > accumulators.maxSize) accumulators.maxSize = numMolecules;
+
+  // Count molecules of each type in this complex
+  const molTypeCounts = new Map<string, number>();
+  for (const mol of parsed.molecules) {
+    molTypeCounts.set(mol.type, (molTypeCounts.get(mol.type) || 0) + 1);
+  }
+
+  // Molecules per complex
+  for (const [molType, molCount] of molTypeCounts) {
+    if (accumulators.molCountSum.has(molType)) {
+      accumulators.molCountSum.set(molType, accumulators.molCountSum.get(molType)! + molCount * count);
+      accumulators.molComplexCount.set(molType, accumulators.molComplexCount.get(molType)! + count);
+    }
+  }
+
+  // Per-molecule analysis
+  for (const mol of parsed.molecules) {
+    for (const comp of mol.components) {
+      const key = `${mol.type}:${comp.name}`;
+
+      // Bond occupancy
+      if (accumulators.bondTotal.has(key)) {
+        accumulators.bondTotal.set(key, accumulators.bondTotal.get(key)! + count);
+        if (comp.bond !== undefined) {
+          accumulators.bondBound.set(key, accumulators.bondBound.get(key)! + count);
+        }
+      }
+
+      // State distribution
+      if (comp.state !== undefined && accumulators.stateCount.has(key)) {
+        accumulators.stateTotal.set(key, accumulators.stateTotal.get(key)! + count);
+        const counts = accumulators.stateCount.get(key)!;
+        if (counts.has(comp.state)) {
+          counts.set(comp.state, counts.get(comp.state)! + count);
+        } else {
+          // Unknown state encountered in data - still track it
+          counts.set(comp.state, count);
+        }
+      }
+    }
+  }
+}
+
+function recordTimePointResults(
+  time: number,
+  metadata: AnalysisMetadata,
+  accumulators: TimePointAccumulators,
+  timeSeriesData: TimeSeriesData
+): void {
+  const { bondComponents, stateComponents, molTypeNames } = metadata;
+  const { sizeHistogram, totalComplexes, sumSize, maxSize, bondTotal, bondBound, stateTotal, stateCount, molCountSum, molComplexCount } = accumulators;
+  const { complexSizes, bondTimeSeries, stateTimeSeries, molPerComplexTimeSeries } = timeSeriesData;
+
+  // Record complex size distribution
+  const meanSize = totalComplexes > 0 ? sumSize / totalComplexes : 0;
+  complexSizes.push({ time, sizeHistogram, meanSize, maxSize });
+
+  // Record bond occupancy for this time point
+  for (const bc of bondComponents) {
+    const key = `${bc.moleculeType}:${bc.component}`;
+    const total = bondTotal.get(key)!;
+    const bound = bondBound.get(key)!;
+    const fractionBound = total > 0 ? bound / total : 0;
+    bondTimeSeries.get(key)!.push({ time, fractionBound });
+  }
+
+  // Record state distribution for this time point
+  for (const sc of stateComponents) {
+    const key = `${sc.moleculeType}:${sc.component}`;
+    const total = stateTotal.get(key)!;
+    const counts = stateCount.get(key)!;
+    const stateMap = stateTimeSeries.get(key)!;
+    for (const [state, stateArr] of stateMap) {
+      const cnt = counts.get(state) || 0;
+      const fraction = total > 0 ? cnt / total : 0;
+      stateArr.push({ time, fraction });
+    }
+  }
+
+  // Record molecules per complex for this time point
+  for (const name of molTypeNames) {
+    const sum = molCountSum.get(name)!;
+    const complexCount = molComplexCount.get(name)!;
+    const mean = complexCount > 0 ? sum / complexCount : 0;
+    molPerComplexTimeSeries.get(name)!.push({ time, mean });
+  }
+}
+
+function processTimePoint(
+  tp: { time: number; species: Record<string, number> },
+  metadata: AnalysisMetadata,
+  timeSeriesData: TimeSeriesData
+): void {
+  const accumulators = createTimePointAccumulators(metadata);
+
+  for (const [specStr, count] of Object.entries(tp.species)) {
+    updateAccumulatorsForSpecies(specStr, count, accumulators);
+  }
+
+  recordTimePointResults(tp.time, metadata, accumulators, timeSeriesData);
+}
+
+function assembleAnalysisResult(
+  metadata: AnalysisMetadata,
+  timeSeriesData: TimeSeriesData
+): NFsimAnalysisResult {
+  const { bondComponents, stateComponents } = metadata;
+  const { complexSizes, bondTimeSeries, stateTimeSeries, molPerComplexTimeSeries } = timeSeriesData;
+
+  const bondOccupancies: BondOccupancy[] = bondComponents.map(bc => ({
+    moleculeType: bc.moleculeType,
+    component: bc.component,
+    timeSeries: bondTimeSeries.get(`${bc.moleculeType}:${bc.component}`)!,
+  }));
+
+  const siteStates: SiteStateDistribution[] = stateComponents.map(sc => ({
+    moleculeType: sc.moleculeType,
+    component: sc.component,
+    stateFractions: stateTimeSeries.get(`${sc.moleculeType}:${sc.component}`)!,
+  }));
+
+  return {
+    complexSizes,
+    bondOccupancies,
+    siteStates,
+    moleculesPerComplex: molPerComplexTimeSeries,
+  };
+}
+
+function extractAnalysisMetadata(moleculeTypes: NFsimMoleculeType[]): AnalysisMetadata {
   const bondComponents: Array<{ moleculeType: string; component: string }> = [];
   const stateComponents: Array<{
     moleculeType: string;
@@ -241,185 +481,31 @@ export function analyzeNFsimOutput(config: NFsimAnalysisConfig): NFsimAnalysisRe
     }
   }
 
-  // All known molecule type names for molecules-per-complex tracking
   const molTypeNames = moleculeTypes.map(mt => mt.name);
+
+  return { bondComponents, stateComponents, molTypeNames };
+}
+
+// ---------------------------------------------------------------------------
+// Analysis entry point
+// ---------------------------------------------------------------------------
+
+export function analyzeNFsimOutput(config: NFsimAnalysisConfig): NFsimAnalysisResult {
+  // Clear parse cache for fresh analysis
+  parseCache.clear();
+
+  const { speciesTimeSeries, moleculeTypes } = config;
+
+  const metadata = extractAnalysisMetadata(moleculeTypes);
+  const timeSeriesData = initializeTimeSeriesData(metadata);
 
   // ----------- Per-time-point analysis -----------
 
-  const complexSizes: ComplexSizeDistribution[] = [];
-
-  // Intermediate accumulators keyed by "molType:comp"
-  const bondTimeSeries = new Map<string, Array<{ time: number; fractionBound: number }>>();
-  for (const bc of bondComponents) {
-    bondTimeSeries.set(`${bc.moleculeType}:${bc.component}`, []);
-  }
-
-  const stateTimeSeries = new Map<
-    string,
-    Map<string, Array<{ time: number; fraction: number }>>
-  >();
-  for (const sc of stateComponents) {
-    const stateMap = new Map<string, Array<{ time: number; fraction: number }>>();
-    for (const s of sc.possibleStates) {
-      stateMap.set(s, []);
-    }
-    stateTimeSeries.set(`${sc.moleculeType}:${sc.component}`, stateMap);
-  }
-
-  const molPerComplexTimeSeries = new Map<string, Array<{ time: number; mean: number }>>();
-  for (const name of molTypeNames) {
-    molPerComplexTimeSeries.set(name, []);
-  }
-
   for (const tp of speciesTimeSeries) {
-    const { time, species } = tp;
-
-    // --- Complex size distribution ---
-    const sizeHistogram = new Map<number, number>();
-    let totalComplexes = 0;
-    let sumSize = 0;
-    let maxSize = 0;
-
-    // --- Bond occupancy accumulators: total and bound counts per (molType, comp) ---
-    const bondTotal = new Map<string, number>();
-    const bondBound = new Map<string, number>();
-    for (const bc of bondComponents) {
-      const key = `${bc.moleculeType}:${bc.component}`;
-      bondTotal.set(key, 0);
-      bondBound.set(key, 0);
-    }
-
-    // --- State accumulators: count per (molType, comp, state) ---
-    const stateCount = new Map<string, Map<string, number>>();
-    const stateTotal = new Map<string, number>();
-    for (const sc of stateComponents) {
-      const key = `${sc.moleculeType}:${sc.component}`;
-      stateTotal.set(key, 0);
-      const counts = new Map<string, number>();
-      for (const s of sc.possibleStates) {
-        counts.set(s, 0);
-      }
-      stateCount.set(key, counts);
-    }
-
-    // --- Molecules per complex accumulators ---
-    // Sum of (count_of_molType_in_complex * species_count) per molType
-    const molCountSum = new Map<string, number>();
-    // Total number of complexes that contain at least one molecule of that type
-    const molComplexCount = new Map<string, number>();
-    for (const name of molTypeNames) {
-      molCountSum.set(name, 0);
-      molComplexCount.set(name, 0);
-    }
-
-    // Iterate over all species at this time point
-    for (const [specStr, count] of Object.entries(species)) {
-      if (count === 0) continue;
-
-      const parsed = parseSpeciesString(specStr);
-      const numMolecules = parsed.molecules.length;
-
-      // Complex size
-      sizeHistogram.set(numMolecules, (sizeHistogram.get(numMolecules) || 0) + count);
-      totalComplexes += count;
-      sumSize += numMolecules * count;
-      if (numMolecules > maxSize) maxSize = numMolecules;
-
-      // Count molecules of each type in this complex
-      const molTypeCounts = new Map<string, number>();
-      for (const mol of parsed.molecules) {
-        molTypeCounts.set(mol.type, (molTypeCounts.get(mol.type) || 0) + 1);
-      }
-
-      // Molecules per complex
-      for (const [molType, molCount] of molTypeCounts) {
-        if (molCountSum.has(molType)) {
-          molCountSum.set(molType, molCountSum.get(molType)! + molCount * count);
-          molComplexCount.set(molType, molComplexCount.get(molType)! + count);
-        }
-      }
-
-      // Per-molecule analysis
-      for (const mol of parsed.molecules) {
-        for (const comp of mol.components) {
-          const key = `${mol.type}:${comp.name}`;
-
-          // Bond occupancy
-          if (bondTotal.has(key)) {
-            bondTotal.set(key, bondTotal.get(key)! + count);
-            if (comp.bond !== undefined) {
-              bondBound.set(key, bondBound.get(key)! + count);
-            }
-          }
-
-          // State distribution
-          if (comp.state !== undefined && stateCount.has(key)) {
-            stateTotal.set(key, stateTotal.get(key)! + count);
-            const counts = stateCount.get(key)!;
-            if (counts.has(comp.state)) {
-              counts.set(comp.state, counts.get(comp.state)! + count);
-            } else {
-              // Unknown state encountered in data - still track it
-              counts.set(comp.state, count);
-            }
-          }
-        }
-      }
-    }
-
-    // Record complex size distribution
-    const meanSize = totalComplexes > 0 ? sumSize / totalComplexes : 0;
-    complexSizes.push({ time, sizeHistogram, meanSize, maxSize });
-
-    // Record bond occupancy for this time point
-    for (const bc of bondComponents) {
-      const key = `${bc.moleculeType}:${bc.component}`;
-      const total = bondTotal.get(key)!;
-      const bound = bondBound.get(key)!;
-      const fractionBound = total > 0 ? bound / total : 0;
-      bondTimeSeries.get(key)!.push({ time, fractionBound });
-    }
-
-    // Record state distribution for this time point
-    for (const sc of stateComponents) {
-      const key = `${sc.moleculeType}:${sc.component}`;
-      const total = stateTotal.get(key)!;
-      const counts = stateCount.get(key)!;
-      const stateMap = stateTimeSeries.get(key)!;
-      for (const [state, stateArr] of stateMap) {
-        const cnt = counts.get(state) || 0;
-        const fraction = total > 0 ? cnt / total : 0;
-        stateArr.push({ time, fraction });
-      }
-    }
-
-    // Record molecules per complex for this time point
-    for (const name of molTypeNames) {
-      const sum = molCountSum.get(name)!;
-      const complexCount = molComplexCount.get(name)!;
-      const mean = complexCount > 0 ? sum / complexCount : 0;
-      molPerComplexTimeSeries.get(name)!.push({ time, mean });
-    }
+    processTimePoint(tp, metadata, timeSeriesData);
   }
 
   // ----------- Assemble results -----------
 
-  const bondOccupancies: BondOccupancy[] = bondComponents.map(bc => ({
-    moleculeType: bc.moleculeType,
-    component: bc.component,
-    timeSeries: bondTimeSeries.get(`${bc.moleculeType}:${bc.component}`)!,
-  }));
-
-  const siteStates: SiteStateDistribution[] = stateComponents.map(sc => ({
-    moleculeType: sc.moleculeType,
-    component: sc.component,
-    stateFractions: stateTimeSeries.get(`${sc.moleculeType}:${sc.component}`)!,
-  }));
-
-  return {
-    complexSizes,
-    bondOccupancies,
-    siteStates,
-    moleculesPerComplex: molPerComplexTimeSeries,
-  };
+  return assembleAnalysisResult(metadata, timeSeriesData);
 }
