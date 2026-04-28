@@ -36,6 +36,26 @@ function stripWhitespace(s: string): string {
     return result;
 }
 
+// Helper: Fast whitespace removal and 'in' to '@' conversion for compartment syntax
+function normalizeCompartmentSyntax(s: string): string {
+    let result = '';
+    let i = 0;
+    while (i < s.length) {
+        if (s.charCodeAt(i) <= 32) {
+            i++;
+            continue;
+        }
+        // If we see ' in ' surrounded by whitespace, convert it to '@'
+        if (s[i] === 'i' && s[i+1] === 'n' && i > 0 && s.charCodeAt(i-1) <= 32 && i+2 < s.length && s.charCodeAt(i+2) <= 32) {
+            result += '@';
+            i += 2;
+            continue;
+        }
+        result += s[i];
+        i++;
+    }
+    return result;
+}
 
 /**
  * Main entry point for network generation.
@@ -567,11 +587,11 @@ export async function generateExpandedNetwork(
 
         // PARITY FIX: Loose Matching for Compartment Syntax
         // BNG2 allows flexible compartment syntax (`A@C` vs `A` in `C`).
-        // If exact canonical match fails, we normalize whitespace and try again.
+        // If exact canonical match fails, we normalize whitespace and 'in' syntax, then try again.
         if (concentration === undefined) {
-            const normalizedTarget = stripWhitespace(canonicalName);
+            const normalizedTarget = normalizeCompartmentSyntax(canonicalName);
             for (const [seedCanon, seedConc] of seedConcentrationMap.entries()) {
-                if (stripWhitespace(seedCanon) === normalizedTarget) {
+                if (normalizeCompartmentSyntax(seedCanon) === normalizedTarget) {
                     concentration = seedConc;
                     if (VERBOSE_NETEXP_DEBUG) console.log(`[NetworkExpansion] Found concentration via loose match for '${canonicalName}': ${concentration}`);
                     break;
