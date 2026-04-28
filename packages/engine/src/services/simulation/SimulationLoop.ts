@@ -22,7 +22,7 @@ import { getFeatureFlags } from '../../featureFlags';
 import { jitCompiler, type JITCompiledFunction, type NetworkByteCode } from '../analysis/JITCompiler';
 import { createReducedSystem, findConservationLaws } from '../analysis/ConservationLaws';
 import { SeededRandom } from '../../utils/random';
-import { buildCSRStoichiometry, sparseCSRDgemv, shouldUseSparse } from './SparseStoichiometry';
+import { buildCSRStoichiometry, sparseCSRDgemv, shouldUseSparse, type CSRStoichiometryMatrix } from './SparseStoichiometry';
 import { buildCSRObservableMatrix, evaluateObservablesCSR, shouldUseCSRObservables, type CSRObservableMatrix } from './CSRObservableEvaluator';
 import { DenseOutputBuffer } from './DenseOutput';
 // import * as fs from 'node:fs';
@@ -258,6 +258,484 @@ async function convertReactionsToGPU(
   });
 
   return { gpuReactions, rateConstants };
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// DERIVATIVE HELPER FUNCTIONS
+// Extracted to avoid overly long function bodies inside the hot loop initialization.
+// ------------------------------------------------------------------------------------------------
+
+function buildFunctionalRatesDerivative(
+  model: BNGLModel,
+  concreteReactions: ConcreteReaction[],
+  observableNames: string[],
+  reactionReactingVolumes: Float64Array,
+  odeUsesAmountState: boolean,
+  speciesVolumes: Float64Array,
+  evaluateObservablesFast: (yIn: Float64Array) => Record<string, number>
+) {
+  let loggedVDephos = false;
+
+        const parameterNames = Object.keys(model.parameters || {});
+
+        // ---------------------------------------------------------------
+        // OPTIMIZATION A+B: Pre-compile all functional rate expressions
+        // at setup time instead of per-step. This eliminates repeated
+        // cache lookups, Object.keys(), preExpandExpression(), and
+        // feature flag checks from the hot loop.
+        // ---------------------------------------------------------------
+
+        // Build the full set of variable names available during evaluation.
+        // This is done ONCE here instead of discovering them per-step.
+        const allVarNames: string[] = [
+          ...parameterNames,
+          ...observableNames,
+          ...model.species.map(s => s.name),
+        ];
+        // Add ridxN placeholders for up to the max reactant count
+        let maxReactants = 0;
+        for (let i = 0; i < concreteReactions.length; i++) {
+          if (concreteReactions[i].reactants.length > maxReactants) {
+            maxReactants = concreteReactions[i].reactants.length;
+          }
+        }
+        for (let j = 0; j < maxReactants; j++) {
+          allVarNames.push(`ridx${j}`);
+        }
+
+        // Collect functional rate expressions and build index mapping
+        const functionalRateExprs: string[] = [];
+        const functionalRateIndices: number[] = []; // maps functionalRateExprs index -> concreteReactions index
+        for (let i = 0; i < concreteReactions.length; i++) {
+          const rxn = concreteReactions[i];
+          if (rxn.isFunctionalRate && rxn.rateExpression) {
+            functionalRateIndices.push(i);
+            functionalRateExprs.push(rxn.rateExpression);
+          }
+        }
+
+        // Pre-compile with JIT where possible (Optimization B: 16.7x),
+        // falling back to AST-walk (Optimization A: 8x)
+        let compiledRates: PreCompiledRateWithJIT[] = [];
+        try {
+          compiledRates = preCompileFunctionalRatesWithJIT(
+            functionalRateExprs,
+            allVarNames,
+            model.functions,
+            true // enableJIT
+          );
+        } catch (e: any) {
+          console.warn('[Worker] Pre-compilation of functional rates failed, falling back to per-step evaluation:', e?.message ?? String(e));
+        }
+
+        // Build a lookup: concreteReactions index -> compiled rate entry (or null)
+        const rxnCompiledRate: (PreCompiledRateWithJIT | null)[] = new Array(concreteReactions.length).fill(null);
+        for (let fi = 0; fi < functionalRateIndices.length; fi++) {
+          if (fi < compiledRates.length) {
+            rxnCompiledRate[functionalRateIndices[fi]] = compiledRates[fi];
+          }
+        }
+
+        // ---------------------------------------------------------------
+        // OPTIMIZATION (benchmark #7): Pre-allocate a single mutable
+        // rateContext object. Updated in-place each step instead of
+        // creating { ...context, ...rxnContext } per reaction.
+        // Eliminates ~5M object allocations per simulation.
+        // ---------------------------------------------------------------
+        const rateContext: Record<string, number> = Object.create(null) as Record<string, number>;
+        // Initialize with parameters
+        for (let i = 0; i < parameterNames.length; i++) {
+          const parameterName = parameterNames[i];
+          if (parameterName === '__proto__' || parameterName === 'constructor' || parameterName === 'prototype') continue;
+          setSafeNumericField(rateContext, parameterName, model.parameters[parameterName]);
+        }
+        // Initialize observable slots
+        for (let i = 0; i < observableNames.length; i++) {
+          const observableName = observableNames[i];
+          if (observableName !== '__proto__' && observableName !== 'constructor' && observableName !== 'prototype') {
+            setSafeNumericField(rateContext, observableName, 0);
+          }
+        }
+        // Initialize species name slots
+        for (let k = 0; k < model.species.length; k++) {
+          const speciesName = model.species[k].name;
+          if (speciesName !== '__proto__' && speciesName !== 'constructor' && speciesName !== 'prototype') {
+            setSafeNumericField(rateContext, speciesName, 0);
+          }
+        }
+        // Initialize ridxN slots
+        for (let j = 0; j < maxReactants; j++) {
+          rateContext[`ridx${j}`] = 0;
+        }
+
+        return (yIn: Float64Array, dydt: Float64Array) => {
+          dydt.fill(0);
+
+          // Update observable values in the mutable context (in-place)
+          const obsValues = evaluateObservablesFast(yIn);
+          for (let i = 0; i < observableNames.length; i++) {
+            const observableName = observableNames[i];
+            if (observableName !== '__proto__' && observableName !== 'constructor' && observableName !== 'prototype') {
+              setSafeNumericField(rateContext, observableName, obsValues[observableName]);
+            }
+          }
+          // Update species values in the mutable context (in-place)
+          for (let k = 0; k < model.species.length; k++) {
+            const speciesName = model.species[k].name;
+            if (speciesName !== '__proto__' && speciesName !== 'constructor' && speciesName !== 'prototype') {
+              setSafeNumericField(
+                rateContext,
+                speciesName,
+                odeUsesAmountState ? yIn[k] : (yIn[k] * speciesVolumes[k])
+              );
+            }
+          }
+
+          for (let i = 0; i < concreteReactions.length; i++) {
+            const rxn = concreteReactions[i];
+            let rate: number;
+
+            if (rxn.isFunctionalRate && rxn.rateExpression) {
+              // Update ridxN values in the mutable context (in-place, no allocation)
+              for (let j = 0; j < rxn.reactants.length; j++) {
+                rateContext[`ridx${j}`] = odeUsesAmountState
+                  ? yIn[rxn.reactants[j]]
+                  : (yIn[rxn.reactants[j]] * speciesVolumes[rxn.reactants[j]]);
+              }
+
+              const compiled = rxnCompiledRate[i];
+              try {
+                if (compiled) {
+                  // Fast path: use pre-compiled function (JIT or AST-walk)
+                  // No cache lookup, no Object.keys(), no preExpandExpression(), no feature flag check
+                  rate = compiled.isJIT && compiled.jitFn
+                    ? compiled.jitFn(rateContext)
+                    : compiled.astFn(rateContext);
+                } else {
+                  // Fallback: pre-compilation failed for this reaction, use original path
+                  rate = evaluateFunctionalRate(
+                    rxn.rateExpression,
+                    model.parameters,
+                    obsValues,
+                    model.functions,
+                    rateContext
+                  );
+                }
+                if (!loggedVDephos && rxn.rateExpression.includes('v_dephos')) {
+                  loggedVDephos = true;
+                  console.log('[Worker Debug] v_dephos eval:', {
+                    expr: rxn.rateExpression,
+                    rate,
+                    Active_Enzyme: obsValues.Active_Enzyme,
+                    Active_Substrate: obsValues.Active_Substrate
+                  });
+                }
+                if (isNaN(rate) || !isFinite(rate)) {
+                  console.error(`[Worker] Functional rate evaluation for '${rxn.rateExpression}' returned ${rate}.`);
+                  rate = 0;
+                }
+              } catch (e: any) {
+                console.error(`[Worker] Functional rate evaluation for '${rxn.rateExpression}' failed:`, e.message);
+                rate = 0;
+              }
+            } else {
+              // Mass action constant rate
+              rate = rxn.rateConstant;
+            }
+
+            // FIX: 'rate' is already the rate constant (for mass action) or the evaluated rate.
+            // Do NOT multiply by rxn.rateConstant again.
+            // Scale velocity to "Amount" units for mass conservation across compartments
+            // Rate in nM/s * Vol_Reacting = Amount_Rate in counts/s or moles/s
+            // Include degeneracy (symmetry factor)
+            const vAnchor = reactionReactingVolumes[i] || 1.0;
+            const velocityBase = rate * rxn.propensityFactor * (rxn.degeneracy ?? 1) * vAnchor;
+            let multiplicative = 1;
+            // NOTE: BNG2 network simulations (ODE) do not implement TotalRate; treat as standard mass action.
+            for (let j = 0; j < rxn.reactants.length; j++) {
+              const ridx = rxn.reactants[j];
+              const nativeVal = yIn[ridx];
+              const anchorRelVal = odeUsesAmountState
+                ? (nativeVal / vAnchor)
+                : (nativeVal * (speciesVolumes[ridx] / vAnchor));
+              multiplicative *= anchorRelVal;
+            }
+            const velocity = velocityBase * multiplicative;
+
+
+            for (let j = 0; j < rxn.reactants.length; j++) {
+              const reactantIdx = rxn.reactants[j];
+              const isActuallyConstant = model.species[reactantIdx].isConstant;
+              if (!isActuallyConstant) {
+                dydt[reactantIdx] -= odeUsesAmountState
+                  ? velocity
+                  : (velocity / speciesVolumes[reactantIdx]);
+              }
+            }
+            for (let j = 0; j < rxn.products.length; j++) {
+              const productIdx = rxn.products[j];
+              if (!model.species[productIdx].isConstant) {
+                const stoich = rxn.productStoichiometries ? rxn.productStoichiometries[j] : 1;
+                const contrib = odeUsesAmountState
+                  ? (velocity * stoich)
+                  : ((velocity * stoich) / speciesVolumes[productIdx]);
+                dydt[productIdx] += contrib;
+              }
+            }
+          }
+        };
+
+}
+
+function buildSparseCSRDerivative(
+  concreteReactions: ConcreteReaction[],
+  numSpecies: number,
+  reactionReactingVolumes: Float64Array,
+  odeUsesAmountState: boolean,
+  speciesVolumes: Float64Array,
+  csrMatrix: CSRStoichiometryMatrix
+) {
+
+        // Pre-allocate velocity buffer once (reused every derivative call)
+        const sparseNRxns = concreteReactions.length;
+        const velocityBuffer = new Float64Array(sparseNRxns);
+        // Pre-compute inverse volume per species for concentration mode
+        const invSpeciesVolumes = odeUsesAmountState ? null : new Float64Array(numSpecies);
+        if (invSpeciesVolumes) {
+          for (let i = 0; i < numSpecies; i++) {
+            invSpeciesVolumes[i] = 1.0 / speciesVolumes[i];
+          }
+        }
+
+        // Flatten per-reaction data into contiguous typed arrays (zero-copy hot path)
+        const sparseRxnRateK = new Float64Array(sparseNRxns);
+        const sparseRxnPropDeg = new Float64Array(sparseNRxns);
+        const sparseRxnVAnchors = new Float64Array(sparseNRxns);
+        let sparseTotalReactants = 0;
+        for (let i = 0; i < sparseNRxns; i++) sparseTotalReactants += concreteReactions[i].reactants.length;
+        const sparseFlatReactantIdx = new Int32Array(sparseTotalReactants);
+        const sparseFlatReactantOffsets = new Int32Array(sparseNRxns + 1);
+        const sparseFlatReactantScale = odeUsesAmountState ? null : new Float64Array(sparseTotalReactants);
+
+        let srOff = 0;
+        for (let i = 0; i < sparseNRxns; i++) {
+          const rxn = concreteReactions[i];
+          const vAnchor = reactionReactingVolumes[i] || 1.0;
+          sparseRxnRateK[i] = rxn.rateConstant;
+          sparseRxnPropDeg[i] = (rxn.propensityFactor ?? 1) * (rxn.degeneracy ?? 1);
+          sparseRxnVAnchors[i] = vAnchor;
+          sparseFlatReactantOffsets[i] = srOff;
+          for (let j = 0; j < rxn.reactants.length; j++) {
+            const ridx = rxn.reactants[j];
+            sparseFlatReactantIdx[srOff] = ridx;
+            if (sparseFlatReactantScale) {
+              sparseFlatReactantScale[srOff] = speciesVolumes[ridx] / vAnchor;
+            }
+            srOff++;
+          }
+        }
+        sparseFlatReactantOffsets[sparseNRxns] = srOff;
+
+        console.log(`[Worker] Sparse CSR derivative active: ${numSpecies} species, ${sparseNRxns} reactions, ${csrMatrix.nnz} nnz (sparsity ${((1 - csrMatrix.nnz / (numSpecies * sparseNRxns)) * 100).toFixed(1)}%)`);
+
+        return (yIn: Float64Array, dydt: Float64Array) => {
+          if (!(globalThis as any)._hasLoggedDerivCall) {
+            console.log('[Worker] DERIVATIVE FUNCTION CALLED (Sparse CSR Fallback)');
+            (globalThis as any)._hasLoggedDerivCall = true;
+          }
+
+          // Step 1: Compute reaction velocities into pre-allocated buffer (flattened arrays)
+          for (let i = 0; i < sparseNRxns; i++) {
+            let velocity = sparseRxnRateK[i];
+            let multiplicative = 1.0;
+            const vAnchor = sparseRxnVAnchors[i];
+            const rStart = sparseFlatReactantOffsets[i];
+            const rEnd = sparseFlatReactantOffsets[i + 1];
+
+            if (odeUsesAmountState) {
+              for (let j = rStart; j < rEnd; j++) {
+                multiplicative *= (yIn[sparseFlatReactantIdx[j]] / vAnchor);
+              }
+            } else {
+              for (let j = rStart; j < rEnd; j++) {
+                multiplicative *= (yIn[sparseFlatReactantIdx[j]] * sparseFlatReactantScale![j]);
+              }
+            }
+
+            velocity *= multiplicative * sparseRxnPropDeg[i] * vAnchor;
+            velocityBuffer[i] = velocity;
+          }
+
+          // Step 2: Sparse matrix-vector product: dydt = S * velocityBuffer
+          dydt.fill(0);
+          sparseCSRDgemv(csrMatrix, velocityBuffer, dydt);
+
+          // Step 3: For concentration mode, scale by 1/volume per species
+          if (invSpeciesVolumes) {
+            for (let i = 0; i < numSpecies; i++) {
+              dydt[i] *= invSpeciesVolumes[i];
+            }
+          }
+        };
+
+}
+
+function buildDenseDerivative(
+  model: BNGLModel,
+  concreteReactions: ConcreteReaction[],
+  numSpecies: number,
+  reactionReactingVolumes: Float64Array,
+  odeUsesAmountState: boolean,
+  speciesVolumes: Float64Array
+) {
+// Dense fallback for small models (< 20 species or low sparsity)
+      // --- Zero-copy optimization: pre-allocate all temporaries outside the closure ---
+      const nRxns = concreteReactions.length;
+
+      // Pre-allocated reaction velocity buffer (reused every derivative call)
+      const denseVelocityBuffer = new Float64Array(nRxns);
+
+      // Flatten per-reaction data into contiguous typed arrays for cache-friendly access.
+      // This eliminates object property lookups on concreteReactions[i] in the hot loop.
+      const rxnRateConstants = new Float64Array(nRxns);
+      const rxnPropensityFactors = new Float64Array(nRxns);   // propensityFactor * degeneracy
+      const rxnVAnchors = new Float64Array(nRxns);
+
+      // Flatten reactant indices into a single contiguous Int32Array with offsets
+      let totalReactants = 0;
+      let totalProducts = 0;
+      for (let i = 0; i < nRxns; i++) {
+        totalReactants += concreteReactions[i].reactants.length;
+        totalProducts += concreteReactions[i].products.length;
+      }
+      const flatReactantIdx = new Int32Array(totalReactants);
+      const flatReactantOffsets = new Int32Array(nRxns + 1);
+      const flatProductIdx = new Int32Array(totalProducts);
+      const flatProductStoich = new Float64Array(totalProducts);
+      const flatProductOffsets = new Int32Array(nRxns + 1);
+
+      // Pre-compute per-reactant volume scale factors (concentration mode)
+      // and per-product inverse volume (concentration mode)
+      const flatReactantScale = odeUsesAmountState ? null : new Float64Array(totalReactants);
+      const denseInvSpeciesVolumes = odeUsesAmountState ? null : new Float64Array(numSpecies);
+      if (denseInvSpeciesVolumes) {
+        for (let i = 0; i < numSpecies; i++) {
+          denseInvSpeciesVolumes[i] = 1.0 / speciesVolumes[i];
+        }
+      }
+
+      // Constant species mask as a Uint8Array for branchless checks
+      const isConstant = new Uint8Array(numSpecies);
+      for (let i = 0; i < numSpecies; i++) {
+        isConstant[i] = model.species[i].isConstant ? 1 : 0;
+      }
+
+      let rOff = 0;
+      let pOff = 0;
+      for (let i = 0; i < nRxns; i++) {
+        const rxn = concreteReactions[i];
+        const vAnchor = reactionReactingVolumes[i] || 1.0;
+
+        rxnRateConstants[i] = rxn.rateConstant;
+        rxnPropensityFactors[i] = (rxn.propensityFactor ?? 1) * (rxn.degeneracy ?? 1);
+        rxnVAnchors[i] = vAnchor;
+
+        flatReactantOffsets[i] = rOff;
+        for (let j = 0; j < rxn.reactants.length; j++) {
+          const ridx = rxn.reactants[j];
+          flatReactantIdx[rOff] = ridx;
+          if (flatReactantScale) {
+            flatReactantScale[rOff] = speciesVolumes[ridx] / vAnchor;
+          }
+          rOff++;
+        }
+
+        flatProductOffsets[i] = pOff;
+        for (let j = 0; j < rxn.products.length; j++) {
+          flatProductIdx[pOff] = rxn.products[j];
+          flatProductStoich[pOff] = rxn.productStoichiometries ? rxn.productStoichiometries[j] : 1;
+          pOff++;
+        }
+      }
+      flatReactantOffsets[nRxns] = rOff;
+      flatProductOffsets[nRxns] = pOff;
+
+      console.log(`[Worker] Zero-copy dense derivative active: ${numSpecies} species, ${nRxns} reactions (pre-allocated ${(totalReactants + totalProducts) * 4 + nRxns * 24} bytes)`);
+
+      return (yIn: Float64Array, dydt: Float64Array) => {
+        if (!(globalThis as any)._hasLoggedDerivCall) {
+          console.log('[Worker] DERIVATIVE FUNCTION CALLED (Zero-Copy Dense Fallback)');
+          (globalThis as any)._hasLoggedDerivCall = true;
+        }
+
+        // Step 1: Compute reaction velocities into pre-allocated buffer
+        for (let i = 0; i < nRxns; i++) {
+          let velocity = rxnRateConstants[i];
+          let multiplicative = 1.0;
+          const vAnchor = rxnVAnchors[i];
+          const rStart = flatReactantOffsets[i];
+          const rEnd = flatReactantOffsets[i + 1];
+
+          if (odeUsesAmountState) {
+            for (let j = rStart; j < rEnd; j++) {
+              multiplicative *= (yIn[flatReactantIdx[j]] / vAnchor);
+            }
+          } else {
+            for (let j = rStart; j < rEnd; j++) {
+              multiplicative *= (yIn[flatReactantIdx[j]] * flatReactantScale![j]);
+            }
+          }
+
+          velocity *= multiplicative * rxnPropensityFactors[i] * vAnchor;
+          denseVelocityBuffer[i] = velocity;
+        }
+
+        // Step 2: Distribute flux using flattened arrays
+        dydt.fill(0);
+        for (let i = 0; i < nRxns; i++) {
+          const velocity = denseVelocityBuffer[i];
+          const rStart = flatReactantOffsets[i];
+          const rEnd = flatReactantOffsets[i + 1];
+
+          // Subtract from reactants
+          if (odeUsesAmountState) {
+            for (let j = rStart; j < rEnd; j++) {
+              const idx = flatReactantIdx[j];
+              if (!isConstant[idx]) {
+                dydt[idx] -= velocity;
+              }
+            }
+          } else {
+            for (let j = rStart; j < rEnd; j++) {
+              const idx = flatReactantIdx[j];
+              if (!isConstant[idx]) {
+                dydt[idx] -= velocity * denseInvSpeciesVolumes![idx];
+              }
+            }
+          }
+
+          // Add to products
+          const pStart = flatProductOffsets[i];
+          const pEnd = flatProductOffsets[i + 1];
+
+          if (odeUsesAmountState) {
+            for (let j = pStart; j < pEnd; j++) {
+              const idx = flatProductIdx[j];
+              if (!isConstant[idx]) {
+                dydt[idx] += velocity * flatProductStoich[j];
+              }
+            }
+          } else {
+            for (let j = pStart; j < pEnd; j++) {
+              const idx = flatProductIdx[j];
+              if (!isConstant[idx]) {
+                dydt[idx] += velocity * flatProductStoich[j] * denseInvSpeciesVolumes![idx];
+              }
+            }
+          }
+        }
+      };
 }
 
 /**
@@ -1622,7 +2100,6 @@ export async function simulate(
       throw err;
     }
 
-    let derivatives: (y: Float64Array, dydt: Float64Array) => void;
 
 
 
@@ -1753,214 +2230,15 @@ export async function simulate(
 
     const buildDerivativesFunction = () => {
       if (functionalRateCount > 0) {
-        const parameterNames = Object.keys(model.parameters || {});
-
-        // ---------------------------------------------------------------
-        // OPTIMIZATION A+B: Pre-compile all functional rate expressions
-        // at setup time instead of per-step. This eliminates repeated
-        // cache lookups, Object.keys(), preExpandExpression(), and
-        // feature flag checks from the hot loop.
-        // ---------------------------------------------------------------
-
-        // Build the full set of variable names available during evaluation.
-        // This is done ONCE here instead of discovering them per-step.
-        const allVarNames: string[] = [
-          ...parameterNames,
-          ...observableNames,
-          ...model.species.map(s => s.name),
-        ];
-        // Add ridxN placeholders for up to the max reactant count
-        let maxReactants = 0;
-        for (let i = 0; i < concreteReactions.length; i++) {
-          if (concreteReactions[i].reactants.length > maxReactants) {
-            maxReactants = concreteReactions[i].reactants.length;
-          }
-        }
-        for (let j = 0; j < maxReactants; j++) {
-          allVarNames.push(`ridx${j}`);
-        }
-
-        // Collect functional rate expressions and build index mapping
-        const functionalRateExprs: string[] = [];
-        const functionalRateIndices: number[] = []; // maps functionalRateExprs index -> concreteReactions index
-        for (let i = 0; i < concreteReactions.length; i++) {
-          const rxn = concreteReactions[i];
-          if (rxn.isFunctionalRate && rxn.rateExpression) {
-            functionalRateIndices.push(i);
-            functionalRateExprs.push(rxn.rateExpression);
-          }
-        }
-
-        // Pre-compile with JIT where possible (Optimization B: 16.7x),
-        // falling back to AST-walk (Optimization A: 8x)
-        let compiledRates: PreCompiledRateWithJIT[] = [];
-        try {
-          compiledRates = preCompileFunctionalRatesWithJIT(
-            functionalRateExprs,
-            allVarNames,
-            model.functions,
-            true // enableJIT
-          );
-        } catch (e: any) {
-          console.warn('[Worker] Pre-compilation of functional rates failed, falling back to per-step evaluation:', e?.message ?? String(e));
-        }
-
-        // Build a lookup: concreteReactions index -> compiled rate entry (or null)
-        const rxnCompiledRate: (PreCompiledRateWithJIT | null)[] = new Array(concreteReactions.length).fill(null);
-        for (let fi = 0; fi < functionalRateIndices.length; fi++) {
-          if (fi < compiledRates.length) {
-            rxnCompiledRate[functionalRateIndices[fi]] = compiledRates[fi];
-          }
-        }
-
-        // ---------------------------------------------------------------
-        // OPTIMIZATION (benchmark #7): Pre-allocate a single mutable
-        // rateContext object. Updated in-place each step instead of
-        // creating { ...context, ...rxnContext } per reaction.
-        // Eliminates ~5M object allocations per simulation.
-        // ---------------------------------------------------------------
-        const rateContext: Record<string, number> = Object.create(null) as Record<string, number>;
-        // Initialize with parameters
-        for (let i = 0; i < parameterNames.length; i++) {
-          const parameterName = parameterNames[i];
-          if (parameterName === '__proto__' || parameterName === 'constructor' || parameterName === 'prototype') continue;
-          setSafeNumericField(rateContext, parameterName, model.parameters[parameterName]);
-        }
-        // Initialize observable slots
-        for (let i = 0; i < observableNames.length; i++) {
-          const observableName = observableNames[i];
-          if (observableName !== '__proto__' && observableName !== 'constructor' && observableName !== 'prototype') {
-            setSafeNumericField(rateContext, observableName, 0);
-          }
-        }
-        // Initialize species name slots
-        for (let k = 0; k < model.species.length; k++) {
-          const speciesName = model.species[k].name;
-          if (speciesName !== '__proto__' && speciesName !== 'constructor' && speciesName !== 'prototype') {
-            setSafeNumericField(rateContext, speciesName, 0);
-          }
-        }
-        // Initialize ridxN slots
-        for (let j = 0; j < maxReactants; j++) {
-          rateContext[`ridx${j}`] = 0;
-        }
-
-        return (yIn: Float64Array, dydt: Float64Array) => {
-          dydt.fill(0);
-
-          // Update observable values in the mutable context (in-place)
-          const obsValues = evaluateObservablesFast(yIn);
-          for (let i = 0; i < observableNames.length; i++) {
-            const observableName = observableNames[i];
-            if (observableName !== '__proto__' && observableName !== 'constructor' && observableName !== 'prototype') {
-              setSafeNumericField(rateContext, observableName, obsValues[observableName]);
-            }
-          }
-          // Update species values in the mutable context (in-place)
-          for (let k = 0; k < model.species.length; k++) {
-            const speciesName = model.species[k].name;
-            if (speciesName !== '__proto__' && speciesName !== 'constructor' && speciesName !== 'prototype') {
-              setSafeNumericField(
-                rateContext,
-                speciesName,
-                odeUsesAmountState ? yIn[k] : (yIn[k] * speciesVolumes[k])
-              );
-            }
-          }
-
-          for (let i = 0; i < concreteReactions.length; i++) {
-            const rxn = concreteReactions[i];
-            let rate: number;
-
-            if (rxn.isFunctionalRate && rxn.rateExpression) {
-              // Update ridxN values in the mutable context (in-place, no allocation)
-              for (let j = 0; j < rxn.reactants.length; j++) {
-                rateContext[`ridx${j}`] = odeUsesAmountState
-                  ? yIn[rxn.reactants[j]]
-                  : (yIn[rxn.reactants[j]] * speciesVolumes[rxn.reactants[j]]);
-              }
-
-              const compiled = rxnCompiledRate[i];
-              try {
-                if (compiled) {
-                  // Fast path: use pre-compiled function (JIT or AST-walk)
-                  // No cache lookup, no Object.keys(), no preExpandExpression(), no feature flag check
-                  rate = compiled.isJIT && compiled.jitFn
-                    ? compiled.jitFn(rateContext)
-                    : compiled.astFn(rateContext);
-                } else {
-                  // Fallback: pre-compilation failed for this reaction, use original path
-                  rate = evaluateFunctionalRate(
-                    rxn.rateExpression,
-                    model.parameters,
-                    obsValues,
-                    model.functions,
-                    rateContext
-                  );
-                }
-                if (!loggedVDephos && rxn.rateExpression.includes('v_dephos')) {
-                  loggedVDephos = true;
-                  console.log('[Worker Debug] v_dephos eval:', {
-                    expr: rxn.rateExpression,
-                    rate,
-                    Active_Enzyme: obsValues.Active_Enzyme,
-                    Active_Substrate: obsValues.Active_Substrate
-                  });
-                }
-                if (isNaN(rate) || !isFinite(rate)) {
-                  console.error(`[Worker] Functional rate evaluation for '${rxn.rateExpression}' returned ${rate}.`);
-                  rate = 0;
-                }
-              } catch (e: any) {
-                console.error(`[Worker] Functional rate evaluation for '${rxn.rateExpression}' failed:`, e.message);
-                rate = 0;
-              }
-            } else {
-              // Mass action constant rate
-              rate = rxn.rateConstant;
-            }
-
-            // FIX: 'rate' is already the rate constant (for mass action) or the evaluated rate.
-            // Do NOT multiply by rxn.rateConstant again.
-            // Scale velocity to "Amount" units for mass conservation across compartments
-            // Rate in nM/s * Vol_Reacting = Amount_Rate in counts/s or moles/s
-            // Include degeneracy (symmetry factor)
-            const vAnchor = reactionReactingVolumes[i] || 1.0;
-            const velocityBase = rate * rxn.propensityFactor * (rxn.degeneracy ?? 1) * vAnchor;
-            let multiplicative = 1;
-            // NOTE: BNG2 network simulations (ODE) do not implement TotalRate; treat as standard mass action.
-            for (let j = 0; j < rxn.reactants.length; j++) {
-              const ridx = rxn.reactants[j];
-              const nativeVal = yIn[ridx];
-              const anchorRelVal = odeUsesAmountState
-                ? (nativeVal / vAnchor)
-                : (nativeVal * (speciesVolumes[ridx] / vAnchor));
-              multiplicative *= anchorRelVal;
-            }
-            const velocity = velocityBase * multiplicative;
-
-
-            for (let j = 0; j < rxn.reactants.length; j++) {
-              const reactantIdx = rxn.reactants[j];
-              const isActuallyConstant = model.species[reactantIdx].isConstant;
-              if (!isActuallyConstant) {
-                dydt[reactantIdx] -= odeUsesAmountState
-                  ? velocity
-                  : (velocity / speciesVolumes[reactantIdx]);
-              }
-            }
-            for (let j = 0; j < rxn.products.length; j++) {
-              const productIdx = rxn.products[j];
-              if (!model.species[productIdx].isConstant) {
-                const stoich = rxn.productStoichiometries ? rxn.productStoichiometries[j] : 1;
-                const contrib = odeUsesAmountState
-                  ? (velocity * stoich)
-                  : ((velocity * stoich) / speciesVolumes[productIdx]);
-                dydt[productIdx] += contrib;
-              }
-            }
-          }
-        };
+        return buildFunctionalRatesDerivative(
+          model,
+          concreteReactions,
+          observableNames,
+          reactionReactingVolumes,
+          odeUsesAmountState,
+          speciesVolumes,
+          evaluateObservablesFast
+        );
       }
 
       const allowJit = functionalRateCount === 0;
@@ -1989,239 +2267,27 @@ export async function simulate(
       const useSparse = shouldUseSparse(numSpecies, concreteReactions.length, csrMatrix.nnz);
 
       if (useSparse) {
-        // Pre-allocate velocity buffer once (reused every derivative call)
-        const sparseNRxns = concreteReactions.length;
-        const velocityBuffer = new Float64Array(sparseNRxns);
-        // Pre-compute inverse volume per species for concentration mode
-        const invSpeciesVolumes = odeUsesAmountState ? null : new Float64Array(numSpecies);
-        if (invSpeciesVolumes) {
-          for (let i = 0; i < numSpecies; i++) {
-            invSpeciesVolumes[i] = 1.0 / speciesVolumes[i];
-          }
-        }
-
-        // Flatten per-reaction data into contiguous typed arrays (zero-copy hot path)
-        const sparseRxnRateK = new Float64Array(sparseNRxns);
-        const sparseRxnPropDeg = new Float64Array(sparseNRxns);
-        const sparseRxnVAnchors = new Float64Array(sparseNRxns);
-        let sparseTotalReactants = 0;
-        for (let i = 0; i < sparseNRxns; i++) sparseTotalReactants += concreteReactions[i].reactants.length;
-        const sparseFlatReactantIdx = new Int32Array(sparseTotalReactants);
-        const sparseFlatReactantOffsets = new Int32Array(sparseNRxns + 1);
-        const sparseFlatReactantScale = odeUsesAmountState ? null : new Float64Array(sparseTotalReactants);
-
-        let srOff = 0;
-        for (let i = 0; i < sparseNRxns; i++) {
-          const rxn = concreteReactions[i];
-          const vAnchor = reactionReactingVolumes[i] || 1.0;
-          sparseRxnRateK[i] = rxn.rateConstant;
-          sparseRxnPropDeg[i] = (rxn.propensityFactor ?? 1) * (rxn.degeneracy ?? 1);
-          sparseRxnVAnchors[i] = vAnchor;
-          sparseFlatReactantOffsets[i] = srOff;
-          for (let j = 0; j < rxn.reactants.length; j++) {
-            const ridx = rxn.reactants[j];
-            sparseFlatReactantIdx[srOff] = ridx;
-            if (sparseFlatReactantScale) {
-              sparseFlatReactantScale[srOff] = speciesVolumes[ridx] / vAnchor;
-            }
-            srOff++;
-          }
-        }
-        sparseFlatReactantOffsets[sparseNRxns] = srOff;
-
-        console.log(`[Worker] Sparse CSR derivative active: ${numSpecies} species, ${sparseNRxns} reactions, ${csrMatrix.nnz} nnz (sparsity ${((1 - csrMatrix.nnz / (numSpecies * sparseNRxns)) * 100).toFixed(1)}%)`);
-
-        return (yIn: Float64Array, dydt: Float64Array) => {
-          if (!(globalThis as any)._hasLoggedDerivCall) {
-            console.log('[Worker] DERIVATIVE FUNCTION CALLED (Sparse CSR Fallback)');
-            (globalThis as any)._hasLoggedDerivCall = true;
-          }
-
-          // Step 1: Compute reaction velocities into pre-allocated buffer (flattened arrays)
-          for (let i = 0; i < sparseNRxns; i++) {
-            let velocity = sparseRxnRateK[i];
-            let multiplicative = 1.0;
-            const vAnchor = sparseRxnVAnchors[i];
-            const rStart = sparseFlatReactantOffsets[i];
-            const rEnd = sparseFlatReactantOffsets[i + 1];
-
-            if (odeUsesAmountState) {
-              for (let j = rStart; j < rEnd; j++) {
-                multiplicative *= (yIn[sparseFlatReactantIdx[j]] / vAnchor);
-              }
-            } else {
-              for (let j = rStart; j < rEnd; j++) {
-                multiplicative *= (yIn[sparseFlatReactantIdx[j]] * sparseFlatReactantScale![j]);
-              }
-            }
-
-            velocity *= multiplicative * sparseRxnPropDeg[i] * vAnchor;
-            velocityBuffer[i] = velocity;
-          }
-
-          // Step 2: Sparse matrix-vector product: dydt = S * velocityBuffer
-          dydt.fill(0);
-          sparseCSRDgemv(csrMatrix, velocityBuffer, dydt);
-
-          // Step 3: For concentration mode, scale by 1/volume per species
-          if (invSpeciesVolumes) {
-            for (let i = 0; i < numSpecies; i++) {
-              dydt[i] *= invSpeciesVolumes[i];
-            }
-          }
-        };
+        return buildSparseCSRDerivative(
+          concreteReactions,
+          numSpecies,
+          reactionReactingVolumes,
+          odeUsesAmountState,
+          speciesVolumes,
+          csrMatrix
+        );
       }
 
-      // Dense fallback for small models (< 20 species or low sparsity)
-      // --- Zero-copy optimization: pre-allocate all temporaries outside the closure ---
-      const nRxns = concreteReactions.length;
-
-      // Pre-allocated reaction velocity buffer (reused every derivative call)
-      const denseVelocityBuffer = new Float64Array(nRxns);
-
-      // Flatten per-reaction data into contiguous typed arrays for cache-friendly access.
-      // This eliminates object property lookups on concreteReactions[i] in the hot loop.
-      const rxnRateConstants = new Float64Array(nRxns);
-      const rxnPropensityFactors = new Float64Array(nRxns);   // propensityFactor * degeneracy
-      const rxnVAnchors = new Float64Array(nRxns);
-
-      // Flatten reactant indices into a single contiguous Int32Array with offsets
-      let totalReactants = 0;
-      let totalProducts = 0;
-      for (let i = 0; i < nRxns; i++) {
-        totalReactants += concreteReactions[i].reactants.length;
-        totalProducts += concreteReactions[i].products.length;
-      }
-      const flatReactantIdx = new Int32Array(totalReactants);
-      const flatReactantOffsets = new Int32Array(nRxns + 1);
-      const flatProductIdx = new Int32Array(totalProducts);
-      const flatProductStoich = new Float64Array(totalProducts);
-      const flatProductOffsets = new Int32Array(nRxns + 1);
-
-      // Pre-compute per-reactant volume scale factors (concentration mode)
-      // and per-product inverse volume (concentration mode)
-      const flatReactantScale = odeUsesAmountState ? null : new Float64Array(totalReactants);
-      const denseInvSpeciesVolumes = odeUsesAmountState ? null : new Float64Array(numSpecies);
-      if (denseInvSpeciesVolumes) {
-        for (let i = 0; i < numSpecies; i++) {
-          denseInvSpeciesVolumes[i] = 1.0 / speciesVolumes[i];
-        }
-      }
-
-      // Constant species mask as a Uint8Array for branchless checks
-      const isConstant = new Uint8Array(numSpecies);
-      for (let i = 0; i < numSpecies; i++) {
-        isConstant[i] = model.species[i].isConstant ? 1 : 0;
-      }
-
-      let rOff = 0;
-      let pOff = 0;
-      for (let i = 0; i < nRxns; i++) {
-        const rxn = concreteReactions[i];
-        const vAnchor = reactionReactingVolumes[i] || 1.0;
-
-        rxnRateConstants[i] = rxn.rateConstant;
-        rxnPropensityFactors[i] = (rxn.propensityFactor ?? 1) * (rxn.degeneracy ?? 1);
-        rxnVAnchors[i] = vAnchor;
-
-        flatReactantOffsets[i] = rOff;
-        for (let j = 0; j < rxn.reactants.length; j++) {
-          const ridx = rxn.reactants[j];
-          flatReactantIdx[rOff] = ridx;
-          if (flatReactantScale) {
-            flatReactantScale[rOff] = speciesVolumes[ridx] / vAnchor;
-          }
-          rOff++;
-        }
-
-        flatProductOffsets[i] = pOff;
-        for (let j = 0; j < rxn.products.length; j++) {
-          flatProductIdx[pOff] = rxn.products[j];
-          flatProductStoich[pOff] = rxn.productStoichiometries ? rxn.productStoichiometries[j] : 1;
-          pOff++;
-        }
-      }
-      flatReactantOffsets[nRxns] = rOff;
-      flatProductOffsets[nRxns] = pOff;
-
-      console.log(`[Worker] Zero-copy dense derivative active: ${numSpecies} species, ${nRxns} reactions (pre-allocated ${(totalReactants + totalProducts) * 4 + nRxns * 24} bytes)`);
-
-      return (yIn: Float64Array, dydt: Float64Array) => {
-        if (!(globalThis as any)._hasLoggedDerivCall) {
-          console.log('[Worker] DERIVATIVE FUNCTION CALLED (Zero-Copy Dense Fallback)');
-          (globalThis as any)._hasLoggedDerivCall = true;
-        }
-
-        // Step 1: Compute reaction velocities into pre-allocated buffer
-        for (let i = 0; i < nRxns; i++) {
-          let velocity = rxnRateConstants[i];
-          let multiplicative = 1.0;
-          const vAnchor = rxnVAnchors[i];
-          const rStart = flatReactantOffsets[i];
-          const rEnd = flatReactantOffsets[i + 1];
-
-          if (odeUsesAmountState) {
-            for (let j = rStart; j < rEnd; j++) {
-              multiplicative *= (yIn[flatReactantIdx[j]] / vAnchor);
-            }
-          } else {
-            for (let j = rStart; j < rEnd; j++) {
-              multiplicative *= (yIn[flatReactantIdx[j]] * flatReactantScale![j]);
-            }
-          }
-
-          velocity *= multiplicative * rxnPropensityFactors[i] * vAnchor;
-          denseVelocityBuffer[i] = velocity;
-        }
-
-        // Step 2: Distribute flux using flattened arrays
-        dydt.fill(0);
-        for (let i = 0; i < nRxns; i++) {
-          const velocity = denseVelocityBuffer[i];
-          const rStart = flatReactantOffsets[i];
-          const rEnd = flatReactantOffsets[i + 1];
-
-          // Subtract from reactants
-          if (odeUsesAmountState) {
-            for (let j = rStart; j < rEnd; j++) {
-              const idx = flatReactantIdx[j];
-              if (!isConstant[idx]) {
-                dydt[idx] -= velocity;
-              }
-            }
-          } else {
-            for (let j = rStart; j < rEnd; j++) {
-              const idx = flatReactantIdx[j];
-              if (!isConstant[idx]) {
-                dydt[idx] -= velocity * denseInvSpeciesVolumes![idx];
-              }
-            }
-          }
-
-          // Add to products
-          const pStart = flatProductOffsets[i];
-          const pEnd = flatProductOffsets[i + 1];
-
-          if (odeUsesAmountState) {
-            for (let j = pStart; j < pEnd; j++) {
-              const idx = flatProductIdx[j];
-              if (!isConstant[idx]) {
-                dydt[idx] += velocity * flatProductStoich[j];
-              }
-            }
-          } else {
-            for (let j = pStart; j < pEnd; j++) {
-              const idx = flatProductIdx[j];
-              if (!isConstant[idx]) {
-                dydt[idx] += velocity * flatProductStoich[j] * denseInvSpeciesVolumes![idx];
-              }
-            }
-          }
-        }
-      };
+      return buildDenseDerivative(
+        model,
+        concreteReactions,
+        numSpecies,
+        reactionReactingVolumes,
+        odeUsesAmountState,
+        speciesVolumes
+      );
     };
 
-    derivatives = buildDerivativesFunction();
+    const derivatives = buildDerivativesFunction();
 
     if (functionalRateCount > 0) {
       // Just ensuring derivatives func is correct (already done above)
