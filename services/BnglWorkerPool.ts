@@ -35,11 +35,14 @@ export const canUseSharedArrayBuffer = (): boolean => {
  * in inter-process communication IDs.
  */
 export const generateSecureMessageId = (): number => {
-    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-        return crypto.getRandomValues(new Uint32Array(1))[0];
+    try {
+        const arr = new Uint32Array(1);
+        crypto.getRandomValues(arr);
+        return arr[0];
+    } catch {
+        // Final fallback to Math.random if crypto is completely unavailable (e.g., extremely old environments)
+        return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
     }
-    // Fallback for environments lacking crypto support
-    return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
 };
 
 export const createSharedEnsembleResults = (
