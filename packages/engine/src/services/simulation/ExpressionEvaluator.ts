@@ -571,6 +571,52 @@ function compileRateToBytecodeProgram(expandedExpr: string, varNames: string[]):
   };
 }
 
+
+function applyUnaryMathOp(op: number, val: number): number {
+  switch (op) {
+    case 9: return Math.exp(val);
+    case 10: return Math.log(val);
+    case 11: return Math.log10(val);
+    case 12: return Math.sqrt(val);
+    case 13: return Math.abs(val);
+    case 14: return Math.sin(val);
+    case 15: return Math.cos(val);
+    case 16: return Math.ceil(val);
+    case 17: return Math.floor(val);
+    case 18: return Math.round(val);
+    case 19: return Math.tan(val);
+    case 20: return Math.asin(val);
+    case 21: return Math.acos(val);
+    case 22: return Math.atan(val);
+    default: return val;
+  }
+}
+
+function applyBinaryMathOp(op: number, a: number, b: number): number {
+  switch (op) {
+    case 3: return a + b;
+    case 4: return a - b;
+    case 5: return a * b;
+    case 6: return a / b;
+    case 7: return a ** b;
+    case 23: return Math.max(a, b);
+    case 24: return Math.min(a, b);
+    default: return a;
+  }
+}
+
+function applyComparisonOp(op: number, a: number, b: number): number {
+  switch (op) {
+    case 26: return a < b ? 1 : 0;
+    case 27: return a > b ? 1 : 0;
+    case 28: return a <= b ? 1 : 0;
+    case 29: return a >= b ? 1 : 0;
+    case 30: return a === b ? 1 : 0;
+    case 31: return a !== b ? 1 : 0;
+    default: return 0;
+  }
+}
+
 function buildBytecodeEvaluator(
   program: BytecodeProgram,
   varNames: string[]
@@ -594,152 +640,55 @@ function buildBytecodeEvaluator(
       const op = code[pc++];
       if (op === OP_STOP) break;
 
-      switch (op) {
-        case 0: { // PUSH_CONST
-          const val = view.getFloat64(pc, true);
-          pc += 8;
-          stack[sp++] = val;
-          break;
+      if (op >= 9 && op <= 22) {
+        stack[sp - 1] = applyUnaryMathOp(op, stack[sp - 1]);
+      } else if ((op >= 3 && op <= 7) || op === 23 || op === 24) {
+        const b = stack[--sp];
+        stack[sp - 1] = applyBinaryMathOp(op, stack[sp - 1], b);
+      } else if (op >= 26 && op <= 31) {
+        const b = stack[--sp];
+        stack[sp - 1] = applyComparisonOp(op, stack[sp - 1], b);
+      } else {
+        switch (op) {
+          case 0: { // PUSH_CONST
+            const val = view.getFloat64(pc, true);
+            pc += 8;
+            stack[sp++] = val;
+            break;
+          }
+          case 1:
+          case 2: { // PUSH_SPEC / PUSH_OBS
+            const idx = view.getInt32(pc, true);
+            pc += 4;
+            stack[sp++] = (idx >= 0 && idx < valueSlots.length) ? valueSlots[idx] : 0;
+            break;
+          }
+          case 8: // NEG
+            stack[sp - 1] = -stack[sp - 1];
+            break;
+          case 25: { // IF_ELSE
+            const elseVal = stack[--sp];
+            const thenVal = stack[--sp];
+            const cond = stack[--sp];
+            stack[sp++] = cond !== 0 ? thenVal : elseVal;
+            break;
+          }
+          case 32: { // AND
+            const b = stack[--sp];
+            stack[sp - 1] = (stack[sp - 1] !== 0 && b !== 0) ? 1 : 0;
+            break;
+          }
+          case 33: { // OR
+            const b = stack[--sp];
+            stack[sp - 1] = (stack[sp - 1] !== 0 || b !== 0) ? 1 : 0;
+            break;
+          }
+          case 34: // NOT
+            stack[sp - 1] = stack[sp - 1] === 0 ? 1 : 0;
+            break;
+          default:
+            return 0;
         }
-        case 1:
-        case 2: { // PUSH_SPEC / PUSH_OBS
-          const idx = view.getInt32(pc, true);
-          pc += 4;
-          stack[sp++] = (idx >= 0 && idx < valueSlots.length) ? valueSlots[idx] : 0;
-          break;
-        }
-        case 3: { // ADD
-          const b = stack[--sp];
-          stack[sp - 1] += b;
-          break;
-        }
-        case 4: { // SUB
-          const b = stack[--sp];
-          stack[sp - 1] -= b;
-          break;
-        }
-        case 5: { // MUL
-          const b = stack[--sp];
-          stack[sp - 1] *= b;
-          break;
-        }
-        case 6: { // DIV
-          const b = stack[--sp];
-          stack[sp - 1] /= b;
-          break;
-        }
-        case 7: { // POW
-          const b = stack[--sp];
-          stack[sp - 1] = stack[sp - 1] ** b;
-          break;
-        }
-        case 8: // NEG
-          stack[sp - 1] = -stack[sp - 1];
-          break;
-        case 9: // EXP
-          stack[sp - 1] = Math.exp(stack[sp - 1]);
-          break;
-        case 10: // LOG
-          stack[sp - 1] = Math.log(stack[sp - 1]);
-          break;
-        case 11: // LOG10
-          stack[sp - 1] = Math.log10(stack[sp - 1]);
-          break;
-        case 12: // SQRT
-          stack[sp - 1] = Math.sqrt(stack[sp - 1]);
-          break;
-        case 13: // ABS
-          stack[sp - 1] = Math.abs(stack[sp - 1]);
-          break;
-        case 14: // SIN
-          stack[sp - 1] = Math.sin(stack[sp - 1]);
-          break;
-        case 15: // COS
-          stack[sp - 1] = Math.cos(stack[sp - 1]);
-          break;
-        case 16: // CEIL
-          stack[sp - 1] = Math.ceil(stack[sp - 1]);
-          break;
-        case 17: // FLOOR
-          stack[sp - 1] = Math.floor(stack[sp - 1]);
-          break;
-        case 18: // ROUND
-          stack[sp - 1] = Math.round(stack[sp - 1]);
-          break;
-        case 19: // TAN
-          stack[sp - 1] = Math.tan(stack[sp - 1]);
-          break;
-        case 20: // ASIN
-          stack[sp - 1] = Math.asin(stack[sp - 1]);
-          break;
-        case 21: // ACOS
-          stack[sp - 1] = Math.acos(stack[sp - 1]);
-          break;
-        case 22: // ATAN
-          stack[sp - 1] = Math.atan(stack[sp - 1]);
-          break;
-        case 23: { // MAX
-          const b = stack[--sp];
-          stack[sp - 1] = Math.max(stack[sp - 1], b);
-          break;
-        }
-        case 24: { // MIN
-          const b = stack[--sp];
-          stack[sp - 1] = Math.min(stack[sp - 1], b);
-          break;
-        }
-        case 25: { // IF_ELSE
-          const elseVal = stack[--sp];
-          const thenVal = stack[--sp];
-          const cond = stack[--sp];
-          stack[sp++] = cond !== 0 ? thenVal : elseVal;
-          break;
-        }
-        case 26: { // LT
-          const b = stack[--sp];
-          stack[sp - 1] = stack[sp - 1] < b ? 1 : 0;
-          break;
-        }
-        case 27: { // GT
-          const b = stack[--sp];
-          stack[sp - 1] = stack[sp - 1] > b ? 1 : 0;
-          break;
-        }
-        case 28: { // LE
-          const b = stack[--sp];
-          stack[sp - 1] = stack[sp - 1] <= b ? 1 : 0;
-          break;
-        }
-        case 29: { // GE
-          const b = stack[--sp];
-          stack[sp - 1] = stack[sp - 1] >= b ? 1 : 0;
-          break;
-        }
-        case 30: { // EQ
-          const b = stack[--sp];
-          stack[sp - 1] = stack[sp - 1] === b ? 1 : 0;
-          break;
-        }
-        case 31: { // NE
-          const b = stack[--sp];
-          stack[sp - 1] = stack[sp - 1] !== b ? 1 : 0;
-          break;
-        }
-        case 32: { // AND
-          const b = stack[--sp];
-          stack[sp - 1] = (stack[sp - 1] !== 0 && b !== 0) ? 1 : 0;
-          break;
-        }
-        case 33: { // OR
-          const b = stack[--sp];
-          stack[sp - 1] = (stack[sp - 1] !== 0 || b !== 0) ? 1 : 0;
-          break;
-        }
-        case 34: // NOT
-          stack[sp - 1] = stack[sp - 1] === 0 ? 1 : 0;
-          break;
-        default:
-          return 0;
       }
     }
 
