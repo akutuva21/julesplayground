@@ -198,7 +198,6 @@ export class WorkerPool {
       await this.initialize();
     }
 
-    // 🛡️ Sentinel: Use cryptographically secure random number generator for task IDs
     let taskId: string;
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       taskId = crypto.randomUUID();
