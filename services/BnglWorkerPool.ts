@@ -29,10 +29,15 @@ export const canUseSharedArrayBuffer = (): boolean => {
     }
 };
 
+/**
+ * Uses cryptographically secure random number generator to prevent predictability
+ * in inter-process communication IDs.
+ */
 export const generateSecureMessageId = (): number => {
     if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
         return crypto.getRandomValues(new Uint32Array(1))[0];
     }
+    // Fallback for environments lacking crypto support
     return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
 };
 
