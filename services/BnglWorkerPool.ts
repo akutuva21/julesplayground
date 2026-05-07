@@ -38,7 +38,7 @@ export const generateSecureMessageId = (): number => {
         return crypto.getRandomValues(new Uint32Array(1))[0];
     }
     // Fallback for environments lacking crypto support
-    return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+    throw new Error('Secure random ID generation is not supported in this environment');
 };
 
 export const createSharedEnsembleResults = (
