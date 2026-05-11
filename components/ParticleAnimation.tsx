@@ -20,16 +20,25 @@ const getPalette = (type: ParticleAnimationProps['type']): string[] => {
   }
 };
 
+const secureRandom = (): number => {
+  if (typeof globalThis.crypto?.getRandomValues !== 'function') {
+    throw new Error('Secure random generation is unavailable');
+  }
+  const array = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(array);
+  return array[0] / (0xffffffff + 1);
+};
+
 export const ParticleAnimation: React.FC<ParticleAnimationProps> = ({ type, className }) => {
   const palette = useMemo(() => getPalette(type), [type]);
   const particles = useMemo(() => {
     return Array.from({ length: PARTICLE_COUNT }, (_, idx) => ({
       id: idx,
-      top: Math.random() * 90 + 5,
-      left: Math.random() * 90 + 5,
-      size: Math.random() * 8 + 4,
-      delay: Math.random() * 1.5,
-      duration: Math.random() * 2 + 1.5
+      top: secureRandom() * 90 + 5,
+      left: secureRandom() * 90 + 5,
+      size: secureRandom() * 8 + 4,
+      delay: secureRandom() * 1.5,
+      duration: secureRandom() * 2 + 1.5
     }));
   }, [type]);
 
