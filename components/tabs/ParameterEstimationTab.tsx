@@ -70,6 +70,13 @@ export const ParameterEstimationTab: React.FC<ParameterEstimationTabProps> = ({ 
   const [theme] = useTheme();
   const isDark = theme === 'dark';
 
+  // Secure random float generation replacing Math.random()
+  const getSecureRandomFloat = useCallback(() => {
+    const array = new Uint32Array(1);
+    window.crypto.getRandomValues(array);
+    return array[0] / (0xffffffff + 1);
+  }, []);
+
   // Parameter selection
   const [selectedParams, setSelectedParams] = useState<string[]>([]);
   const [priors, setPriors] = useState<ParameterPrior[]>([]);
@@ -293,7 +300,7 @@ export const ParameterEstimationTab: React.FC<ParameterEstimationTabProps> = ({ 
           const rowVals = [row.time.toFixed(4)];
           for (const name of obsNames) {
             const exact = row[name] ?? 0;
-            const noisy = exact * (1 + (Math.random() - 0.5) * 0.05);
+            const noisy = exact * (1 + (getSecureRandomFloat() - 0.5) * 0.05);
             rowVals.push(noisy.toFixed(4));
           }
           csv += rowVals.join(', ') + '\n';
@@ -312,7 +319,7 @@ export const ParameterEstimationTab: React.FC<ParameterEstimationTabProps> = ({ 
         const row = res.data[idx];
         for (const name of obsNames) {
           const exact = row[name] ?? 0;
-          const noisy = exact * (1 + (Math.random() - 0.5) * 0.05);
+          const noisy = exact * (1 + (getSecureRandomFloat() - 0.5) * 0.05);
           measRows.push(`${name}\tdefault\t${row.time.toFixed(4)}\t${noisy.toFixed(6)}`);
         }
       }
