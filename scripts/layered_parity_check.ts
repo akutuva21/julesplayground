@@ -1204,8 +1204,14 @@ async function ensureGeneratedArtifacts(modelName: string, files: ModelFiles, op
 
   const safeModelName = modelName.replace(/[^a-zA-Z0-9]/g, '_');
 
+  // Security: prevent path traversal vulnerabilities
+  const absWebOutputDir = path.resolve(WEB_OUTPUT_DIR);
+
   if (needNet) {
     const netPath = path.join(WEB_OUTPUT_DIR, `${safeModelName}.net`);
+    if (!path.resolve(netPath).startsWith(absWebOutputDir + path.sep)) {
+      throw new Error(`Path traversal detected: ${netPath}`);
+    }
     log(`    [Artifacts] Exporting network for ${modelName} to ${netPath}...`);
     try {
       log(`    Executing: npx -y tsx scripts/export_net.ts "${files.bnglPath}" "${netPath}"`);
@@ -1280,6 +1286,12 @@ async function ensureGeneratedArtifacts(modelName: string, files: ModelFiles, op
       const lines = [`# time ${headers.join(' ')}`, ...rows];
       const cdatPath = path.join(WEB_OUTPUT_DIR, `${safeModelName}.cdat`);
       const gdatPath = path.join(WEB_OUTPUT_DIR, `results_${safeModelName}.csv`);
+      if (!path.resolve(cdatPath).startsWith(absWebOutputDir + path.sep)) {
+        throw new Error(`Path traversal detected: ${cdatPath}`);
+      }
+      if (!path.resolve(gdatPath).startsWith(absWebOutputDir + path.sep)) {
+        throw new Error(`Path traversal detected: ${gdatPath}`);
+      }
       fs.mkdirSync(path.dirname(cdatPath), { recursive: true });
       fs.writeFileSync(cdatPath, lines.join('\n') + '\n', 'utf8');
       files.webCdat = cdatPath;
