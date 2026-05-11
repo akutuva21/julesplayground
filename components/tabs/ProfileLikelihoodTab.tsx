@@ -306,7 +306,12 @@ export const ProfileLikelihoodTab: React.FC<ProfileLikelihoodTabProps> = ({ mode
                         for (const name of obsNames) {
                            const exact = row[name] ?? 0;
                            // +/- 2.5% random noise
-                           const noisy = exact * (1 + (Math.random() - 0.5) * 0.05);
+                           // We use crypto.getRandomValues to satisfy the security scanner,
+                           // even though this is just for simulation noise.
+                           const array = new Uint32Array(1);
+                           crypto.getRandomValues(array);
+                           const secureRandom = array[0] / (0xffffffff + 1);
+                           const noisy = exact * (1 + (secureRandom - 0.5) * 0.05);
                            rowVals.push(noisy.toFixed(4));
                         }
                         csv += rowVals.join(', ') + '\n';
