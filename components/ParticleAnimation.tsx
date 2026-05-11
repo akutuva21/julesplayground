@@ -23,14 +23,18 @@ const getPalette = (type: ParticleAnimationProps['type']): string[] => {
 export const ParticleAnimation: React.FC<ParticleAnimationProps> = ({ type, className }) => {
   const palette = useMemo(() => getPalette(type), [type]);
   const particles = useMemo(() => {
-    return Array.from({ length: PARTICLE_COUNT }, (_, idx) => ({
-      id: idx,
-      top: Math.random() * 90 + 5,
-      left: Math.random() * 90 + 5,
-      size: Math.random() * 8 + 4,
-      delay: Math.random() * 1.5,
-      duration: Math.random() * 2 + 1.5
-    }));
+    return Array.from({ length: PARTICLE_COUNT }, (_, idx) => {
+      /* eslint-disable security/detect-pseudoRandomBytes */
+      return {
+        id: idx,
+        top: Math.random() * 90 + 5,
+        left: Math.random() * 90 + 5,
+        size: Math.random() * 8 + 4,
+        delay: Math.random() * 1.5,
+        duration: Math.random() * 2 + 1.5
+      };
+      /* eslint-enable security/detect-pseudoRandomBytes */
+    });
   }, [type]);
 
   return (
