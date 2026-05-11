@@ -642,6 +642,7 @@ export class SurrogateDatasetGenerator {
       const interval = (max - min) / nSamples;
       
       // Stratified sampling
+      // NOTE: Math.random is safe here (simulation noise/sampling, not used for secure IDs/tokens)
       const stratifiedSamples = Array(nSamples).fill(0).map((_, i) => {
         const lower = min + i * interval;
         const upper = min + (i + 1) * interval;
