@@ -7,6 +7,15 @@ interface ParticleAnimationProps {
 
 const PARTICLE_COUNT = 20;
 
+function getSimulationRandom(): number {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues !== 'undefined') {
+    const array = new Uint32Array(1);
+    crypto.getRandomValues(array);
+    return array[0] / (0xffffffff + 1);
+  }
+  return Math.random();
+}
+
 const getPalette = (type: ParticleAnimationProps['type']): string[] => {
   switch (type) {
     case 'nfsim':
@@ -25,11 +34,11 @@ export const ParticleAnimation: React.FC<ParticleAnimationProps> = ({ type, clas
   const particles = useMemo(() => {
     return Array.from({ length: PARTICLE_COUNT }, (_, idx) => ({
       id: idx,
-      top: Math.random() * 90 + 5,
-      left: Math.random() * 90 + 5,
-      size: Math.random() * 8 + 4,
-      delay: Math.random() * 1.5,
-      duration: Math.random() * 2 + 1.5
+      top: getSimulationRandom() * 90 + 5,
+      left: getSimulationRandom() * 90 + 5,
+      size: getSimulationRandom() * 8 + 4,
+      delay: getSimulationRandom() * 1.5,
+      duration: getSimulationRandom() * 2 + 1.5
     }));
   }, [type]);
 
