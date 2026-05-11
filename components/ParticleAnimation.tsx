@@ -25,10 +25,16 @@ export const ParticleAnimation: React.FC<ParticleAnimationProps> = ({ type, clas
   const particles = useMemo(() => {
     return Array.from({ length: PARTICLE_COUNT }, (_, idx) => ({
       id: idx,
+      // Security Exception: Math.random() is fine for visual simulation noise. Not used for tokens/IDs.
+      // eslint-disable-next-line security/detect-pseudoRandomBytes
       top: Math.random() * 90 + 5,
+      // eslint-disable-next-line security/detect-pseudoRandomBytes
       left: Math.random() * 90 + 5,
+      // eslint-disable-next-line security/detect-pseudoRandomBytes
       size: Math.random() * 8 + 4,
+      // eslint-disable-next-line security/detect-pseudoRandomBytes
       delay: Math.random() * 1.5,
+      // eslint-disable-next-line security/detect-pseudoRandomBytes
       duration: Math.random() * 2 + 1.5
     }));
   }, [type]);
