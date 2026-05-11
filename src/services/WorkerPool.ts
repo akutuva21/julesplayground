@@ -190,6 +190,8 @@ export class WorkerPool {
     instance.currentTask = null;
   }
 
+  private fallbackCounter: number = 0;
+
   /**
    * Submit a task to the pool
    */
@@ -206,7 +208,8 @@ export class WorkerPool {
       crypto.getRandomValues(arr);
       taskId = `${Date.now().toString(36)}-${arr[0].toString(36)}${arr[1].toString(36)}`;
     } else {
-      taskId = `${Date.now().toString(36)}-${Math.random().toString(36).substring(7)}`;
+      this.fallbackCounter++;
+      taskId = `${Date.now().toString(36)}-fallback-${this.fallbackCounter}`;
     }
 
     const task: WorkerTask<T> = { id: taskId, type, data };

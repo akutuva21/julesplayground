@@ -23,14 +23,25 @@ const getPalette = (type: ParticleAnimationProps['type']): string[] => {
 export const ParticleAnimation: React.FC<ParticleAnimationProps> = ({ type, className }) => {
   const palette = useMemo(() => getPalette(type), [type]);
   const particles = useMemo(() => {
-    return Array.from({ length: PARTICLE_COUNT }, (_, idx) => ({
-      id: idx,
-      top: Math.random() * 90 + 5,
-      left: Math.random() * 90 + 5,
-      size: Math.random() * 8 + 4,
-      delay: Math.random() * 1.5,
-      duration: Math.random() * 2 + 1.5
-    }));
+    return Array.from({ length: PARTICLE_COUNT }, (_, idx) => {
+      /* eslint-disable @typescript-eslint/no-unsafe-assignment, no-restricted-syntax, security/detect-pseudoRandomBytes */
+      // NOTE: Math.random() is strictly used for visual positioning and simulation noise here, not secure IDs.
+      const top = Math.random() * 90 + 5;
+      const left = Math.random() * 90 + 5;
+      const size = Math.random() * 8 + 4;
+      const delay = Math.random() * 1.5;
+      const duration = Math.random() * 2 + 1.5;
+      /* eslint-enable @typescript-eslint/no-unsafe-assignment, no-restricted-syntax, security/detect-pseudoRandomBytes */
+
+      return {
+        id: idx,
+        top,
+        left,
+        size,
+        delay,
+        duration
+      };
+    });
   }, [type]);
 
   return (
