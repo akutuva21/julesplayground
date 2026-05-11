@@ -362,7 +362,8 @@ export const ABCSMCTab: React.FC<ABCSMCTabProps> = ({ model }) => {
                          for (const name of obsNames) {
                             const exact = row[name] ?? 0;
                             // +/- 2.5% random noise
-                            const noisy = exact * (1 + (Math.random() - 0.5) * 0.05);
+                            const randomValue = window.crypto.getRandomValues(new Uint32Array(1))[0] / (0xffffffff + 1);
+                            const noisy = exact * (1 + (randomValue - 0.5) * 0.05);
                             rowVals.push(noisy.toFixed(4));
                          }
                          csv += rowVals.join(', ') + '\n';
