@@ -2,6 +2,18 @@
 // Phase 2: Neural ODE surrogate models for fast parameter sweeps
 
 import * as tf from '@tensorflow/tfjs';
+
+/**
+ * Generate a secure random float between 0 (inclusive) and 1 (exclusive).
+ */
+function secureRandomFloat(): number {
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    return arr[0] / (0xffffffff + 1);
+  }
+  throw new Error('Secure random generation is not supported in this environment');
+}
 // Note: BNGLModel type is in root types.ts - using 'any' for flexibility
 
 // Backend initialization state
@@ -645,12 +657,12 @@ export class SurrogateDatasetGenerator {
       const stratifiedSamples = Array(nSamples).fill(0).map((_, i) => {
         const lower = min + i * interval;
         const upper = min + (i + 1) * interval;
-        return lower + Math.random() * (upper - lower);
+        return lower + secureRandomFloat() * (upper - lower);
       });
       
       // Shuffle
       for (let i = nSamples - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(secureRandomFloat() * (i + 1));
         [stratifiedSamples[i], stratifiedSamples[j]] = [stratifiedSamples[j], stratifiedSamples[i]];
       }
       
