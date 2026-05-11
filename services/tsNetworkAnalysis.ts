@@ -244,11 +244,21 @@ export function tsAnalyseGraph(payload: NetworkAnalysisPayload): IgraphAnalysisR
   // ---- Community detection (label propagation) -----------------------------
   const labels = Array.from({ length: n }, (_, i) => i);
   const LP_ITER = 20;
+
+  if (typeof globalThis.crypto?.getRandomValues !== 'function') {
+    throw new Error("Secure random number generation is not supported in this environment.");
+  }
+  const randBuffer = new Uint32Array(1);
+  const getRandomFloat = () => {
+    globalThis.crypto.getRandomValues(randBuffer);
+    return randBuffer[0] / (0xffffffff + 1);
+  };
+
   for (let iter = 0; iter < LP_ITER; iter++) {
     // Random order (Fisher-Yates)
     const order = Array.from({ length: n }, (_, i) => i);
     for (let i = n - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(getRandomFloat() * (i + 1));
       [order[i], order[j]] = [order[j], order[i]];
     }
     let changed = false;
