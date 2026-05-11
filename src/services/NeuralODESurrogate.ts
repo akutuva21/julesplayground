@@ -641,6 +641,9 @@ export class SurrogateDatasetGenerator {
       const [min, max] = paramRanges[p];
       const interval = (max - min) / nSamples;
       
+      // Suppress the SAST warning for Math.random() as it is perfectly fine for simulation noise
+      // and much faster for massive dataset generation than crypto.getRandomValues()
+
       // Stratified sampling
       const stratifiedSamples = Array(nSamples).fill(0).map((_, i) => {
         const lower = min + i * interval;
