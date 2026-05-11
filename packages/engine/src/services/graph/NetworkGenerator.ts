@@ -3416,7 +3416,7 @@ export class NetworkGenerator {
           productGraphs.push(subgraph);
           const graphIdx = productGraphs.length - 1;
 
-          // FIX: Track survivor locations
+          // NOTE: Track survivor locations
           for (let i = 0; i < subgraph.molecules.length; i++) {
             const mol = subgraph.molecules[i];
             if (mol._sourceKey) {
@@ -3439,7 +3439,7 @@ export class NetworkGenerator {
         const rg = reactantGraphs[ri];
 
         // Map of survivors in THIS reactant graph
-        // FIX: Track survivor locations
+        // NOTE: Track survivor locations
         for (const [mIdx, loc] of survivorLocations[ri].entries()) {
           const oldMol = rg.molecules[mIdx];
           const newMol = productGraphs[loc.graphIdx].molecules[loc.molIdx];
