@@ -293,7 +293,8 @@ export const ParameterEstimationTab: React.FC<ParameterEstimationTabProps> = ({ 
           const rowVals = [row.time.toFixed(4)];
           for (const name of obsNames) {
             const exact = row[name] ?? 0;
-            const noisy = exact * (1 + (Math.random() - 0.5) * 0.05);
+            const randomValue = crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
+            const noisy = exact * (1 + (randomValue - 0.5) * 0.05);
             rowVals.push(noisy.toFixed(4));
           }
           csv += rowVals.join(', ') + '\n';
@@ -312,7 +313,8 @@ export const ParameterEstimationTab: React.FC<ParameterEstimationTabProps> = ({ 
         const row = res.data[idx];
         for (const name of obsNames) {
           const exact = row[name] ?? 0;
-          const noisy = exact * (1 + (Math.random() - 0.5) * 0.05);
+          const randomValue = crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
+          const noisy = exact * (1 + (randomValue - 0.5) * 0.05);
           measRows.push(`${name}\tdefault\t${row.time.toFixed(4)}\t${noisy.toFixed(6)}`);
         }
       }
