@@ -23,14 +23,30 @@ const getPalette = (type: ParticleAnimationProps['type']): string[] => {
 export const ParticleAnimation: React.FC<ParticleAnimationProps> = ({ type, className }) => {
   const palette = useMemo(() => getPalette(type), [type]);
   const particles = useMemo(() => {
-    return Array.from({ length: PARTICLE_COUNT }, (_, idx) => ({
-      id: idx,
-      top: Math.random() * 90 + 5,
-      left: Math.random() * 90 + 5,
-      size: Math.random() * 8 + 4,
-      delay: Math.random() * 1.5,
-      duration: Math.random() * 2 + 1.5
-    }));
+    const randomValues = new Uint32Array(PARTICLE_COUNT * 5);
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      crypto.getRandomValues(randomValues);
+    } else {
+      // Fallback to Math.random() for environments without Web Crypto API (e.g. old SSR)
+      // Since this is purely aesthetic animation noise, falling back is perfectly safe.
+      for (let i = 0; i < randomValues.length; i++) {
+        // eslint-disable-next-line react-hooks/purity
+        randomValues[i] = Math.floor(Math.random() * 4294967296);
+      }
+    }
+    const getRandom = (idx: number) => randomValues[idx] / 4294967296;
+
+    return Array.from({ length: PARTICLE_COUNT }, (_, idx) => {
+      const i = idx * 5;
+      return {
+        id: idx,
+        top: getRandom(i) * 90 + 5,
+        left: getRandom(i + 1) * 90 + 5,
+        size: getRandom(i + 2) * 8 + 4,
+        delay: getRandom(i + 3) * 1.5,
+        duration: getRandom(i + 4) * 2 + 1.5
+      };
+    });
   }, [type]);
 
   return (
