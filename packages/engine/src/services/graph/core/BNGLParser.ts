@@ -307,7 +307,7 @@ export class BNGLParser {
     }
 
     // Parse name and components
-    // FIX: Molecule name must start with letter or underscore (not number or wildcard)
+    // Molecule name must start with letter or underscore (not number or wildcard)
     // Allow '*' for wildcard molecule patterns
     const parseMoleculeFields = (input: string): { name: string; componentStr: string; moleculeWildcard?: string; suffixCompartment?: string } | null => {
       const str = input.trim();
@@ -322,7 +322,8 @@ export class BNGLParser {
       if (first === '*') {
         idx = 1;
       } else {
-        if (!/[A-Za-z_]/.test(first)) return null;
+        const isValidFirstChar = /[A-Za-z_]/.test(first);
+        if (!isValidFirstChar) return null;
         idx++;
         while (idx < str.length && /[A-Za-z0-9_]/.test(str[idx])) idx++;
       }
@@ -427,7 +428,7 @@ export class BNGLParser {
     const states = stateParts.slice(1);
     const component = new Component(name, states);
     if (states.length > 0) component.state = states[0];
-    // FIX: Handle '?' or '*' as "any state" wildcard in BNGL
+    // NOTE: Handle '?' or '*' as "any state" wildcard in BNGL
     if (component.state === '*' || component.state === '?') {
       component.state = '?';
     }
@@ -444,7 +445,7 @@ export class BNGLParser {
         // BioNetGen semantic: "." explicitly means UNBOUND
         component.wildcard = '-';
       } else {
-        // FIX: Allow '0' as a valid bond label (common in BNG2)
+        // NOTE: Allow '0' as a valid bond label (common in BNG2)
         const bond = parseInt(bondPart);
         if (!isNaN(bond) && bond >= 0) {
           component.edges.set(bond, -1);

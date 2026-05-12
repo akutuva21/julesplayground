@@ -7,6 +7,15 @@ interface ParticleAnimationProps {
 
 const PARTICLE_COUNT = 20;
 
+const getSecureRandom = (): number => {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+    const array = new Uint32Array(1);
+    window.crypto.getRandomValues(array);
+    return array[0] / (0xffffffff + 1);
+  }
+  return Math.random(); // Fallback for SSR where it's just visual simulation noise
+};
+
 const getPalette = (type: ParticleAnimationProps['type']): string[] => {
   switch (type) {
     case 'nfsim':
@@ -25,17 +34,11 @@ export const ParticleAnimation: React.FC<ParticleAnimationProps> = ({ type, clas
   const particles = useMemo(() => {
     return Array.from({ length: PARTICLE_COUNT }, (_, idx) => ({
       id: idx,
-      // Security Exception: Math.random() is fine for visual simulation noise. Not used for tokens/IDs.
-      // eslint-disable-next-line security/detect-pseudoRandomBytes
-      top: Math.random() * 90 + 5,
-      // eslint-disable-next-line security/detect-pseudoRandomBytes
-      left: Math.random() * 90 + 5,
-      // eslint-disable-next-line security/detect-pseudoRandomBytes
-      size: Math.random() * 8 + 4,
-      // eslint-disable-next-line security/detect-pseudoRandomBytes
-      delay: Math.random() * 1.5,
-      // eslint-disable-next-line security/detect-pseudoRandomBytes
-      duration: Math.random() * 2 + 1.5
+      top: getSecureRandom() * 90 + 5,
+      left: getSecureRandom() * 90 + 5,
+      size: getSecureRandom() * 8 + 4,
+      delay: getSecureRandom() * 1.5,
+      duration: getSecureRandom() * 2 + 1.5
     }));
   }, [type]);
 
