@@ -21,8 +21,9 @@ describe('Model Loader Error Paths', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(modelLoader.getManifest()).rejects.toThrow(/Manifest fetch failed for all candidates/);
-    await expect(modelLoader.getManifest()).rejects.toThrow(/404/);
+    const manifestPromise = modelLoader.getManifest();
+    await expect(manifestPromise).rejects.toThrow(/Manifest fetch failed for all candidates/);
+    await expect(manifestPromise).rejects.toThrow(/404/);
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -30,8 +31,9 @@ describe('Model Loader Error Paths', () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error('Network failure'));
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(modelLoader.getManifest()).rejects.toThrow(/Manifest fetch failed for all candidates/);
-    await expect(modelLoader.getManifest()).rejects.toThrow(/Network failure/);
+    const manifestPromise = modelLoader.getManifest();
+    await expect(manifestPromise).rejects.toThrow(/Manifest fetch failed for all candidates/);
+    await expect(manifestPromise).rejects.toThrow(/404/);
   });
 
   it('should succeed if the first candidate fails but the second succeeds', async () => {
@@ -63,13 +65,52 @@ describe('Model Loader Error Paths', () => {
   });
 });
 
+describe('getManifestDebugInfo', () => {
+  let modelLoader: typeof import('../../services/modelLoader');
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.unstubAllGlobals();
+    modelLoader = await import('../../services/modelLoader');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should initially return null for resolved, and list candidates', () => {
+    const debugInfo = modelLoader.getManifestDebugInfo();
+    expect(debugInfo.resolved).toBeNull();
+    expect(debugInfo.candidates).toBeInstanceOf(Array);
+    expect(debugInfo.candidates.length).toBeGreaterThan(0);
+  });
+
+  it('should return the resolved URL after successful manifest load', async () => {
+    const validManifest = { models: [], totalModels: 0, generated: '2023-01-01' };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => validManifest
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    let debugInfo = modelLoader.getManifestDebugInfo();
+    expect(debugInfo.resolved).toBeNull();
+
+    await modelLoader.getManifest();
+
+    debugInfo = modelLoader.getManifestDebugInfo();
+    expect(debugInfo.resolved).not.toBeNull();
+    expect(typeof debugInfo.resolved).toBe('string');
+    expect(debugInfo.candidates).toContain(debugInfo.resolved);
+  });
+});
+
 describe('preloadModel', () => {
   let modelLoader: typeof import('../../services/modelLoader');
 
   beforeEach(async () => {
     vi.resetModules();
     vi.unstubAllGlobals();
-    // Dynamic import to get a fresh instance of the module cache
     modelLoader = await import('../../services/modelLoader');
   });
 
@@ -78,22 +119,15 @@ describe('preloadModel', () => {
   });
 
   it('should call loadModelCode and fetch when not cached and not pending', async () => {
-    // Mock getManifest and fetch
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => 'test code'
-    });
+    const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    // Mock manifest resolution so findModel works
     const mockManifest = {
       models: [{ id: 'model1', rawUrl: 'http://test.com/model1.bngl' }],
       totalModels: 1,
       generated: '2023-01-01'
     };
 
-    // We need to setup getManifest to return our mock, but getManifest uses fetch
-    // so let's make our fetch mock handle the manifest fetch too
     fetchMock.mockImplementation((url: string) => {
       if (url.includes('manifest.json')) {
         return Promise.resolve({
@@ -109,10 +143,8 @@ describe('preloadModel', () => {
 
     modelLoader.preloadModel('model1');
 
-    // Wait for macro-task queue to clear so any async promises process
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    // fetch should be called (first for manifest, then for model code)
     expect(fetchMock).toHaveBeenCalled();
     const calls = fetchMock.mock.calls.map(call => call[0]);
     expect(calls).toContain('http://test.com/model1.bngl');
@@ -144,18 +176,14 @@ describe('preloadModel', () => {
           json: async () => mockManifest
         });
       }
-      // Hangs forever for the model code fetch
       return new Promise(() => {});
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    // Initial fetch starts here and enters pendingFetches
     modelLoader.loadModelCode('model1').catch(() => {});
 
-    // wait for synchronous execution and manifest load
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    // Clear mock calls to verify preloadModel doesn't add more calls
     fetchMock.mockClear();
 
     modelLoader.preloadModel('model1');
@@ -183,13 +211,10 @@ describe('preloadModel', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    // Call preloadModel - if it doesn't catch, Vitest will fail with unhandled rejection
     modelLoader.preloadModel('model_fail');
 
-    // Wait for the chain to complete to ensure rejection is handled internally
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Test passes if we reach here without unhandled rejection
     expect(fetchMock).toHaveBeenCalled();
   });
 });

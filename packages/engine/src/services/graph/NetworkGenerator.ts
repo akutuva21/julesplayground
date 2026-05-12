@@ -3132,7 +3132,7 @@ export class NetworkGenerator {
     // (e.g. A+A→B state-change, logistic carrying-capacity terms like R+R→R),
     // BNG2 writes the full rate constant k in the NET (no 0.5 prefix).
     // The web was incorrectly writing 0.5*k because multiplicity = 1/2 was baked into storedRate.
-    // Fix: split the ruleSymmetryFactor (1/2) into a separate propensityFactor field so that:
+    // NOTE: split the ruleSymmetryFactor (1/2) into a separate propensityFactor field so that:
     //   - NET file writes the full k (matches BNG2 convention for non-bond rules)
     //   - ODE/SSA simulation kernels apply propensityFactor implicitly (already do this)
     //
@@ -3184,7 +3184,7 @@ export class NetworkGenerator {
       storedRate,
       rule.name,
       {
-        degeneracy: 1, // Fix: Multiplicity is already in storedRate. ODE loop applies degeneracy again, so set to 1.
+        degeneracy: 1, // NOTE: Multiplicity is already in storedRate. ODE loop applies degeneracy again, so set to 1.
         propensityFactor: storedPropensityFactor,
         statFactor: storedExprScaleFactor,
         rateExpression: finalRateExpr,
@@ -3256,7 +3256,7 @@ export class NetworkGenerator {
     const productGraphs: SpeciesGraph[] = [];
     const usedReactantMolsInReaction = new Set<string>(); // Tracks reactant graph molecules surviving in products
     const usedReactantPatternMols = new Set<string>(); // Tracks reactant pattern molecules (for mapping correctness)
-    const survivorLocations = reactantGraphs.map(() => new Map<number, { graphIdx: number; molIdx: number }>()); // FIX: Track where survivors ended up
+    const survivorLocations = reactantGraphs.map(() => new Map<number, { graphIdx: number; molIdx: number }>()); // NOTE: Track where survivors ended up
 
     // 0. Identify which molecules were explicitly matched by the rule (Targeted for transformation/deletion)
     const matchedReactantKeys = new Set<string>();
@@ -3416,7 +3416,7 @@ export class NetworkGenerator {
           productGraphs.push(subgraph);
           const graphIdx = productGraphs.length - 1;
 
-          // FIX: Track survivor locations
+          // NOTE: Track survivor locations
           for (let i = 0; i < subgraph.molecules.length; i++) {
             const mol = subgraph.molecules[i];
             if (mol._sourceKey) {
@@ -3431,7 +3431,7 @@ export class NetworkGenerator {
       }
     }
 
-    // FIX: Pre-calculate component state changes for MoveConnected rules
+    // NOTE: Pre-calculate component state changes for MoveConnected rules
     // This allows us to propagate state changes (like 'loc') to bystanders in the connected component.
     const survivorDeltas = new Map<string, { comp: string, state: string }[]>();
     if ((rule as any).isMoveConnected) {
@@ -3439,7 +3439,7 @@ export class NetworkGenerator {
         const rg = reactantGraphs[ri];
 
         // Map of survivors in THIS reactant graph
-        // FIX: Track survivor locations
+        // NOTE: Track survivor locations
         for (const [mIdx, loc] of survivorLocations[ri].entries()) {
           const oldMol = rg.molecules[mIdx];
           const newMol = productGraphs[loc.graphIdx].molecules[loc.molIdx];
@@ -3643,7 +3643,7 @@ export class NetworkGenerator {
             const oldMol = rg.molecules[oldIdx];
             const newMol = this.cloneMoleculeStructure(oldMol);
 
-            // FIX: Apply MoveConnected deltas to bystanders
+            // NOTE: Apply MoveConnected deltas to bystanders
             if ((rule as any).isMoveConnected && anchors.size > 0) {
               // Use the first available anchor to determine the delta
               const anchorKey = anchors.keys().next().value;
