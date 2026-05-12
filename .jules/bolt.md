@@ -1,3 +1,0 @@
-## 2024-05-11 - Optimize O(N) array lookup in Molecule component extension loop
-**Learning:** When refactoring O(N) array operations like `.find()` or `.some()` into O(1) Map or Set lookups inside a loop, consider the length of both the target AND incoming arrays if the target array grows dynamically. Setting a threshold like `targetArray.length >= 10` can fail to trigger the optimization if the target array starts small but the incoming array is massive.
-**Action:** When conditionally creating Maps/Sets based on array length to avoid small-array allocation overhead, use `targetArray.length + incomingArray.length >= threshold` to ensure the optimization catches cases where small arrays rapidly grow to become large arrays during the loop execution.
