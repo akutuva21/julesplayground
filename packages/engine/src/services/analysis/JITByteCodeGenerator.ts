@@ -242,7 +242,7 @@ export function compileToByteCode(
 
         let currentStoichOffset = 0;
         for (let s = 0; s < nSpecies; s++) {
-            for (const [rxnIdx, stoich] of speciesRxnEntries[s].entries()) {
+            for (const [rxnIdx, stoich] of speciesRxnEntries[s]) {
                 speciesRxnIdx[currentStoichOffset] = rxnIdx;
                 speciesStoich[currentStoichOffset] = stoich;
                 currentStoichOffset++;
@@ -257,7 +257,7 @@ export function compileToByteCode(
         // Map: reaction index -> species affected (non-zero net stoichiometry)
         const rxnToAffectedSpecies: Array<{species: number, stoich: number}[]> = Array.from({ length: nReactions }, () => []);
         for (let s = 0; s < nSpecies; s++) {
-            for (const [rxnIdx, stoich] of speciesRxnEntries[s].entries()) {
+            for (const [rxnIdx, stoich] of speciesRxnEntries[s]) {
                 if (stoich !== 0) {
                     rxnToAffectedSpecies[rxnIdx].push({ species: s, stoich });
                 }
