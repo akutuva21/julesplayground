@@ -993,7 +993,7 @@ export class JITCompiler {
 
             let currentStoichOffset = 0;
             for (let s = 0; s < nSpecies; s++) {
-                for (const [rxnIdx, stoich] of speciesRxnEntries[s]) {
+                for (const [rxnIdx, stoich] of speciesRxnEntries[s].entries()) {
                     if (currentStoichOffset < 0 || currentStoichOffset >= speciesRxnIdx.length || currentStoichOffset >= speciesStoich.length) {
                         throw new Error(`[JITCompiler] stoichiometry entry index out of range: ${currentStoichOffset}`);
                     }
@@ -1011,7 +1011,7 @@ export class JITCompiler {
             // Map: reaction index -> species affected (non-zero net stoichiometry)
             const rxnToAffectedSpecies: Array<{species: number, stoich: number}[]> = Array.from({ length: nReactions }, () => []);
             for (let s = 0; s < nSpecies; s++) {
-                for (const [rxnIdx, stoich] of speciesRxnEntries[s]) {
+                for (const [rxnIdx, stoich] of speciesRxnEntries[s].entries()) {
                     if (stoich !== 0) {
                         rxnToAffectedSpecies[rxnIdx].push({ species: s, stoich });
                     }

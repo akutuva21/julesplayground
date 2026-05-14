@@ -34,7 +34,7 @@ export async function handleSimulate(args: ToolArgs): Promise<ToolResult<any>> {
             const safeBase = baseDir.endsWith(sep) ? baseDir : baseDir + sep;
 
             // SECURITY: Validate boundaries to prevent path traversal
-            if (!resolvedPath.startsWith(safeBase)) {
+            if (!resolvedPath.startsWith(safeBase) && resolvedPath !== baseDir) {
                 throw new Error(`Access denied: Invalid file path`);
             }
             code = readFileSync(resolvedPath, 'utf-8');
