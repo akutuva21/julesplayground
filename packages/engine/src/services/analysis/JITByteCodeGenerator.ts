@@ -200,7 +200,7 @@ export function compileToByteCode(
         reactantOffsets[nReactions] = currentReactantOffset;
 
         // Stoichiometry matrix conversion (CSC-like)
-        const speciesRxnEntries: Map<number, number>[] = Array.from({ length: nSpecies }, () => new Map<number, number>());
+        const speciesRxnEntries: Array<Map<number, number>> = Array.from({ length: nSpecies }, () => new Map<number, number>());
         for (let r = 0; r < nReactions; r++) {
             const rxn = reactions[r];
             // Reactants
@@ -242,7 +242,7 @@ export function compileToByteCode(
 
         let currentStoichOffset = 0;
         for (let s = 0; s < nSpecies; s++) {
-            for (const [rxnIdx, stoich] of speciesRxnEntries[s]) {
+            for (const [rxnIdx, stoich] of speciesRxnEntries[s].entries()) {
                 speciesRxnIdx[currentStoichOffset] = rxnIdx;
                 speciesStoich[currentStoichOffset] = stoich;
                 currentStoichOffset++;
@@ -255,13 +255,11 @@ export function compileToByteCode(
         const jacRows = Array.from({ length: nSpecies }, () => new Map<number, { rxnIdx: number; coeff: number }[]>());
 
         // Map: reaction index -> species affected (non-zero net stoichiometry)
-        const rxnToAffectedSpecies: number[][] = Array.from({length: nReactions}, () => []);
+        const rxnToAffectedSpecies: Array<{species: number, stoich: number}[]> = Array.from({ length: nReactions }, () => []);
         for (let s = 0; s < nSpecies; s++) {
-            const entries = speciesRxnEntries[s];
-            if (!entries) continue;
-            for (const [rxnIdx, stoich] of entries) {
+            for (const [rxnIdx, stoich] of speciesRxnEntries[s].entries()) {
                 if (stoich !== 0) {
-                    rxnToAffectedSpecies[rxnIdx].push(s);
+                    rxnToAffectedSpecies[rxnIdx].push({ species: s, stoich });
                 }
             }
         }
@@ -274,12 +272,13 @@ export function compileToByteCode(
                 const j = normalizeSpeciesIndex(rxn.reactantIndices[i_r], nSpecies, r, 'reactant', i_r); // Species the rate depends on
                 const reactantStoichJ = rxn.reactantStoich[i_r];
 
-                for (const s of affectedSpecies) {
+                for (const affected of affectedSpecies) {
+                    const s = affected.species;
                     if (!jacRows[s].has(j)) {
                         jacRows[s].set(j, []);
                     }
                     // We store the contribution from reaction r to J[s][j]
-                    const netStoichI = speciesRxnEntries[s].get(r)!;
+                    const netStoichI = affected.stoich;
                     jacRows[s].get(j)!.push({ rxnIdx: r, coeff: netStoichI * reactantStoichJ });
                 }
             }
