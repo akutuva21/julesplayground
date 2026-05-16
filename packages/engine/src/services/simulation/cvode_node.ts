@@ -45,10 +45,20 @@ export const createCVodeModule: CvodeLoader = async (moduleArg?: unknown) => {
     // cannot parse. Strip only the terminal export statement before evaluating.
     source = source.replace(/^\s*export\s+default\s+createCVodeModule\s*;?\s*$/gm, '');
     const script = new vm.Script(source, { filename: loaderPath });
+
+    // Create a safe require function that only allows specific Node built-ins
+    const allowedModules = new Set(['path', 'fs', 'crypto']);
+    const safeRequire = (moduleName: string) => {
+      if (allowedModules.has(moduleName)) {
+        return require(moduleName);
+      }
+      throw new Error(`Security Violation: Cannot require unauthorized module '${moduleName}' in CVODE VM context`);
+    };
+
     const context = vm.createContext({
       module: moduleObj,
       exports: exportsObj,
-      require,
+      require: safeRequire,
       __filename: loaderPath,
       __dirname: dirname(loaderPath),
       process,
