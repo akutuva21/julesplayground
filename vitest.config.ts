@@ -9,6 +9,7 @@ export default defineConfig({
     },
   },
   test: {
+    globalSetup: ['./tests/global-teardown.ts'],
     // Fast default suite for day-to-day development.
     // Heavy parity/integration/benchmark suites run via `npm run test:full`
     // or targeted `npx vitest run <file>`.
