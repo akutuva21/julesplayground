@@ -345,9 +345,18 @@ export async function _simulateModel(inputModel: BNGLModel, options: { t_end: nu
   // symmetric embeddings (e.g., swapping identical molecules in a dimer).
   // GraphMatcher.findAllMaps returns all embeddings; we dedupe maps by their
   // target-image signature while preserving distinct component assignments.
+  const countObservableMatchesCache = new Map<string, number>();
   const countObservableMatches = (patternGraph: ReturnType<typeof BNGLParser.parseSpeciesGraph>, speciesGraph: ReturnType<typeof BNGLParser.parseSpeciesGraph>): number => {
+    const pCanon = GraphCanonicalizer.canonicalize(patternGraph);
+    const sCanon = GraphCanonicalizer.canonicalize(speciesGraph);
+    const cacheKey = `${pCanon}|${sCanon}`;
+    if (countObservableMatchesCache.has(cacheKey)) return countObservableMatchesCache.get(cacheKey)!;
+
     const rawMaps = GraphMatcher.findAllMaps(patternGraph, speciesGraph);
-    if (rawMaps.length === 0) return 0;
+    if (rawMaps.length === 0) {
+        countObservableMatchesCache.set(cacheKey, 0);
+        return 0;
+    }
 
     const autoFactor = GraphMatcher.getPatternAutomorphismFactor(patternGraph);
     
@@ -358,7 +367,9 @@ export async function _simulateModel(inputModel: BNGLModel, options: { t_end: nu
       total += countEmbeddingDegeneracy(patternGraph, speciesGraph, m);
     }
     
-    return total / autoFactor;
+    const res = total / autoFactor;
+    countObservableMatchesCache.set(cacheKey, res);
+    return res;
   };
 
   const concreteObservables = expandedModel.observables.map(obs => {
@@ -1116,9 +1127,18 @@ describe.skipIf(!HAS_GDAT_REFERENCE_DATA)('GDAT Comparison: Web Simulator vs BNG
       // symmetric embeddings (e.g., swapping identical molecules in a dimer).
       // GraphMatcher.findAllMaps returns all embeddings; we dedupe maps by their
       // target-image signature while preserving distinct component assignments.
+      const countObservableMatchesCache = new Map<string, number>();
       const countObservableMatches = (patternGraph: ReturnType<typeof BNGLParser.parseSpeciesGraph>, speciesGraph: ReturnType<typeof BNGLParser.parseSpeciesGraph>): number => {
+        const pCanon = GraphCanonicalizer.canonicalize(patternGraph);
+        const sCanon = GraphCanonicalizer.canonicalize(speciesGraph);
+        const cacheKey = `${pCanon}|${sCanon}`;
+        if (countObservableMatchesCache.has(cacheKey)) return countObservableMatchesCache.get(cacheKey)!;
+
         const rawMaps = GraphMatcher.findAllMaps(patternGraph, speciesGraph);
-        if (rawMaps.length <= 1) return rawMaps.length;
+        if (rawMaps.length <= 1) {
+            countObservableMatchesCache.set(cacheKey, rawMaps.length);
+            return rawMaps.length;
+        }
 
         const unique = new Set<string>();
         for (const m of rawMaps) {
@@ -1144,7 +1164,9 @@ describe.skipIf(!HAS_GDAT_REFERENCE_DATA)('GDAT Comparison: Web Simulator vs BNG
           unique.add(`${molPairs.join('|')}//${compPairs.join('|')}`);
         }
 
-        return unique.size;
+        const res = unique.size;
+        countObservableMatchesCache.set(cacheKey, res);
+        return res;
       };
 
       const debugModel = process.env.GDAT_DEBUG_MODEL;
