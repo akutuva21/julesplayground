@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { BNGLModel, SimulationOptions } from '../types';
 import * as fimModule from '../services/fim';
+import { bnglService } from '../services/bnglService';
 
 // Mock bnglService
 vi.mock('../services/bnglService', async () => {
@@ -132,6 +133,28 @@ describe('FIM identifiability', () => {
     const exported = fimModule.exportFIM(mockResult);
     expect(exported.format).toBe('FIM-v1');
     expect(exported.eigenvalues).toHaveLength(3);
+  });
+
+  it('catches and logs error when model release fails', async () => {
+    const model: BNGLModel = {
+      parameters: { a: 2, b: 3 },
+      moleculeTypes: [],
+      species: [],
+      observables: [],
+      reactions: [],
+      reactionRules: [],
+    } as any;
+    (globalThis as any).TEST_MODEL = model;
+
+    (bnglService.releaseModel as any).mockRejectedValueOnce(new Error('Mock release error'));
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(fimModule.computeFIM(model, ['a', 'b'], { method: 'ode', t_end: 10, n_steps: 10 })).resolves.toBeDefined();
+
+    expect(consoleSpy).toHaveBeenCalledWith('Failed to release model after FIM analysis:', expect.any(Error));
+
+    consoleSpy.mockRestore();
   });
 });
 
