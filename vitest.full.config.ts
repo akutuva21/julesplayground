@@ -45,7 +45,7 @@ export default defineConfig({
       'tests/services/IntramolecularRules.spec.ts',
       'tests/constants.spec.ts',
       'tests/examples.spec.ts',
-      // 'tests/ui/*.spec.tsx', <- Removed exclusion since we want to run our new UI test!
+      // 'tests/ui/*.spec.tsx', <- Removed exclusion to enable our UI tests to run
       // Legacy spatial processor suite: implementation was removed during engine extraction.
       'tests/services/CompartmentalProcessor.spec.ts',
       'tests/services/XMLValidator.spec.ts',
