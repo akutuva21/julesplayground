@@ -1825,13 +1825,6 @@ export async function simulate(
     let derivatives: (y: Float64Array, dydt: Float64Array) => void;
     let refreshRateContextParameters: (() => void) | undefined = undefined;
 
-
-
-
-    // for (let i = 0; i < numSpecies; i++) {
-    //   fs.appendFileSync(debugLog, `[SimulationLoop] Species ${i} Vol: ${speciesVolumes[i]} name: ${speciesHeaders[i]}\n`);
-    // }
-
     // Debug: compute initial production rates for nuc pSTAT3 species once reaction volumes are available
     try {
       const pstatIndices: number[] = [];
