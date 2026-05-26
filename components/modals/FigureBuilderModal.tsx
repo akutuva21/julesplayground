@@ -67,8 +67,9 @@ export const FigureBuilderModal: React.FC<FigureBuilderModalProps> = ({
       const { composeFigure } = await import('../../src/services/figure/FigureCompositor');
       const { exportFigure, downloadFigure, generateLatexSnippet } = await import('../../src/services/figure/FigureExporter');
 
+      const availablePanelsMap = new Map(availablePanels.map(p => [p.id, p]));
       const panels = selectedPanels.map((id, idx) => {
-        const panel = availablePanels.find(p => p.id === id);
+        const panel = availablePanelsMap.get(id);
         return {
           id,
           label: `(${PANEL_LABELS[idx] || String.fromCharCode(65 + idx)})`,
@@ -179,11 +180,13 @@ export const FigureBuilderModal: React.FC<FigureBuilderModalProps> = ({
                   gridTemplateRows: `repeat(${previewLayout.rows}, 1fr)`,
                 }}
               >
-                {selectedPanels.map((id, idx) => {
-                  const panel = availablePanels.find(p => p.id === id);
-                  return (
-                    <div
-                      key={id}
+                {(() => {
+                  const availablePanelsMap = new Map(availablePanels.map(p => [p.id, p]));
+                  return selectedPanels.map((id, idx) => {
+                    const panel = availablePanelsMap.get(id);
+                    return (
+                      <div
+                        key={id}
                       className="border border-dashed border-slate-300 dark:border-slate-600 rounded p-2 flex flex-col"
                     >
                       <div className="flex items-center justify-between mb-1">
@@ -224,7 +227,8 @@ export const FigureBuilderModal: React.FC<FigureBuilderModalProps> = ({
                       </div>
                     </div>
                   );
-                })}
+                });
+                })()}
               </div>
             )}
           </div>
