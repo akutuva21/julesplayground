@@ -152,9 +152,21 @@ const extractAtomicPatternsBNG2 = (
   const usedP = new Set<number>();
   const rMatched = new Map<number, number>(); // rIdx → pIdx
 
+  const pMolsByName = new Map<string, number[]>();
+  for (let i = 0; i < pMols.length; i++) {
+    const name = pMols[i].name;
+    const arr = pMolsByName.get(name);
+    if (arr !== undefined) {
+      arr.push(i);
+    } else {
+      pMolsByName.set(name, [i]);
+    }
+  }
+
   rMols.forEach((rMol, rIdx) => {
-    const pIdx = pMols.findIndex((p, i) => !usedP.has(i) && p.name === rMol.name);
-    if (pIdx >= 0) {
+    const arr = pMolsByName.get(rMol.name);
+    if (arr !== undefined && arr.length > 0) {
+      const pIdx = arr.shift()!;
       usedP.add(pIdx);
       rMatched.set(rIdx, pIdx);
     }
