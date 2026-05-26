@@ -16,6 +16,8 @@ const generateRule = (numComplexes: number, numMolecules: number, numComponents:
   );
 
   return {
+    id: `rule-${numComplexes}-${numMolecules}-${numComponents}`,
+    name: `Rule_${numComplexes}_${numMolecules}_${numComponents}`,
     reactants: createComplexes(),
     products: createComplexes(),
     rate: 'k1',
