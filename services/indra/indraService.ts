@@ -14,15 +14,15 @@ const DEFAULT_INDRA_API_BASE = 'https://api.indra.bio';
 const DEFAULT_INDRA_DB_BASE = 'https://db.indra.bio';
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DB_TIMEOUT_MS = 45_000;
-const INDRA_DEBUG = true;
+const INDRA_DEBUG = false;
 
 function logIndra(message: string, data?: unknown): void {
   if (!INDRA_DEBUG) return;
   if (data === undefined) {
-    console.log(`[INDRA] ${message}`);
+    console.debug(`[INDRA] ${message}`);
     return;
   }
-  console.log(`[INDRA] ${message}`, data);
+  console.debug(`[INDRA] ${message}`, data);
 }
 
 function getEnvString(name: string): string | null {
