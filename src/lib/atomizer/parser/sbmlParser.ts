@@ -279,12 +279,7 @@ const SBML_PARSER_DEBUG =
 
 const debugSbml = (...args: unknown[]): void => {
   if (!SBML_PARSER_DEBUG) return;
-  logger.debug(
-    'SBM000',
-    args
-      .map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a)))
-      .join(' ')
-  );
+  console.log(...args);
 };
 
 type SimpleXmlNode = {

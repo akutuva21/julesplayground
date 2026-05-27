@@ -126,21 +126,13 @@ export const validationWarningsToMarkers = (code: string, warnings: ValidationWa
 
   const lines = code.split(/\r?\n/);
 
-  const hintCache = new Map<string, number>();
-
   return warnings.map((warning) => {
     let lineIndex = 0;
 
     if (warning.sourceHint) {
-      const hint = warning.sourceHint;
-      if (hintCache.has(hint)) {
-        lineIndex = hintCache.get(hint)!;
-      } else {
-        const matchIndex = lines.findIndex((line) => line.includes(hint));
-        if (matchIndex !== -1) {
-          lineIndex = matchIndex;
-        }
-        hintCache.set(hint, lineIndex);
+      const matchIndex = lines.findIndex((line) => line.includes(warning.sourceHint!));
+      if (matchIndex !== -1) {
+        lineIndex = matchIndex;
       }
     }
 

@@ -668,13 +668,11 @@ export async function generateExpandedNetwork(
             const rxnName = (r as any).name ?? '';
             const totalRate = (r as any).totalRate ?? totalRateByRuleName.get(rxnName) ?? false;
 
-            // NOTE: Use originalRate to preserve parameter names for non-functional updates
-            const preservedRate = foldedRateExpression || (r as any).originalRate || String(r.rate);
-
             const reaction = {
                 reactants: r.reactants.map((ridx: number) => GraphCanonicalizer.canonicalize(result.species[ridx].graph)),
                 products: r.products.map((pidx: number) => GraphCanonicalizer.canonicalize(result.species[pidx].graph)),
-                rate: preservedRate,
+                // FIX: Use originalRate to preserve parameter names for non-functional updates
+                rate: foldedRateExpression || (r as any).originalRate || String(r.rate),
                 rateConstant: typeof r.rate === 'number' ? r.rate : 0,
                 isFunctionalRate,
                 rateExpression: foldedRateExpression,

@@ -283,7 +283,7 @@ export function parseBNGLRegexDeprecated(code: string, options: ParseBNGLOptions
   const { checkCancelled, debug } = options;
   const logDebug = (...args: unknown[]) => {
     if (debug) {
-      console.debug(...args);
+      console.log(...args);
     }
   };
   // compartments are parsed later once model is constructed

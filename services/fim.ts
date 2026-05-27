@@ -548,6 +548,7 @@ export async function computeFIM(
           if (sd < 1e-9) break;
         }
 
+        // return best
         const bestIdx = fvals.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v)[0].i;
         return { x: simplex[bestIdx], fx: fvals[bestIdx] };
       };

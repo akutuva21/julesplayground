@@ -117,7 +117,7 @@ export const removeCompartment = (s: string) => {
 };
 
 const normalizeBareMoleculePattern = (s: string): string => {
-    return s.replace(/(^|\.|:)([A-Za-z_][A-Za-z0-9_]*)(?=\s*($|\.|@))/g, '$1$2()');
+    return /^[A-Za-z0-9_]+$/.test(s) ? `${s}()` : s;
 };
 
 const parseSimpleCompartmentMoleculePattern = (

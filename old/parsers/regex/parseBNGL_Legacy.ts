@@ -245,7 +245,7 @@ export function parseBNGL(code: string, options: ParseBNGLOptions = {}): BNGLMod
   const { checkCancelled, debug } = options;
   const logDebug = (...args: unknown[]) => {
     if (debug) {
-      console.debug(...args);
+      console.log(...args);
     }
   };
   // compartments are parsed later once model is constructed

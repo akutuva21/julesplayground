@@ -43,19 +43,15 @@ export const DebuggerPanel: React.FC<DebuggerPanelProps> = ({ trace, model, netw
       return reports;
     }
 
-    const ruleMap = new Map<string, typeof model.reactionRules[0]>();
-    (model.reactionRules ?? []).forEach((candidate) => {
-      const candidateName = candidate.name?.trim();
-      if (candidateName) {
-        ruleMap.set(candidateName, candidate);
-      } else {
-        const fallback = `${candidate.reactants.join(' + ')}->${candidate.products.join(' + ')}`;
-        ruleMap.set(fallback, candidate);
-      }
-    });
-
     trace.rulesNeverFired.forEach((ruleName) => {
-      const rule = ruleMap.get(ruleName);
+      const rule = (model.reactionRules ?? []).find((candidate) => {
+        const candidateName = candidate.name?.trim();
+        if (candidateName) {
+          return candidateName === ruleName;
+        }
+        const fallback = `${candidate.reactants.join(' + ')}->${candidate.products.join(' + ')}`;
+        return fallback === ruleName;
+      });
       if (rule) {
         reports.set(ruleName, RuleBlocker.explain(rule, { expandedNetwork: network, model }));
       }

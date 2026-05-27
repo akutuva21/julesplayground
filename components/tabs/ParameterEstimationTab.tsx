@@ -141,9 +141,8 @@ export const ParameterEstimationTab: React.FC<ParameterEstimationTabProps> = ({ 
     if (!model) return;
 
     setPriors(prev => {
-      const prevMap = new Map(prev.map(p => [p.name, p]));
       const newPriors: ParameterPrior[] = selectedParams.map(name => {
-        const existing = prevMap.get(name);
+        const existing = prev.find(p => p.name === name);
         if (existing) return existing;
 
         const value = model.parameters[name] ?? 1;

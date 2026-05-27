@@ -19,10 +19,10 @@ const INDRA_DEBUG = true;
 function logIndra(message: string, data?: unknown): void {
   if (!INDRA_DEBUG) return;
   if (data === undefined) {
-    console.debug(`[INDRA] ${message}`);
+    console.log(`[INDRA] ${message}`);
     return;
   }
-  console.debug(`[INDRA] ${message}`, data);
+  console.log(`[INDRA] ${message}`, data);
 }
 
 function getEnvString(name: string): string | null {

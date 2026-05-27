@@ -169,7 +169,7 @@ const CSV_MODEL_ALIASES: Record<string, string> = {
   jaruszewicz2023: 'Jaruszewicz-Blonska_2023',
   // Tutorials that have different ref file names
   babtutorial: 'bab',
-  // NOTE: Fix wrong fuzzy matches (keys normalized: lowercase, no special chars)
+  // Fix wrong fuzzy matches (keys normalized: lowercase, no special chars)
   caspaseactivationloop: 'caspase-activation-loop',
   fgfsignalingpathway: 'fgf-signaling-pathway',
   baruafceri2012: 'BaruaFceRI_2012',
@@ -718,8 +718,7 @@ function getMultiPhaseReference(
     const baseKey = normalizeKey(rawLabel);
     const requiresTofit = baseKey.includes('tofit');
     const alias = CSV_MODEL_ALIASES[baseKey];
-    const normalizedAlias = alias ? normalizeKey(alias) : null;
-    const candidateKeys = [baseKey, normalizedAlias].filter(Boolean) as string[];
+    const candidateKeys = [baseKey, alias ? normalizeKey(alias) : null].filter(Boolean) as string[];
 
     const directMatches: string[] = [];
 

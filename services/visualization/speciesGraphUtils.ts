@@ -90,7 +90,8 @@ export const buildVisualizationMolecule = (
       visualComponent.bondRequirement = null;
     }
 
-    if (component.edges.size > 0) {
+    const bonds = Array.from(component.edges.entries());
+    if (bonds.length > 0) {
       const partnerKeys = graph.adjacency.get(`${molIdx}.${compIdx}`);
       if (partnerKeys && partnerKeys.length > 0) {
         const partnerKey = partnerKeys[0]; // Use first partner for visualization
@@ -100,19 +101,8 @@ export const buildVisualizationMolecule = (
         const partnerMolecule = graph.molecules[partnerMolIdx];
         const partnerComponent = partnerMolecule?.components[partnerCompIdx];
         if (partnerMolecule && partnerComponent) {
-          let bondLabel: number | undefined;
-
-          for (const [key, val] of component.edges.entries()) {
-            if (val === partnerCompIdx) {
-              bondLabel = key;
-              break;
-            }
-          }
-
-          if (bondLabel === undefined) {
-            bondLabel = component.edges.keys().next().value;
-          }
-
+          const match = bonds.find(([, targetCompIdx]) => targetCompIdx === partnerCompIdx);
+          const bondLabel = match ? match[0] : bonds[0]?.[0];
           if (bondLabel !== undefined) {
             visualComponent.bondLabel = `!${bondLabel}`;
             visualComponent.bondPartner = `${partnerMolecule.name}:${partnerComponent.name}`;
@@ -311,30 +301,17 @@ export const detectStateChanges = (
   });
 
   // Match molecules by name and position
-  // Group product molecules by name for O(1) lookups
-  const productMoleculesByName = new Map<string, number[]>();
-  productMolecules.forEach((prodMol, idx) => {
-    let list = productMoleculesByName.get(prodMol.name);
-    if (!list) {
-      list = [];
-      productMoleculesByName.set(prodMol.name, list);
-    }
-    list.push(idx);
-  });
-
-  // Track how many of each molecule name we've used
-  const productMoleculesUsedCount = new Map<string, number>();
+  const usedProductIdx = new Set<number>();
 
   reactantMolecules.forEach((reactantMol) => {
     // Find matching product molecule by name (first unused one)
-    const availableProducts = productMoleculesByName.get(reactantMol.name);
-    const usedCount = productMoleculesUsedCount.get(reactantMol.name) ?? 0;
+    const productIdx = productMolecules.findIndex((prodMol, idx) => {
+      return !usedProductIdx.has(idx) && prodMol.name === reactantMol.name;
+    });
 
-    if (!availableProducts || usedCount >= availableProducts.length) return; // Molecule was deleted
+    if (productIdx === -1) return; // Molecule was deleted
 
-    const productIdx = availableProducts[usedCount];
-    productMoleculesUsedCount.set(reactantMol.name, usedCount + 1);
-
+    usedProductIdx.add(productIdx);
     const productMol = productMolecules[productIdx];
 
     // Compare components between matched molecules
