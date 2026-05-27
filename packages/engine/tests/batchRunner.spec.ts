@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { BNGLModel, SimulationResults } from '../src/types';
 import type { BatchReporter, BatchSimulator } from '../src/utils/batchRunner';
-import { runSingleBatchItem, normalizeFilterNames } from '../src/utils/batchRunner';
+import { runSingleBatchItem, normalizeFilterNames, safeModelName } from '../src/utils/batchRunner';
 
 function createBaseModel(): BNGLModel {
     return {
@@ -151,5 +151,23 @@ describe('normalizeFilterNames', () => {
 
     it('filters out empty/whitespace names and normalizes the rest', () => {
         expect(normalizeFilterNames(['  ', 'A', '', ' b ', undefined as unknown as string, 'C'])).toEqual(['a', 'b', 'c']);
+    });
+describe('safeModelName', () => {
+    it('returns lowercase for alphanumeric strings', () => {
+        expect(safeModelName('ModelName123')).toBe('modelname123');
+    });
+
+    it('replaces special characters with underscores', () => {
+        expect(safeModelName('My-Model (test) & version 1.0!')).toBe('my_model__test____version_1_0_');
+        expect(safeModelName('hello/world\\test')).toBe('hello_world_test');
+    });
+
+    it('handles an empty string', () => {
+        expect(safeModelName('')).toBe('');
+    });
+
+    it('handles strings that are already safe', () => {
+        expect(safeModelName('safe_model_name')).toBe('safe_model_name');
+        expect(safeModelName('another_123')).toBe('another_123');
     });
 });
