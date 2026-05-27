@@ -30,7 +30,7 @@ const prev: LocalParameterState[] = Array.from({ length: numParams }, (_, i) => 
 // Function to measure
 function testBaseline() {
   const start = performance.now();
-  const result = parsedParams.map(p => {
+  parsedParams.map(p => {
     const existing = prev.find(e => e.name === p.name);
     let isDifferent = true;
     if (existing) {
@@ -57,7 +57,7 @@ function testOptimized() {
   for (const e of prev) {
     prevMap.set(e.name, e);
   }
-  const result = parsedParams.map(p => {
+  parsedParams.map(p => {
     const existing = prevMap.get(p.name);
     let isDifferent = true;
     if (existing) {
