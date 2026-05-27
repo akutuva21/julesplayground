@@ -1,6 +1,5 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import * as tf from '@tensorflow/tfjs';
 import { safeLog, clamp, deriveBounds, priorToLogNormal, VariationalParameterEstimator, SimulationData, ParameterPrior } from '../../src/services/ParameterEstimation';
 
 describe('ParameterEstimation Math Helpers', () => {
