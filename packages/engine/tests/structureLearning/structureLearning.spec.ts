@@ -355,7 +355,6 @@ describe('StructureScorer', () => {
       [{ type: 'Molecules', name: 'Xp', pattern: 'X(s~p)' }],
       expData,
       { k_X_s_u_to_p: [0.001, 100] },
-      mockSimulator,
       mockFitter,
     );
 

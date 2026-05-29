@@ -9,6 +9,7 @@ import {
   Tooltip as RechartsTooltip,
   Legend,
   ResponsiveContainer,
+  ReferenceArea,
 } from 'recharts';
 import { formatValue } from '../../src/utils/formatValue';
 import { InlineLegend } from './InteractiveLegend';
