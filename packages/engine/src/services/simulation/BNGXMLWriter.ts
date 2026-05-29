@@ -123,7 +123,7 @@ function expandUserDefinedFunctions(
     // Match function calls: fname(arg1, arg2, ...)
     // Use a regex that handles nested parentheses via counting (simplified: one level)
     for (const [fnName, fn] of fnMap) {
-      let searchFrom = 0;
+      const searchFrom = 0;
 
       while (true) {
         const startIdx = findFunctionCallStart(expanded, fnName, searchFrom);
