@@ -1,5 +1,8 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, it, expect } from 'vitest';
-import { parseExperimentalCSV } from '../../src/utils/experimentalData';
+import { parseExperimentalCSV, readExperimentalCSVFile } from '../../src/utils/experimentalData';
 
 describe('parseExperimentalCSV', () => {
     it('throws error for less than 2 lines', () => {
@@ -91,5 +94,42 @@ describe('parseExperimentalCSV', () => {
             { time: 1, value: 3 },
             { time: 2, value: 4 }
         ]);
+    });
+});
+
+describe('readExperimentalCSVFile', () => {
+    it('works', async () => {
+        const file = new File(['time,A\n0,1\n1,2'], 'test.csv', { type: 'text/csv' });
+        const result = await readExperimentalCSVFile(file);
+        expect(result.fileName).toBe('test.csv');
+        expect(result.datasets).toHaveLength(1);
+        expect(result.datasets[0].name).toBe('A');
+        expect(result.datasets[0].points.length).toBe(2);
+        expect(result.datasets[0].points).toEqual([
+            { time: 0, value: 1 },
+            { time: 1, value: 2 }
+        ]);
+    });
+
+    it('handles file read error', async () => {
+        const file = new File(['time,A\n0,1\n1,2'], 'test.csv', { type: 'text/csv' });
+        // Mock FileReader to trigger onerror
+        const originalFileReader = global.FileReader;
+        global.FileReader = class extends originalFileReader {
+            readAsText() {
+                setTimeout(() => {
+                    if (this.onerror) this.onerror(new Event('error') as any);
+                }, 0);
+            }
+        };
+
+        await expect(readExperimentalCSVFile(file)).rejects.toThrow('Failed to read file');
+
+        global.FileReader = originalFileReader;
+    });
+
+    it('handles parsing error during file read', async () => {
+        const file = new File(['invalid csv'], 'test.csv', { type: 'text/csv' });
+        await expect(readExperimentalCSVFile(file)).rejects.toThrow('CSV must have at least a header row and one data row');
     });
 });
