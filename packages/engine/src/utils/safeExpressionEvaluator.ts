@@ -363,6 +363,28 @@ function getVariables(node: JsepNode): string[] {
   return Array.from(vars);
 }
 
+/**
+ * Compiles a mathematical expression into a safely evaluable function.
+ *
+ * This function parses the provided string expression using `jsep`, validates
+ * its structure (enforcing parenthesis depth limits and restricting execution
+ * to permitted operations/functions to prevent code injection or runaway execution),
+ * and extracts all referenced variables. It ensures that any variable present in
+ * the expression is either a known mathematical constant (e.g., `pi`) or explicitly
+ * listed in the `paramNames` array.
+ *
+ * Invariants:
+ * - The returned function acts purely on the supplied `context` object and internal state;
+ *   it avoids browser-specific APIs and dynamic code evaluation (like `new Function` or `eval()`).
+ * - Unrecognized variables in `expr` that are neither mathematical constants nor in
+ *   `paramNames` will cause compilation to throw an Error.
+ * - During evaluation, if execution exceeds the predefined maximum operation limit,
+ *   an Error is thrown to prevent infinite loops.
+ *
+ * @param expr - The mathematical expression to compile (e.g., `"2 * k1 + sin(t)"`).
+ * @param paramNames - An array of variable names that are permitted to appear in the expression. Defaults to an empty array.
+ * @returns A function that accepts a variable context (`Record<string, number>`) and returns the evaluated `number`.
+ */
 export function compile(
   expr: string,
   paramNames: string[] = []
