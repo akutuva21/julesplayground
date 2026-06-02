@@ -4,6 +4,9 @@ import {
     getSharedEnsembleFeatureVector,
     materializeSharedSimulationResult,
     writeSimulationResultsToShared,
+    isSharedEnsembleResultsHandle,
+    canUseSharedArrayBuffer,
+    generateSecureMessageId
 } from '../../services/BnglWorkerPool';
 import { mergeSimulationOptionsWithModelActionDefaults } from '../../services/bnglWorker';
 
@@ -74,5 +77,83 @@ describe('BnglWorkerPool shared ensemble helpers', () => {
         expect(explicit.gml).toBe(4);
         expect(explicit.equilibrate).toBe(5);
         expect(explicit.seed).toBe(6);
+    });
+});
+describe('BnglWorkerPool utils', () => {
+    it('isSharedEnsembleResultsHandle correctly identifies shared handles', () => {
+        expect(isSharedEnsembleResultsHandle({ kind: 'shared' } as any)).toBe(true);
+        expect(isSharedEnsembleResultsHandle(null)).toBe(false);
+        expect(isSharedEnsembleResultsHandle(undefined)).toBe(false);
+        expect(isSharedEnsembleResultsHandle([])).toBe(false);
+        expect(isSharedEnsembleResultsHandle([{} as any])).toBe(false);
+    });
+
+    it('canUseSharedArrayBuffer handles availability and exceptions', () => {
+        const originalSAB = globalThis.SharedArrayBuffer;
+
+        // Mock valid
+        if (typeof SharedArrayBuffer === 'undefined') {
+            globalThis.SharedArrayBuffer = class SharedArrayBuffer {
+                byteLength: number;
+                constructor(length: number) { this.byteLength = length; }
+            } as any;
+        }
+        expect(canUseSharedArrayBuffer()).toBe(true);
+
+        // Mock throw
+        globalThis.SharedArrayBuffer = function() {
+            throw new Error('Not allowed');
+        } as any;
+        expect(canUseSharedArrayBuffer()).toBe(false);
+
+        // Mock undefined
+        Object.defineProperty(globalThis, 'SharedArrayBuffer', {
+            value: undefined,
+            writable: true,
+            configurable: true,
+        });
+        expect(canUseSharedArrayBuffer()).toBe(false);
+
+        // Restore
+        Object.defineProperty(globalThis, 'SharedArrayBuffer', {
+            value: originalSAB,
+            writable: true,
+            configurable: true,
+        });
+    });
+
+    it('generateSecureMessageId generates random ID or throws if missing crypto', () => {
+        const originalCrypto = globalThis.crypto;
+
+        // Mock valid crypto
+        Object.defineProperty(globalThis, 'crypto', {
+            value: {
+                getRandomValues: (arr: Uint32Array) => {
+                    arr[0] = 12345;
+                    return arr;
+                }
+            },
+            writable: true,
+            configurable: true,
+        });
+
+
+        expect(generateSecureMessageId()).toBe(12345);
+
+        // Mock missing crypto
+        Object.defineProperty(globalThis, 'crypto', {
+            value: undefined,
+            writable: true,
+            configurable: true,
+        });
+
+        expect(() => generateSecureMessageId()).toThrow('Secure random generation is not supported');
+
+        // Restore
+        Object.defineProperty(globalThis, 'crypto', {
+            value: originalCrypto,
+            writable: true,
+            configurable: true,
+        });
     });
 });
