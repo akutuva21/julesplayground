@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cosineSimilarity, semanticSearch, isSemanticSearchReady, resetSemanticSearchState, _internalState } from '../../services/semanticSearch';
+import { cosineSimilarity, semanticSearch, isSemanticSearchReady, resetSemanticSearchState, _internalState, preloadEmbeddingModel, getAllModels } from '../../services/semanticSearch';
 
 // Mock fetching the index
 const mockIndex = {
@@ -131,6 +131,85 @@ describe('Semantic Search Service', () => {
             expect(results).toEqual([]);
         });
 
+        it('should throw an error if pipeline output is falsy', async () => {
+            mockPipeline.mockResolvedValue(async () => null);
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            await expect(semanticSearch('test')).rejects.toThrow('Embedding pipeline returned unexpected output');
+            expect(warnSpy).toHaveBeenCalledWith('[SemanticSearch][DEBUG] embed output is missing data:', null);
+            warnSpy.mockRestore();
+        });
+
+        it('should throw an error if pipeline output has no data field', async () => {
+            mockPipeline.mockResolvedValue(async () => ({}));
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            await expect(semanticSearch('test')).rejects.toThrow('Embedding pipeline returned unexpected output');
+            expect(warnSpy).toHaveBeenCalledWith('[SemanticSearch][DEBUG] embed output is missing data:', {});
+            warnSpy.mockRestore();
+        });
+
+        it('should log a warning if queryEmbedding length is 0', async () => {
+            mockPipeline.mockResolvedValue(async () => ({
+                data: []
+            }));
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            await semanticSearch('test');
+            expect(warnSpy).toHaveBeenCalledWith('[SemanticSearch][DEBUG] queryEmbedding length:', 0);
+            warnSpy.mockRestore();
+        });
+
+        it('should handle concurrent requests waiting for the first one to finish loading', async () => {
+            let resolveLoad: any;
+            const loadPromise = new Promise(resolve => {
+                resolveLoad = resolve;
+            });
+            mockLoadTransformersPipeline.mockImplementation(async () => {
+                await loadPromise;
+                return (...args: any[]) => mockPipeline(...args);
+            });
+
+            // Fire first request
+            const firstRequest = semanticSearch('find X');
+            // Give it time to set isLoading = true
+            await new Promise(r => setTimeout(r, 50));
+            // Fire second request, it should await the ongoing load
+            const secondRequest = semanticSearch('find Y');
+
+            // Resolve the load
+            resolveLoad();
+
+            const [res1, res2] = await Promise.all([firstRequest, secondRequest]);
+            expect(res1[0].id).toBe('m1');
+            expect(res2[0].id).toBe('m2');
+
+            // Should only have been called once
+            expect(mockLoadTransformersPipeline).toHaveBeenCalledTimes(1);
+        });
+
+        it('should handle concurrent requests where the first one throws', async () => {
+            let resolveLoad: any;
+            let rejectLoad: any;
+            const loadPromise = new Promise((resolve, reject) => {
+                resolveLoad = resolve;
+                rejectLoad = reject;
+            });
+            mockLoadTransformersPipeline.mockImplementation(async () => {
+                await loadPromise;
+            });
+
+            // Fire first request
+            const firstRequest = semanticSearch('find X');
+            // Give it time to set isLoading = true
+            await new Promise(r => setTimeout(r, 50));
+            // Fire second request, it should await the ongoing load and throw the cached error
+            const secondRequest = semanticSearch('find Y');
+
+            // Reject the load
+            rejectLoad(new Error('Network failure'));
+
+            await expect(firstRequest).rejects.toThrow('Network failure');
+            await expect(secondRequest).rejects.toThrow('Network failure');
+        });
+
         it('should handle fetch failure by throwing', async () => {
             // Override the default mock for this specific test
             fetchSpy.mockResolvedValue({
@@ -179,6 +258,61 @@ describe('Semantic Search Service', () => {
 
             const ready = await isSemanticSearchReady();
             expect(ready).toBe(false);
+        });
+    });
+
+    describe('preloadEmbeddingModel', () => {
+        it('should start loading the model and catch any errors', async () => {
+            mockLoadTransformersPipeline.mockRejectedValue(new Error('Preload failure'));
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+            preloadEmbeddingModel();
+
+            // Yield the event loop to allow the catch block to run
+            await new Promise(r => setTimeout(r, 0));
+
+            expect(warnSpy).toHaveBeenCalledWith('[SemanticSearch] Failed to preload model:', expect.any(Error));
+            expect(warnSpy.mock.calls[0][1].message).toBe('Preload failure');
+
+            warnSpy.mockRestore();
+        });
+
+        it('should succeed silently on successful preload', async () => {
+            mockLoadTransformersPipeline.mockResolvedValue((...args: any[]) => mockPipeline(...args));
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+            preloadEmbeddingModel();
+
+            // Yield the event loop
+            await new Promise(r => setTimeout(r, 0));
+
+            expect(warnSpy).not.toHaveBeenCalled();
+            expect(_internalState.embedder).not.toBeNull();
+
+            warnSpy.mockRestore();
+        });
+    });
+
+    describe('getAllModels', () => {
+        it('should return all models from the index with a score of 1', async () => {
+            vi.spyOn(global, 'fetch').mockResolvedValue({
+                ok: true,
+                json: async () => mockIndex
+            } as Response);
+
+            const models = await getAllModels();
+
+            expect(models).toHaveLength(2);
+            expect(models[0]).toEqual({
+                id: 'm1',
+                filename: 'model1.bngl',
+                path: '/path/m1',
+                category: 'test',
+                preview: 'preview1',
+                score: 1
+            });
+            expect(models[1].id).toBe('m2');
+            expect(models[1].score).toBe(1);
         });
     });
 
