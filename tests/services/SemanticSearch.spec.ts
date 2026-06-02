@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cosineSimilarity, semanticSearch, isSemanticSearchReady, resetSemanticSearchState, _internalState } from '../../services/semanticSearch';
+import { cosineSimilarity, semanticSearch, isSemanticSearchReady, resetSemanticSearchState, preloadEmbeddingModel, getAllModels, _internalState } from '../../services/semanticSearch';
 
 // Mock fetching the index
 const mockIndex = {
@@ -204,6 +204,66 @@ describe('Semantic Search Service', () => {
             expect(_internalState.embeddingsIndex).toBeNull();
             expect(_internalState.isLoading).toBe(false);
             expect(_internalState.loadError).toBeNull();
+        });
+    });
+
+    describe('preloadEmbeddingModel', () => {
+        it('should trigger model loading', async () => {
+            mockLoadTransformersPipeline.mockResolvedValue((...args: any[]) => mockPipeline(...args));
+
+            // start preloading
+            preloadEmbeddingModel();
+
+            // let promises resolve
+            await new Promise(r => setTimeout(r, 50));
+
+            expect(mockLoadTransformersPipeline).toHaveBeenCalled();
+            expect(_internalState.embedder).not.toBeNull();
+        });
+
+        it('should catch and warn on load failure', async () => {
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const error = new Error('Preload failure');
+            mockLoadTransformersPipeline.mockRejectedValue(error);
+
+            preloadEmbeddingModel();
+
+            // let promises resolve
+            await new Promise(r => setTimeout(r, 50));
+
+            expect(warnSpy).toHaveBeenCalledWith('[SemanticSearch] Failed to preload model:', error);
+            warnSpy.mockRestore();
+        });
+    });
+
+    describe('getAllModels', () => {
+        it('should load index and return all mapped models with score 1', async () => {
+            vi.spyOn(global, 'fetch').mockResolvedValue({
+                ok: true,
+                json: async () => mockIndex
+            } as Response);
+
+            const results = await getAllModels();
+
+            expect(results.length).toBe(2);
+            expect(results[0].id).toBe('m1');
+            expect(results[0].score).toBe(1);
+            expect(results[1].id).toBe('m2');
+            expect(results[1].score).toBe(1);
+            // Verify fields are correctly mapped
+            expect(results[0].filename).toBe('model1.bngl');
+            expect(results[0].path).toBe('/path/m1');
+            expect(results[0].category).toBe('test');
+            expect(results[0].preview).toBe('preview1');
+        });
+
+        it('should propagate errors from getEmbeddingsIndex if fetch fails', async () => {
+            vi.spyOn(global, 'fetch').mockResolvedValue({
+                ok: false,
+                status: 500
+            } as Response);
+
+            await expect(getAllModels()).rejects.toThrow('Failed to load embeddings index: 500');
         });
     });
 });
