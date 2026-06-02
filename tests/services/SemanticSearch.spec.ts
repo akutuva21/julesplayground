@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cosineSimilarity, semanticSearch, isSemanticSearchReady, resetSemanticSearchState, _internalState } from '../../services/semanticSearch';
+import { cosineSimilarity, semanticSearch, isSemanticSearchReady, preloadEmbeddingModel, getAllModels, resetSemanticSearchState, _internalState } from '../../services/semanticSearch';
 
 // Mock fetching the index
 const mockIndex = {
@@ -179,6 +179,87 @@ describe('Semantic Search Service', () => {
 
             const ready = await isSemanticSearchReady();
             expect(ready).toBe(false);
+        });
+    });
+
+    describe('preloadEmbeddingModel', () => {
+        let fetchSpy: any;
+
+        beforeEach(() => {
+            mockLoadTransformersPipeline.mockResolvedValue((...args: any[]) => mockPipeline(...args));
+
+            fetchSpy = vi.spyOn(global, 'fetch');
+            fetchSpy.mockResolvedValue({
+                ok: true,
+                json: async () => mockIndex
+            } as Response);
+
+            mockPipeline.mockResolvedValue(async () => {
+                return { data: new Float32Array([1, 0, 0]) };
+            });
+        });
+
+        it('should trigger embedding model load without throwing', async () => {
+            preloadEmbeddingModel();
+
+            // The function doesn't return a promise we can await directly,
+            // and it might resolve synchronously in tests or very quickly,
+            // so we wait for the state to settle
+            let attempts = 0;
+            while ((_internalState.embedder === null && _internalState.loadError === null) && attempts < 50) {
+                await new Promise(resolve => setTimeout(resolve, 10));
+                attempts++;
+            }
+
+            expect(_internalState.embedder).not.toBeNull();
+            expect(_internalState.loadError).toBeNull();
+        });
+
+        it('should handle load failure and log warning', async () => {
+            const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const error = new Error('Preload failed');
+            mockLoadTransformersPipeline.mockRejectedValue(error);
+
+            preloadEmbeddingModel();
+
+            // Wait for internal state to update to error state
+            let attempts = 0;
+            while (_internalState.loadError === null && attempts < 50) {
+                await new Promise(resolve => setTimeout(resolve, 10));
+                attempts++;
+            }
+
+            expect(_internalState.embedder).toBeNull();
+            expect(_internalState.loadError).toBe(error);
+            expect(consoleWarnSpy).toHaveBeenCalledWith('[SemanticSearch] Failed to preload model:', error);
+
+            consoleWarnSpy.mockRestore();
+        });
+    });
+
+    describe('getAllModels', () => {
+        it('should fetch embeddings index and return all models with score 1', async () => {
+            vi.spyOn(global, 'fetch').mockResolvedValue({
+                ok: true,
+                json: async () => mockIndex
+            } as Response);
+
+            const models = await getAllModels();
+
+            expect(models).toHaveLength(2);
+            expect(models[0].id).toBe('m1');
+            expect(models[0].score).toBe(1);
+            expect(models[1].id).toBe('m2');
+            expect(models[1].score).toBe(1);
+        });
+
+        it('should handle fetch failure', async () => {
+            vi.spyOn(global, 'fetch').mockResolvedValue({
+                ok: false,
+                status: 500
+            } as Response);
+
+            await expect(getAllModels()).rejects.toThrow('Failed to load embeddings index: 500');
         });
     });
 
