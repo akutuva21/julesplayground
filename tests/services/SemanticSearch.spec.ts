@@ -1,6 +1,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cosineSimilarity, semanticSearch, isSemanticSearchReady, resetSemanticSearchState, _internalState } from '../../services/semanticSearch';
+import { cosineSimilarity, semanticSearch, isSemanticSearchReady, getAllModels, preloadEmbeddingModel, resetSemanticSearchState, _internalState } from '../../services/semanticSearch';
 
 // Mock fetching the index
 const mockIndex = {
@@ -179,6 +179,59 @@ describe('Semantic Search Service', () => {
 
             const ready = await isSemanticSearchReady();
             expect(ready).toBe(false);
+        });
+    });
+
+    describe('preloadEmbeddingModel', () => {
+        it('should call getEmbedder silently when successful', async () => {
+            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            mockLoadTransformersPipeline.mockResolvedValue((...args: any[]) => mockPipeline(...args));
+
+            // Should not throw
+            preloadEmbeddingModel();
+
+            // Wait a tick for the promise to resolve
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(consoleSpy).not.toHaveBeenCalled();
+        });
+
+        it('should catch and log error when getEmbedder fails', async () => {
+            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            mockLoadTransformersPipeline.mockRejectedValue(new Error('Preload failed'));
+
+            preloadEmbeddingModel();
+
+            // Wait a tick for the promise rejection
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(consoleSpy).toHaveBeenCalledWith(
+                '[SemanticSearch] Failed to preload model:',
+                expect.any(Error)
+            );
+        });
+    });
+
+    describe('getAllModels', () => {
+        it('should return all models with score 1', async () => {
+            vi.spyOn(global, 'fetch').mockResolvedValue({
+                ok: true,
+                json: async () => mockIndex
+            } as Response);
+
+            const results = await getAllModels();
+
+            expect(results.length).toBe(2);
+            expect(results[0].id).toBe('m1');
+            expect(results[0].score).toBe(1);
+            expect(results[1].id).toBe('m2');
+            expect(results[1].score).toBe(1);
+        });
+
+        it('should throw if index fails to load', async () => {
+            vi.spyOn(global, 'fetch').mockRejectedValue(new Error('Index failed'));
+
+            await expect(getAllModels()).rejects.toThrow('Index failed');
         });
     });
 
