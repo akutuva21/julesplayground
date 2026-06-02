@@ -1,13 +1,91 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+    canUseSharedArrayBuffer,
     createSharedEnsembleResults,
+    generateSecureMessageId,
     getSharedEnsembleFeatureVector,
+    isSharedEnsembleResultsHandle,
     materializeSharedSimulationResult,
     writeSimulationResultsToShared,
 } from '../../services/BnglWorkerPool';
 import { mergeSimulationOptionsWithModelActionDefaults } from '../../services/bnglWorker';
 
 describe('BnglWorkerPool shared ensemble helpers', () => {
+    describe('isSharedEnsembleResultsHandle', () => {
+        it('returns true for a valid handle', () => {
+            const handle = createSharedEnsembleResults(1, ['A'], 1);
+            expect(isSharedEnsembleResultsHandle(handle)).toBe(true);
+        });
+
+        it('returns false for arrays, undefined, null, or invalid objects', () => {
+            expect(isSharedEnsembleResultsHandle([])).toBe(false);
+            expect(isSharedEnsembleResultsHandle([{} as any])).toBe(false);
+            expect(isSharedEnsembleResultsHandle(undefined)).toBe(false);
+            expect(isSharedEnsembleResultsHandle(null)).toBe(false);
+            expect(isSharedEnsembleResultsHandle({ kind: 'other' } as any)).toBe(false);
+        });
+    });
+
+    describe('canUseSharedArrayBuffer', () => {
+        it('returns true if SharedArrayBuffer is available and can be instantiated', () => {
+            // In Node/Vitest environment, SharedArrayBuffer is typically available.
+            const original = globalThis.SharedArrayBuffer;
+            expect(canUseSharedArrayBuffer()).toBe(typeof original !== 'undefined');
+        });
+
+        it('returns false if SharedArrayBuffer throws or is unavailable', () => {
+            const original = globalThis.SharedArrayBuffer;
+            vi.stubGlobal('SharedArrayBuffer', undefined);
+            try {
+                expect(canUseSharedArrayBuffer()).toBe(false);
+            } finally {
+                if (original) {
+                    vi.stubGlobal('SharedArrayBuffer', original);
+                } else {
+                    vi.unstubAllGlobals();
+                }
+            }
+        });
+    });
+
+    describe('generateSecureMessageId', () => {
+        it('generates a secure message ID using crypto.getRandomValues', () => {
+            const mockCrypto = {
+                getRandomValues: (arr: Uint32Array) => {
+                    arr[0] = 42;
+                    return arr;
+                }
+            };
+            const originalCrypto = globalThis.crypto;
+            vi.stubGlobal('crypto', mockCrypto);
+
+            try {
+                expect(generateSecureMessageId()).toBe(42);
+            } finally {
+                if (originalCrypto !== undefined) {
+                    vi.stubGlobal('crypto', originalCrypto);
+                } else {
+                    vi.unstubAllGlobals();
+                }
+            }
+        });
+
+        it('throws an error if crypto is not defined', () => {
+            const originalCrypto = globalThis.crypto;
+            vi.stubGlobal('crypto', undefined);
+
+            try {
+                expect(() => generateSecureMessageId()).toThrow('Secure random generation is not supported in this environment');
+            } finally {
+                if (originalCrypto !== undefined) {
+                    vi.stubGlobal('crypto', originalCrypto);
+                } else {
+                    vi.unstubAllGlobals();
+                }
+            }
+        });
+    });
+
     it('writes and materializes shared ensemble runs without copying per-read', () => {
         const shared = createSharedEnsembleResults(2, ['time', 'A', 'B'], 2);
 
