@@ -85,9 +85,9 @@ function runNativeNFsim(modelName: string, parsedModel: ReturnType<typeof parseB
         throw new Error('NFsim completed without producing GDAT output');
     }
 
-    try { fs.rmSync(xmlPath); } catch (e) { }
-    try { fs.rmSync(gdatPath); } catch (e) { }
-    try { fs.rmSync(speciesPath); } catch (e) { }
+    fs.rmSync(xmlPath, { force: true });
+    fs.rmSync(gdatPath, { force: true });
+    fs.rmSync(speciesPath, { force: true });
 
     return elapsedMs;
 }
@@ -465,11 +465,11 @@ describe.skipIf(!hasBNG2)('Full Published Models Benchmark', () => {
                 }
 
                 // Cleanup temp file
-                try { fs.rmSync(netFile); } catch (e) { }
-                try { fs.rmSync(tempBnglPath); } catch (e) { }
-                try { fs.rmSync(path.join(tempDir, `${modelData.name}.log`)); } catch (e) { }
-                try { fs.rmSync(path.join(tempDir, `${modelData.name}.gdat`)); } catch (e) { }
-                try { fs.rmSync(path.join(tempDir, `${modelData.name}.cdat`)); } catch (e) { }
+                fs.rmSync(netFile, { force: true });
+                fs.rmSync(tempBnglPath, { force: true });
+                fs.rmSync(path.join(tempDir, `${modelData.name}.log`), { force: true });
+                fs.rmSync(path.join(tempDir, `${modelData.name}.gdat`), { force: true });
+                fs.rmSync(path.join(tempDir, `${modelData.name}.cdat`), { force: true });
 
             } catch (bngErr: any) {
                 result.bng2Error = "BNG2 Failed/Timeout";
