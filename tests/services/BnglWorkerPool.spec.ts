@@ -1,11 +1,90 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
     createSharedEnsembleResults,
     getSharedEnsembleFeatureVector,
     materializeSharedSimulationResult,
     writeSimulationResultsToShared,
+    isSharedEnsembleResultsHandle,
+    canUseSharedArrayBuffer,
+    generateSecureMessageId,
 } from '../../services/BnglWorkerPool';
 import { mergeSimulationOptionsWithModelActionDefaults } from '../../services/bnglWorker';
+
+describe('BnglWorkerPool utility functions', () => {
+    describe('isSharedEnsembleResultsHandle', () => {
+        it('returns true for a valid handle', () => {
+            const handle = createSharedEnsembleResults(1, ['A'], 1);
+            expect(isSharedEnsembleResultsHandle(handle)).toBe(true);
+        });
+
+        it('returns false for arrays, null, undefined, and objects without kind: "shared"', () => {
+            expect(isSharedEnsembleResultsHandle(null)).toBe(false);
+            expect(isSharedEnsembleResultsHandle(undefined)).toBe(false);
+            expect(isSharedEnsembleResultsHandle([])).toBe(false);
+            expect(isSharedEnsembleResultsHandle([{} as any])).toBe(false);
+            expect(isSharedEnsembleResultsHandle({ kind: 'somethingElse' } as any)).toBe(false);
+            expect(isSharedEnsembleResultsHandle({} as any)).toBe(false);
+        });
+    });
+
+    describe('canUseSharedArrayBuffer', () => {
+        let originalSharedArrayBuffer: any;
+
+        beforeEach(() => {
+            originalSharedArrayBuffer = globalThis.SharedArrayBuffer;
+        });
+
+        afterEach(() => {
+            globalThis.SharedArrayBuffer = originalSharedArrayBuffer;
+        });
+
+        it('returns true when SharedArrayBuffer is defined and works correctly', () => {
+            expect(canUseSharedArrayBuffer()).toBe(true);
+        });
+
+        it('returns false when SharedArrayBuffer is undefined', () => {
+            (globalThis as any).SharedArrayBuffer = undefined;
+            expect(canUseSharedArrayBuffer()).toBe(false);
+        });
+
+        it('returns false when SharedArrayBuffer constructor throws an error', () => {
+            (globalThis as any).SharedArrayBuffer = function() {
+                throw new Error('Not supported');
+            };
+            expect(canUseSharedArrayBuffer()).toBe(false);
+        });
+    });
+
+    describe('generateSecureMessageId', () => {
+        beforeEach(() => {
+            // Restore any mocks
+            vi.restoreAllMocks();
+        });
+
+        it('returns a random number when crypto is available', () => {
+            // Ensure crypto is mocked to work
+            vi.stubGlobal('crypto', {
+                getRandomValues: (arr: Uint32Array) => {
+                    arr[0] = 12345;
+                    return arr;
+                }
+            });
+            const id = generateSecureMessageId();
+            expect(typeof id).toBe('number');
+            expect(id).toBe(12345);
+        });
+
+        it('throws an error when crypto is undefined', () => {
+            vi.stubGlobal('crypto', undefined);
+            expect(() => generateSecureMessageId()).toThrow('Secure random generation is not supported');
+        });
+
+        it('throws an error when crypto.getRandomValues is undefined', () => {
+            vi.stubGlobal('crypto', { getRandomValues: undefined });
+            expect(() => generateSecureMessageId()).toThrow('Secure random generation is not supported');
+        });
+    });
+});
 
 describe('BnglWorkerPool shared ensemble helpers', () => {
     it('writes and materializes shared ensemble runs without copying per-read', () => {
