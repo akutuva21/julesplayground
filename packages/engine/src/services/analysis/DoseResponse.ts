@@ -490,7 +490,7 @@ async function computeDoseResponseBySimulation(
 
 export async function computeDoseResponse(
   config: DoseResponseConfig,
-): DoseResponseResult {
+): Promise<DoseResponseResult> {
   const {
     model,
     reactions,
@@ -672,7 +672,7 @@ export async function computeDoseResponse(
   }
 
   const totalRootfindPoints = curves.reduce((acc, curve) => acc + curve.responses.length, 0);
-  if (totalRootfindPoints === 0 && config.method !== 'simulate') {
+  if (totalRootfindPoints === 0) {
       const simulated = await computeDoseResponseBySimulation(
           model,
           inputParameter,
