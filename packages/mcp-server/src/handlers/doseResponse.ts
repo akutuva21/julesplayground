@@ -195,7 +195,7 @@ export async function handleDoseResponse(args: ToolArgs): Promise<ToolResult<any
             }
         }
 
-        const result = computeDoseResponse({
+        const result = await computeDoseResponse({
             model,
             reactions: expanded.reactions ?? [],
             species: expanded.species,
