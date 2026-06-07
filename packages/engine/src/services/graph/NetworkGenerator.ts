@@ -1242,9 +1242,9 @@ export class NetworkGenerator {
         }
 
         let targetCompIdx: number | null = null;
-        const parts = targetCompKey.split('.');
-        if (parts.length === 2) {
-          const parsed = Number(parts[1]);
+        const dotIdx = targetCompKey.indexOf('.');
+        if (dotIdx !== -1) {
+          const parsed = Number(targetCompKey.slice(dotIdx + 1));
           if (Number.isFinite(parsed)) targetCompIdx = parsed;
         }
         if (targetCompIdx === null) return null;
@@ -1927,7 +1927,8 @@ export class NetworkGenerator {
         const targetCompKey = match.componentMap.get(`${patternMolIdx}.${patternCompIdx}`);
         if (!targetCompKey) return false;
 
-        const targetCompIdx = Number(targetCompKey.split('.')[1]);
+        const dotIdx = targetCompKey.indexOf('.');
+        const targetCompIdx = dotIdx !== -1 ? Number(targetCompKey.slice(dotIdx + 1)) : Number(targetCompKey);
         const targetComp = targetMol.components[targetCompIdx];
         if (!targetComp) return false;
 
@@ -3307,7 +3308,8 @@ export class NetworkGenerator {
         let invalidInterComplexBond = false;
         for (const [key1, partners] of fullProductGraph.adjacency) {
           if (invalidInterComplexBond) break;
-          const mol1Idx = parseInt(key1.split('.')[0], 10);
+          const dotIdx1 = key1.indexOf('.');
+          const mol1Idx = parseInt(dotIdx1 !== -1 ? key1.slice(0, dotIdx1) : key1, 10);
           const mol1 = fullProductGraph.molecules[mol1Idx] as Molecule & { _sourceKey?: string };
           if (!mol1?._sourceKey) continue;
           const _cIdx5 = mol1._sourceKey.indexOf(':');
@@ -3317,7 +3319,8 @@ export class NetworkGenerator {
             const bondId = key1 < key2 ? `${key1}||${key2}` : `${key2}||${key1}`;
             if (seenBondIds.has(bondId)) continue;
             seenBondIds.add(bondId);
-            const mol2Idx = parseInt(key2.split('.')[0], 10);
+            const dotIdx2 = key2.indexOf('.');
+            const mol2Idx = parseInt(dotIdx2 !== -1 ? key2.slice(0, dotIdx2) : key2, 10);
             const mol2 = fullProductGraph.molecules[mol2Idx] as Molecule & { _sourceKey?: string };
             if (!mol2?._sourceKey) continue;
             const _cIdx6 = mol2._sourceKey.indexOf(':');
@@ -5202,7 +5205,8 @@ export class NetworkGenerator {
             const targetKey = exactComponentMapTarget;
 
             if (!targetKey) continue;
-            const idx = Number(targetKey.split('.')[1]);
+            const dotIdx = targetKey.indexOf('.');
+            const idx = dotIdx !== -1 ? Number(targetKey.slice(dotIdx + 1)) : NaN;
             if (usedSet.has(idx)) continue;
 
             // IMPORTANT: The componentMap lookup is ambiguous when multiple components share the
@@ -5876,9 +5880,9 @@ export class NetworkGenerator {
           const targetCompKey = match.componentMap.get(`${molIdxInPattern}.${compIdx}`);
           let targetCompIdx: number;
           if (targetCompKey) {
-            const parts = targetCompKey.split('.');
-            if (parts.length !== 2) return null;
-            const parsed = Number(parts[1]);
+            const dotIdx = targetCompKey.indexOf('.');
+            if (dotIdx === -1) return null;
+            const parsed = Number(targetCompKey.slice(dotIdx + 1));
             if (!Number.isFinite(parsed)) return null;
             targetCompIdx = parsed;
           } else {
@@ -5981,7 +5985,8 @@ export class NetworkGenerator {
               const bondDegree = comp.edges.size;
               const partnerKeys = reactantSpecies.graph.adjacency.get(`${molIdx}.${ci}`) ?? [];
               const neighborSigs = partnerKeys.map((pk: string) => {
-                const partnerMolIdx = parseInt(pk.split('.')[0]);
+                const dotIdx = pk.indexOf('.');
+                const partnerMolIdx = parseInt(dotIdx !== -1 ? pk.slice(0, dotIdx) : pk, 10);
                 const neighborMol = reactantSpecies.graph.molecules[partnerMolIdx];
                 if (!neighborMol) return '?';
                 // Local (degree-only) sig of neighbor: captures name+state+bond degree
