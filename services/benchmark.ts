@@ -176,11 +176,6 @@ export async function runBenchmark(timeoutMs: number = 60000): Promise<Benchmark
   }
 
   // Summary
-  console.log('');
-  console.log('='.repeat(60));
-  console.log('SUMMARY');
-  console.log('='.repeat(60));
-
   const successful = results.filter(r => r.status === 'success');
   const failed = results.filter(r => r.status === 'failed');
   const timedOut = results.filter(r => r.status === 'timeout');
