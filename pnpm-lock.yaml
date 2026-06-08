@@ -35,6 +35,9 @@ importers:
       d3:
         specifier: ^7.9.0
         version: 7.9.0
+      decimal.js:
+        specifier: ^10.6.0
+        version: 10.6.0
       jsep:
         specifier: ^1.4.0
         version: 1.4.0

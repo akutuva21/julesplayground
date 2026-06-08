@@ -241,10 +241,6 @@ console.debug = (...args: any[]) => {
     originalConsoleDebug?.(...args);
   }
 };
-const workerVerboseLog = (...args: any[]) => {
-  if (!WORKER_VERBOSE_LOGS) return;
-  console.log(...args);
-};
 const cachedModels = new Map<number, BNGLModel>();
 let nextModelId = 1;
 // LRU cache size limit for cached models inside the worker
@@ -420,7 +416,7 @@ export function getCacheSizes() {
 
 async function parseBNGL(jobId: number, bnglCode: string): Promise<BNGLModel> {
   ensureNotCancelled(jobId);
-  workerVerboseLog('[Worker-Debug] parseBNGL called for job', jobId);
+  console.debug('[Worker-Debug] parseBNGL called for job', jobId);
 
   // 1. Parse via ANTLR best-effort model recovery (preserves recoverable legacy inputs)
   const parseResult = parseBNGLWithANTLR(bnglCode);
@@ -436,7 +432,7 @@ async function parseBNGL(jobId: number, bnglCode: string): Promise<BNGLModel> {
 
   // 2. Resolve compartmental volumes if needed
   if (requiresCompartmentResolution(model)) {
-    workerVerboseLog('[Worker] Model has compartments, resolving volumes...');
+    console.debug('[Worker] Model has compartments, resolving volumes...');
     return await resolveCompartmentVolumes(model);
   }
 
@@ -492,16 +488,16 @@ if (typeof ctx.addEventListener === 'function') {
     }
 
     if (type === 'atomize') {
-      workerVerboseLog(`[Worker] Received atomize request ${id}`);
+      console.debug(`[Worker] Received atomize request ${id}`);
       registerJob(id);
       try {
         const sbml = typeof payload === 'string' ? payload : '';
         const atomizer = new Atomizer();
-        workerVerboseLog('[Worker] Initializing atomizer...');
+        console.debug('[Worker] Initializing atomizer...');
         await atomizer.initialize();
-        workerVerboseLog('[Worker] Starting atomization...');
+        console.debug('[Worker] Starting atomization...');
         const result = await atomizer.atomize(sbml);
-        workerVerboseLog('[Worker] Atomization complete', id, 'success=', result.success);
+        console.debug('[Worker] Atomization complete', id, 'success=', result.success);
         const response: WorkerResponse = { id, type: 'atomize_success', payload: result };
         ctx.postMessage(response);
       } catch (error) {
@@ -557,7 +553,7 @@ if (typeof ctx.addEventListener === 'function') {
               (cached.reactions || []).forEach((r) => {
                 const rateConst = nextModel.parameters[r.rate] ?? Number.parseFloat(r.rate);
                 if (isNaN(rateConst)) {
-                  workerVerboseLog('[Worker] Unresolved rate parameter:', r.rate);
+                  console.debug('[Worker] Unresolved rate parameter:', r.rate);
                   // If we can't resolve it, we'll let SimulationLoop handle it (sets to 0) 
                   // but we'll log it here for diagnostics.
                 }
@@ -616,15 +612,15 @@ if (typeof ctx.addEventListener === 'function') {
 
           const VERBOSE_BNGL_WORKER_DEBUG = false; // enable for extra bngl worker debug
           if (VERBOSE_BNGL_WORKER_DEBUG) {
-            workerVerboseLog(
+            console.debug(
               `[Worker Debug] Resolved method: ${effectiveMethod}, isNF=${isNF}, hasMixedMethods=${hasMixedMethods}`
             );
           }
 
           if (hasRules && !hasReactions && !isNF) {
-            workerVerboseLog('[Worker] Auto-generating network from reaction rules...');
-            workerVerboseLog('[Worker] Model parameters:', model.parameters);
-            workerVerboseLog('[Worker] Model reactionRules:', model.reactionRules.map((r, i) => `${i}: ${r.rate}`));
+            console.debug('[Worker] Auto-generating network from reaction rules...');
+            console.debug('[Worker] Model parameters:', model.parameters);
+            console.debug('[Worker] Model reactionRules:', model.reactionRules.map((r, i) => `${i}: ${r.rate}`));
             try {
               // Ensure evaluator is loaded for network generation
               // CRITICAL: We MUST load the evaluator - the fallback returns zeros for all expressions
@@ -635,7 +631,7 @@ if (typeof ctx.addEventListener === 'function') {
                 () => ensureNotCancelled(id),
                 (p) => safePostMessage({ id, type: 'generate_network_progress', payload: p })
               );
-              workerVerboseLog(
+              console.debug(
                 `[Worker] Network auto-generation complete: ${model.species.length} species, ${model.reactions?.length ?? 0} reactions`
               );
             } catch (genError) {
@@ -649,7 +645,7 @@ if (typeof ctx.addEventListener === 'function') {
             // For mixed-method workflows, use the main simulation loop
             // which will delegate individual phases to appropriate simulators
             if (hasMixedMethods) {
-              workerVerboseLog('[Worker] Using mixed-method simulation workflow');
+              console.debug('[Worker] Using mixed-method simulation workflow');
               return await simulate(id, model, options, {
                 checkCancelled: () => ensureNotCancelled(id),
                 postMessage: (msg) => forwardWorkerNotification(id, msg as Record<string, unknown>)
@@ -658,7 +654,7 @@ if (typeof ctx.addEventListener === 'function') {
 
             // For pure NFsim simulations (all phases are 'nf' or single phase)
             if (isNF) {
-              workerVerboseLog('[Worker] Using NFsim for simulation');
+              console.debug('[Worker] Using NFsim for simulation');
 
               if (!model) throw new Error('Model missing for NFsim simulation');
               if (!options) throw new Error('Options missing for NFsim simulation');
@@ -703,7 +699,7 @@ if (typeof ctx.addEventListener === 'function') {
               return await runNFsimSimulation(model, nfOptions, id);
 
             } else {
-              workerVerboseLog(
+              console.debug(
                 `[Worker] Received 'simulate' request. Model has ${phases.length} phases. Options: t_end=${options?.t_end}, method=${options?.method}`
               );
               if (!model || !options) throw new Error('Model or options missing during simulate');
@@ -785,7 +781,7 @@ if (typeof ctx.addEventListener === 'function') {
               cachedModels.delete(oldest);
               // best-effort notification
 
-              workerVerboseLog('[Worker] Evicted cached model (LRU) id=', oldest);
+              console.debug('[Worker] Evicted cached model (LRU) id=', oldest);
             }
           }
         } catch (e) {
@@ -848,20 +844,20 @@ if (typeof ctx.addEventListener === 'function') {
              if (genAction) {
                  const actionMaxIter = Number(genAction.args['max_iter']);
                  if (!isNaN(actionMaxIter)) {
-                     workerVerboseLog(`[Worker] Overriding maxIterations with model action value: ${actionMaxIter}`);
+                     console.debug(`[Worker] Overriding maxIterations with model action value: ${actionMaxIter}`);
                      options = { ...options, maxIterations: actionMaxIter };
                  }
                  
                  const actionMaxAgg = Number(genAction.args['max_agg']);
                  if (!isNaN(actionMaxAgg)) {
-                     workerVerboseLog(`[Worker] Overriding maxAgg with model action value: ${actionMaxAgg}`);
+                     console.debug(`[Worker] Overriding maxAgg with model action value: ${actionMaxAgg}`);
                      options = { ...options, maxAgg: actionMaxAgg };
                  }
                  
                  const actionMaxStoich = Number(genAction.args['max_stoich']);
                  if (!isNaN(actionMaxStoich)) {
                     // For simple numeric max_stoich
-                     workerVerboseLog(`[Worker] Overriding maxStoich with model action value: ${actionMaxStoich}`);
+                     console.debug(`[Worker] Overriding maxStoich with model action value: ${actionMaxStoich}`);
                      // Note: NetworkGenerator expects Map<string, number> or number, simplified here
                      options = { ...options, maxStoich: actionMaxStoich as any };
                  }
@@ -908,7 +904,7 @@ if (typeof ctx.addEventListener === 'function') {
     }
 
     if (type === 'analyse_network') {
-      workerVerboseLog('[Worker] Received analyse_network request', id);
+      console.debug('[Worker] Received analyse_network request', id);
       registerJob(id);
       try {
         const analysisPayload = payload as NetworkAnalysisPayload;
