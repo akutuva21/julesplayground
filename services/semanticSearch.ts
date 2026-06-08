@@ -69,10 +69,6 @@ async function getEmbedder(): Promise<Pipeline> {
   try {
     console.log('[SemanticSearch] Loading embedding model...');
 
-    // Use a small runtime loader that picks the correct transformers backend
-    // for the current environment (browser: UMD on window or CDN; Node: direct import).
-    // This centralizes the browser-safe logic and keeps the Vite build from
-    // accidentally pulling Node-only code into client chunks.
     const { loadTransformersPipeline } = await import('@/src/utils/transformersLoader');
     const pipeline = await loadTransformersPipeline();
     embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
