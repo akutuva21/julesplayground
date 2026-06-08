@@ -101,7 +101,6 @@ async function getEmbeddingsIndex(): Promise<EmbeddingsIndex> {
   }
 
   embeddingsIndex = await response.json();
-  console.log(`[SemanticSearch] Loaded ${embeddingsIndex!.count} model embeddings.`);
   return embeddingsIndex!;
 }
 
