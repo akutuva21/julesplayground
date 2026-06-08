@@ -102,8 +102,6 @@ export async function runBenchmark(timeoutMs: number = 60000): Promise<Benchmark
   console.log('='.repeat(60));
   console.log('BIONETGEN WEB SIMULATOR BENCHMARK');
   console.log('='.repeat(60));
-  console.log(`Testing ${PUBLISHED_MODELS.length} models with ${timeoutMs / 1000}s timeout`);
-  console.log('');
 
   for (let i = 0; i < PUBLISHED_MODELS.length; i++) {
     const modelPath = PUBLISHED_MODELS[i];
