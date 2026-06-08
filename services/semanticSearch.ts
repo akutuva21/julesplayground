@@ -77,7 +77,6 @@ async function getEmbedder(): Promise<Pipeline> {
     const pipeline = await loadTransformersPipeline();
     embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
 
-    console.log('[SemanticSearch] Model loaded.');
     return embedder;
   } catch (err) {
     loadError = err instanceof Error ? err : new Error(String(err));
