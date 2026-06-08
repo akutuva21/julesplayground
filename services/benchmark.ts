@@ -156,10 +156,6 @@ export async function runBenchmark(timeoutMs: number = 60000): Promise<Benchmark
       result.numReactions = model.reactions?.length ?? 0;
       result.status = 'success';
 
-      // Get data point count as sanity check
-      const dataPoints = simResult.data?.length ?? 0;
-      console.log(`  ✓ Success: ${result.numSpecies} species, ${result.numReactions} rxns, ${dataPoints} pts, ${result.totalTime.toFixed(0)}ms`);
-
     } catch (error: any) {
       if (error.message === 'Timeout') {
         result.status = 'timeout';
