@@ -81,7 +81,6 @@ async function _loadModule(): Promise<IgraphModule> {
   const mod = await loader({
     locateFile: (path: string) => {
       if (path.endsWith('.wasm')) {
-        console.log(`[IgraphLoader] Resolving ${path} → ${wasmUrl}`);
         return wasmUrl;
       }
       return path;
