@@ -67,8 +67,6 @@ async function getEmbedder(): Promise<Pipeline> {
 
   isLoading = true;
   try {
-    console.log('[SemanticSearch] Loading embedding model...');
-
     // Use a small runtime loader that picks the correct transformers backend
     // for the current environment (browser: UMD on window or CDN; Node: direct import).
     // This centralizes the browser-safe logic and keeps the Vite build from
@@ -77,7 +75,6 @@ async function getEmbedder(): Promise<Pipeline> {
     const pipeline = await loadTransformersPipeline();
     embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
 
-    console.log('[SemanticSearch] Model loaded.');
     return embedder;
   } catch (err) {
     loadError = err instanceof Error ? err : new Error(String(err));
@@ -101,7 +98,6 @@ async function getEmbeddingsIndex(): Promise<EmbeddingsIndex> {
   }
 
   embeddingsIndex = await response.json();
-  console.log(`[SemanticSearch] Loaded ${embeddingsIndex!.count} model embeddings.`);
   return embeddingsIndex!;
 }
 
