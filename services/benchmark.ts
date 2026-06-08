@@ -168,7 +168,6 @@ export async function runBenchmark(timeoutMs: number = 60000): Promise<Benchmark
       } else {
         result.status = 'failed';
         result.error = error.message;
-        console.log(`  ✗ FAILED: ${error.message?.substring(0, 80)}`);
       }
     }
 
