@@ -1,3 +1,0 @@
-## 2026-06-11 - Fast Graph Edge Iteration
-**Learning:** High-throughput internal string key parsing like `partner.split('.')` in core tight loops (e.g. graph building) creates short-lived arrays and strings, causing severe GC pressure.
-**Action:** Replace `const [molStr, compStr] = key.split('.')` with `const dotIdx = key.indexOf('.'); const mol = parseInt(key, 10); const comp = dotIdx !== -1 ? Number(key.substring(dotIdx + 1)) : 0` to dodge allocation where split string pieces are only needed as numbers. Fallback value on missing dot delimiter should be identical to the original logic matching (e.g. `NaN` or `0` depending on context validation).
