@@ -1,4 +1,0 @@
-## 2024-06-15 - Remove `new Function` from JITCompiler.ts to prevent arbitrary code execution
-**Vulnerability:** The methods `compileSSAPropensities` and `compileSSAPropensitiesWithFunctionalRates` in `JITCompiler.ts` dynamically assembled JavaScript code strings and passed them to `new Function(...)` to evaluate reaction propensities. This allowed for potential code injection.
-**Learning:** This existed to provide a "fast path" for propensity calculation in mass-action models. However, it violates security constraints and static analysis (CodeQL) checks.
-**Prevention:** Always use safe, pre-compiled AST evaluators (like `SafeExpressionEvaluator`) instead of dynamic code emission tools like `eval` or `new Function`. Fallback paths using these safe evaluators were already built into the simulation loops and function safely.
