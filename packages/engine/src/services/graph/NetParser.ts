@@ -65,7 +65,7 @@ export function parseNetFile(content: string): NetFileParseResult {
     let end = content.indexOf('\n', start);
     if (end === -1) end = len;
 
-    let hashIdx = content.indexOf('#', start);
+    const hashIdx = content.indexOf('#', start);
     let lineEndIdx = end;
     if (hashIdx !== -1 && hashIdx < end) {
       lineEndIdx = hashIdx;
