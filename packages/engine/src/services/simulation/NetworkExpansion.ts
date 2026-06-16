@@ -755,6 +755,7 @@ export async function generateExpandedNetwork(
             mols.push(name.substring(mStart, mEnd));
             start = dotIdx + 1;
         }
+
         for (let i = 0; i < mols.length; i++) {
             const m = mols[i];
             if (!molToSpecies.has(m)) molToSpecies.set(m, new Set());
@@ -803,10 +804,12 @@ export async function generateExpandedNetwork(
                 // Optimization Step 1: Filter Candidates
                 // Remove compartment tags to find base molecules required by the pattern.
                 const cleanPat = removeCompartment(trimmedPat);
-                const patParts = cleanPat.split('.');
                 const patMols: string[] = [];
-                for (let j = 0; j < patParts.length; j++) {
-                    let m = patParts[j];
+
+                let start = 0;
+                let end;
+                const processPatPart = (part: string) => {
+                    let m = part;
                     const parenIdx = m.indexOf('(');
                     if (parenIdx !== -1) {
                         m = m.substring(0, parenIdx);
@@ -814,7 +817,13 @@ export async function generateExpandedNetwork(
                     if (m) {
                         patMols.push(m);
                     }
+                };
+
+                while ((end = cleanPat.indexOf('.', start)) !== -1) {
+                    processPatPart(cleanPat.substring(start, end));
+                    start = end + 1;
                 }
+                processPatPart(cleanPat.substring(start));
 
                 let candidates: Iterable<number> = generatedSpecies.keys();
 
