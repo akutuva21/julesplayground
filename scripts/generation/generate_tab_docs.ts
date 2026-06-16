@@ -160,11 +160,22 @@ function renderFullSkeleton(tabs: TabEntry[]): string {
     lines.push('');
     lines.push('**Workflow:**');
     lines.push('');
-    lines.push('<!-- TODO: describe the tab\'s intended workflow -->');
+    lines.push('Explain the typical user journey, from input to output. What does the user need to provide? What does the tab produce or analyze?');
     lines.push('');
     lines.push('**Screenshots:**');
     lines.push('');
-    lines.push('<!-- TODO: add relevant screenshots -->');
+    const possibleImages = [`${t.id}.png`, `${t.id}-v2.png`];
+    let hasScreenshot = false;
+    for (const img of possibleImages) {
+      if (existsSync(join(resolve('docs/assets/screenshots'), img))) {
+        lines.push(`![Screenshot of ${t.label}](assets/screenshots/${img})`);
+        lines.push('');
+        hasScreenshot = true;
+      }
+    }
+    if (!hasScreenshot) {
+      lines.push('<!-- TODO: add relevant screenshots -->');
+    }
     lines.push('');
     lines.push('**Common pitfalls:**');
     lines.push('');
@@ -176,7 +187,14 @@ function renderFullSkeleton(tabs: TabEntry[]): string {
     lines.push('');
     lines.push('**See also:**');
     lines.push('');
-    lines.push('<!-- TODO: cross-references to tutorials, design docs, and related tabs -->');
+    lines.push('- [Quickstart Guide](quickstart.md)');
+    lines.push('- [Solvers Documentation](solvers.md)');
+    lines.push('- [MCP Server Reference](mcp-server.md)');
+    const relatedTabs = tabs.filter((other) => other.category === t.category && other.id !== t.id);
+    if (relatedTabs.length > 0) {
+      const relatedLinks = relatedTabs.map((other) => `[${other.label}](#${other.id})`);
+      lines.push(`- Related tabs: ${relatedLinks.join(', ')}`);
+    }
     lines.push('');
     lines.push('---');
     lines.push('');
