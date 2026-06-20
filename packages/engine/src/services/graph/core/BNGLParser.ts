@@ -645,32 +645,53 @@ export class BNGLParser {
    */
   static parseSeedSpecies(block: string, parameters: Map<string, number>): Map<string, number> {
     const seed = new Map<string, number>();
-    for (const raw of block.split('\n')) {
-      const line = raw.split('#')[0].trim();
-      if (!line) continue;
 
-      // Handle format: [index] [label:] species_pattern concentration_expression
-      let remaining = line;
-      const leadingMatch = remaining.match(/^(\d+)\s+/);
-      if (leadingMatch) {
-        remaining = remaining.slice(leadingMatch[0].length);
+    // ⚡ Bolt: Zero-allocation while loop using string indexes to avoid split('\n') array allocations
+    const len = block.length;
+    let idx = 0;
+    while (idx < len) {
+      let nextIdx = block.indexOf('\n', idx);
+      if (nextIdx === -1) nextIdx = len;
+
+      let hashIdx = block.indexOf('#', idx);
+      let endOfLineIdx = nextIdx;
+      if (hashIdx !== -1 && hashIdx < nextIdx) {
+        endOfLineIdx = hashIdx;
       }
 
-      const labelMatch = remaining.match(/^(\S+:)\s+/);
-      if (labelMatch) {
-        remaining = remaining.slice(labelMatch[0].length);
+      let startChar = idx;
+      while (startChar < endOfLineIdx && block.charCodeAt(startChar) <= 32) startChar++;
+
+      let endChar = endOfLineIdx - 1;
+      while (endChar >= startChar && block.charCodeAt(endChar) <= 32) endChar--;
+
+      if (startChar <= endChar) {
+        const line = block.slice(startChar, endChar + 1);
+
+        // Handle format: [index] [label:] species_pattern concentration_expression
+        let remaining = line;
+        const leadingMatch = remaining.match(/^(\d+)\s+/);
+        if (leadingMatch) {
+          remaining = remaining.slice(leadingMatch[0].length);
+        }
+
+        const labelMatch = remaining.match(/^(\S+:)\s+/);
+        if (labelMatch) {
+          remaining = remaining.slice(labelMatch[0].length);
+        }
+
+        const firstSpace = remaining.search(/\s/);
+        if (firstSpace !== -1) {
+          const speciesStr = remaining.slice(0, firstSpace);
+          const concentrationStr = remaining.slice(firstSpace).trim();
+
+          if (speciesStr && concentrationStr) {
+            const amt = this.evaluateExpression(concentrationStr, parameters);
+            seed.set(speciesStr, amt);
+          }
+        }
       }
-
-      const firstSpace = remaining.search(/\s/);
-      if (firstSpace === -1) continue;  // No concentration specified
-
-      const speciesStr = remaining.slice(0, firstSpace);
-      const concentrationStr = remaining.slice(firstSpace).trim();
-
-      if (!speciesStr || !concentrationStr) continue;
-
-      const amt = this.evaluateExpression(concentrationStr, parameters);
-      seed.set(speciesStr, amt);
+      idx = nextIdx + 1;
     }
     return seed;
   }
@@ -696,30 +717,51 @@ export class BNGLParser {
     const parameterNames = new Set<string>();
 
     // Parse each line in the block
-    for (const raw of block.split('\n')) {
-      const line = raw.split('#')[0].trim();
-      if (!line || line.toLowerCase().startsWith('begin') || line.toLowerCase().startsWith('end')) continue;
+    // ⚡ Bolt: Zero-allocation while loop using string indexes to avoid split('\n') array allocations
+    const len = block.length;
+    let idx = 0;
+    while (idx < len) {
+      let nextIdx = block.indexOf('\n', idx);
+      if (nextIdx === -1) nextIdx = len;
 
-      // Handle format: [index] [label:] species_pattern concentration_expression
-      let remaining = line;
-      const leadingMatch = remaining.match(/^(\d+)\s+/);
-      if (leadingMatch) remaining = remaining.slice(leadingMatch[0].length);
-
-      const labelMatch = remaining.match(/^(\S+:)\s+/);
-      if (labelMatch) remaining = remaining.slice(labelMatch[0].length);
-
-      const firstSpace = remaining.search(/\s/);
-      if (firstSpace === -1) continue;
-
-      const concentrationStr = remaining.slice(firstSpace).trim();
-      if (!concentrationStr) continue;
-
-      // Extract all potential identifiers from the concentration expression
-      // BNGL identifiers start with a letter/underscore and contain letters/digits/underscores
-      const idMatches = concentrationStr.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g);
-      for (const match of idMatches) {
-        parameterNames.add(match[1]);
+      let hashIdx = block.indexOf('#', idx);
+      let endOfLineIdx = nextIdx;
+      if (hashIdx !== -1 && hashIdx < nextIdx) {
+        endOfLineIdx = hashIdx;
       }
+
+      let startChar = idx;
+      while (startChar < endOfLineIdx && block.charCodeAt(startChar) <= 32) startChar++;
+
+      let endChar = endOfLineIdx - 1;
+      while (endChar >= startChar && block.charCodeAt(endChar) <= 32) endChar--;
+
+      if (startChar <= endChar) {
+        const line = block.slice(startChar, endChar + 1);
+        if (!line.toLowerCase().startsWith('begin') && !line.toLowerCase().startsWith('end')) {
+          // Handle format: [index] [label:] species_pattern concentration_expression
+          let remaining = line;
+          const leadingMatch = remaining.match(/^(\d+)\s+/);
+          if (leadingMatch) remaining = remaining.slice(leadingMatch[0].length);
+
+          const labelMatch = remaining.match(/^(\S+:)\s+/);
+          if (labelMatch) remaining = remaining.slice(labelMatch[0].length);
+
+          const firstSpace = remaining.search(/\s/);
+          if (firstSpace !== -1) {
+            const concentrationStr = remaining.slice(firstSpace).trim();
+            if (concentrationStr) {
+              // Extract all potential identifiers from the concentration expression
+              // BNGL identifiers start with a letter/underscore and contain letters/digits/underscores
+              const idMatches = concentrationStr.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\b/g);
+              for (const match of idMatches) {
+                parameterNames.add(match[1]);
+              }
+            }
+          }
+        }
+      }
+      idx = nextIdx + 1;
     }
 
     return Array.from(parameterNames);
