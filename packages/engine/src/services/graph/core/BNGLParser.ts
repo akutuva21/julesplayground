@@ -653,7 +653,7 @@ export class BNGLParser {
       let nextIdx = block.indexOf('\n', idx);
       if (nextIdx === -1) nextIdx = len;
 
-      let hashIdx = block.indexOf('#', idx);
+      const hashIdx = block.indexOf('#', idx);
       let endOfLineIdx = nextIdx;
       if (hashIdx !== -1 && hashIdx < nextIdx) {
         endOfLineIdx = hashIdx;
@@ -724,7 +724,7 @@ export class BNGLParser {
       let nextIdx = block.indexOf('\n', idx);
       if (nextIdx === -1) nextIdx = len;
 
-      let hashIdx = block.indexOf('#', idx);
+      const hashIdx = block.indexOf('#', idx);
       let endOfLineIdx = nextIdx;
       if (hashIdx !== -1 && hashIdx < nextIdx) {
         endOfLineIdx = hashIdx;
