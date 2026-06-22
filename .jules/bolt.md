@@ -1,0 +1,1 @@
+2026-06-19: Replaced Map usage in PatternMatcher backtrack arrays with Int32Array. Maps carry significant closure and memory overhead in hot paths compared to flat array indexing, which allows O(1) assignments and queries.
