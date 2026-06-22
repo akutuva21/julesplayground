@@ -23,7 +23,7 @@ export const sobolSensitivityArgsSchema = z.object({
     max_reactions: positiveInt.optional(),
 }).strict();
 
-const computeFimArgsSchema = z.object({
+export const computeFimArgsSchema = z.object({
     code: z.string().describe('BNGL model code'),
     parameters: z.array(z.string()).optional().describe('Parameter names to include in FIM (default: all)'),
     all_timepoints: z.boolean().optional().describe('Use all timepoints (default: true)'),

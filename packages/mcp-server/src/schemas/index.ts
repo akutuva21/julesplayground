@@ -13,6 +13,7 @@ export {
 export {
     sobolSensitivityArgsSchema,
 
+    computeFimArgsSchema,
     identifiabilityArgsSchema,
     bayesianInferenceArgsSchema,
     perturbationScreenArgsSchema,
