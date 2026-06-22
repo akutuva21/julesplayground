@@ -145,6 +145,16 @@ export function applyNetworkOptions<T extends { max_agents?: number; max_reactio
     };
 }
 
+/**
+ * Expands a rule-based BNGL model into a fully-realized reaction network of species and reactions.
+ *
+ * This function wraps the core engine's `generateExpandedNetwork` algorithm. It processes
+ * the input model to expand its rules and seed species into a complete network. Progress
+ * callbacks are ignored in this headless context by providing empty functions.
+ *
+ * @param {BNGLModel} model - The parsed BNGL model to be expanded.
+ * @returns {Promise<BNGLModel>} A promise resolving to the fully expanded BNGL model.
+ */
 export async function expandModel(model: BNGLModel): Promise<BNGLModel> {
     return generateExpandedNetwork(
         model,
