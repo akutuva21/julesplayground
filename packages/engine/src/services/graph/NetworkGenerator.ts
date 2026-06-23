@@ -291,9 +291,9 @@ function joinSortedIndices(arr: number[]): string {
   }
   if (len === 3) {
     let a = arr[0], b = arr[1], c = arr[2];
-    if (a > b) { let t = a; a = b; b = t; }
-    if (b > c) { let t = b; b = c; c = t; }
-    if (a > b) { let t = a; a = b; b = t; }
+    if (a > b) { const t = a; a = b; b = t; }
+    if (b > c) { const t = b; b = c; c = t; }
+    if (a > b) { const t = a; a = b; b = t; }
     return a + ',' + b + ',' + c;
   }
   return arr.slice().sort((a, b) => a - b).join(',');
