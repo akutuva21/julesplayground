@@ -78,7 +78,7 @@ function stripBNGLComments(src: string): string {
     let endIdx = src.indexOf('\n', startIdx);
     if (endIdx === -1) endIdx = len;
 
-    let hashIdx = src.indexOf('#', startIdx);
+    const hashIdx = src.indexOf('#', startIdx);
     if (hashIdx !== -1 && hashIdx < endIdx) {
       let e = hashIdx;
       while (e > startIdx && src.charCodeAt(e - 1) <= 32) e--;
