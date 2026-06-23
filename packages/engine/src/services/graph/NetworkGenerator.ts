@@ -280,11 +280,31 @@ function computeWildcardBoundStatFactor(pattern: SpeciesGraph, target: SpeciesGr
 
 
 /**
+ * Helper to join small sorted integer arrays with zero allocation
+ */
+function joinSortedIndices(arr: number[]): string {
+  const len = arr.length;
+  if (len === 0) return '';
+  if (len === 1) return '' + arr[0];
+  if (len === 2) {
+    return arr[0] < arr[1] ? arr[0] + ',' + arr[1] : arr[1] + ',' + arr[0];
+  }
+  if (len === 3) {
+    let a = arr[0], b = arr[1], c = arr[2];
+    if (a > b) { let t = a; a = b; b = t; }
+    if (b > c) { let t = b; b = c; c = t; }
+    if (a > b) { let t = a; a = b; b = t; }
+    return a + ',' + b + ',' + c;
+  }
+  return arr.slice().sort((a, b) => a - b).join(',');
+}
+
+/**
  * Generate a reaction key for fast duplicate detection.
  * Uses sorted reactant and product indices for canonical comparison.
  */
 function getReactionKey(reactants: number[], products: number[], ruleName: string): string {
-  return `${reactants.slice().sort().join(',')}:${products.slice().sort().join(',')}:${ruleName}`;
+  return `${joinSortedIndices(reactants)}:${joinSortedIndices(products)}:${ruleName}`;
 }
 
 function getReactionKeyWithOrderMode(
