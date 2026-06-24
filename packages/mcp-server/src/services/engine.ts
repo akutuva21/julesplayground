@@ -145,6 +145,19 @@ export function applyNetworkOptions<T extends { max_agents?: number; max_reactio
     };
 }
 
+/**
+ * Asynchronously generates the full reaction network for a given BNGL model.
+ *
+ * This function wraps the core engine's `generateExpandedNetwork` logic and provides
+ * no-op cancellation and progress callbacks, making it suitable for MCP tools to resolve
+ * explicit species and reactions.
+ *
+ * **Invariant**: MCP tools must call this engine-delegated function to perform network
+ * expansion, and must not reimplement the expansion algorithm themselves.
+ *
+ * @param model - The initial BNGL model containing patterns and rules.
+ * @returns A promise that resolves to the fully expanded BNGL model with explicit species and reactions.
+ */
 export async function expandModel(model: BNGLModel): Promise<BNGLModel> {
     return generateExpandedNetwork(
         model,
