@@ -1,0 +1,3 @@
+## 2024-06-25 - Eliminate Array.from allocations in hot perturbation analysis loops
+**Learning:** In the systematic perturbation screen (`PerturbationScreen.ts`), computing deviation metrics between wild-type and perturbed trajectories used `Array.from()` and spread operators (`...`) to evaluate large arrays. This caused excessive intermediate array allocations, triggering garbage collection overhead and potential "Maximum call stack size exceeded" errors for large arrays.
+**Action:** Replaced chained array operations (`Array.from().reduce()` and `Math.max(...Array.from())`) with pre-allocated `for` loops inside `computeDeviation()`. This prevents intermediate array allocation and reduces execution time.
