@@ -11,7 +11,6 @@
 
 import { BNGLParser } from '../graph/core/BNGLParser';
 import { GraphCanonicalizer } from '../graph/core/Canonical';
-import { getExpressionDependencies } from '../../parser/ExpressionDependencies';
 import { GraphMatcher } from '../graph/core/Matcher';
 import { countEmbeddingDegeneracy } from '../graph/core/degeneracy';
 import { registerCacheClearCallback } from '../../featureFlags';
@@ -421,13 +420,40 @@ export const isFunctionalRateExpr = (
 ): boolean => {
     if (!rateExpr) return false;
 
-    // Use ANTLR parser to extract all dependencies (observables, functions, parameters)
-    const dependencies = getExpressionDependencies(rateExpr);
+    // Fast character scanning instead of heavy ANTLR parsing
+    let currentTokenStart = -1;
+    const len = rateExpr.length;
 
-    for (const dep of dependencies) {
-        if (observableNames.has(dep)) return true;
-        if (functionNames.has(dep)) return true;
-        if (changingParams.has(dep)) return true;
+    for (let i = 0; i < len; i++) {
+        const charCode = rateExpr.charCodeAt(i);
+
+        // A-Z (65-90), a-z (97-122), 0-9 (48-57), _ (95)
+        const isAlphaNum = (charCode >= 65 && charCode <= 90) ||
+                           (charCode >= 97 && charCode <= 122) ||
+                           (charCode >= 48 && charCode <= 57) ||
+                           charCode === 95;
+
+        if (isAlphaNum) {
+            if (currentTokenStart === -1) {
+                currentTokenStart = i;
+            }
+        } else {
+            if (currentTokenStart !== -1) {
+                const token = rateExpr.substring(currentTokenStart, i);
+                if (observableNames.has(token) || functionNames.has(token) || changingParams.has(token)) {
+                    return true;
+                }
+                currentTokenStart = -1;
+            }
+        }
+    }
+
+    // Check the last token
+    if (currentTokenStart !== -1) {
+        const token = rateExpr.substring(currentTokenStart);
+        if (observableNames.has(token) || functionNames.has(token) || changingParams.has(token)) {
+            return true;
+        }
     }
 
     // Fallback: if the parser missed a user-defined function call, detect it via regex.
