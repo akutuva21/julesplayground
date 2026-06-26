@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { simulatePSA, PSASimulator } from '../../src/services/simulation/PSASimulator';
 import type { BNGLModel } from '../../src/types';
 
@@ -15,24 +15,26 @@ describe('PSASimulator', () => {
           reactants: ['A'],
           products: ['B'],
           rateConstant: 1.0,
+          rate: ''
         },
       ],
       observables: [
         { name: 'ObsA', pattern: 'A', type: 'Molecules' },
         { name: 'ObsB', pattern: 'B', type: 'Molecules' },
       ],
-      parameters: [],
-      rules: [],
+      parameters: {},
+      reactionRules: [],
       functions: [],
       compartments: [],
-      compartmentMappings: []
+      moleculeTypes: []
     };
 
     const result = await simulatePSA(model, {
       t_end: 1,
       n_steps: 10,
       poplevel: 100,
-      seed: 42
+      seed: 42,
+      method: 'psa'
     });
 
     expect(result.headers).toEqual(['time', 'ObsA', 'ObsB']);
@@ -53,24 +55,26 @@ describe('PSASimulator', () => {
           reactants: ['A'],
           products: ['B'],
           rateConstant: 1.0,
-          totalRate: true
+          totalRate: true,
+          rate: ''
         },
       ],
       observables: [
         { name: 'ObsA', pattern: 'A', type: 'Molecules' }
       ],
-      parameters: [],
-      rules: [],
+      parameters: {},
+      reactionRules: [],
       functions: [],
       compartments: [],
-      compartmentMappings: []
+      moleculeTypes: []
     };
 
     const result = await simulatePSA(model, {
       t_end: 1,
       n_steps: 2,
       poplevel: 100,
-      seed: 42
+      seed: 42,
+      method: 'psa'
     });
     expect(result.data.length).toBe(3);
   });
@@ -88,30 +92,33 @@ describe('PSASimulator', () => {
           reactants: ['A', 'B'],
           products: ['C'],
           rateConstant: 0.001,
+          rate: ''
         },
         {
           name: 'A_plus_A_to_C',
           reactants: ['A', 'A'],
           products: ['C'],
           rateConstant: 0.001,
+          rate: ''
         }
       ],
       observables: [
         { name: 'ObsA', pattern: 'A', type: 'Molecules' },
         { name: 'ObsC', pattern: 'C', type: 'Molecules' }
       ],
-      parameters: [],
-      rules: [],
+      parameters: {},
+      reactionRules: [],
       functions: [],
       compartments: [],
-      compartmentMappings: []
+      moleculeTypes: []
     };
 
     const result = await simulatePSA(model, {
       t_end: 1,
       n_steps: 2,
       poplevel: 100,
-      seed: 42
+      seed: 42,
+      method: 'psa'
     });
     expect(result.data.length).toBe(3);
   });
@@ -126,17 +133,18 @@ describe('PSASimulator', () => {
       observables: [
         { name: 'Phosphorylated', pattern: 'A(s~P), B(s~P)', type: 'Molecules' }
       ],
-      parameters: [],
-      rules: [],
+      parameters: {},
+      reactionRules: [],
       functions: [],
       compartments: [],
-      compartmentMappings: []
+      moleculeTypes: []
     };
 
     const result = await simulatePSA(model, {
       t_end: 1,
       n_steps: 1,
-      seed: 42
+      seed: 42,
+      method: 'psa'
     });
     expect(result.data[0].Phosphorylated).toBe(30);
   });
@@ -144,28 +152,28 @@ describe('PSASimulator', () => {
   it('should throw error for unknown species in reaction', async () => {
     const model: BNGLModel = {
       species: [{ name: 'A', initialConcentration: 10, isConstant: false }],
-      reactions: [{ name: 'r1', reactants: ['Unknown'], products: [], rateConstant: 1 }],
+      reactions: [{ name: 'r1', reactants: ['Unknown'], products: [], rateConstant: 1, rate: '' }],
       observables: [],
-      parameters: [],
-      rules: [],
+      parameters: {},
+      reactionRules: [],
       functions: [],
       compartments: [],
-      compartmentMappings: []
+      moleculeTypes: []
     };
-    await expect(simulatePSA(model, { t_end: 1, n_steps: 1, seed: 42 })).rejects.toThrow('PSA simulation error: species "Unknown" not found in model species list.');
+    await expect(simulatePSA(model, { t_end: 1, n_steps: 1, seed: 42, method: 'psa' })).rejects.toThrow('PSA simulation error: species "Unknown" not found in model species list.');
   });
 
   it('should throw error for unknown product species in reaction', async () => {
     const model: BNGLModel = {
       species: [{ name: 'A', initialConcentration: 10, isConstant: false }],
-      reactions: [{ name: 'r1', reactants: ['A'], products: ['Unknown'], rateConstant: 1 }],
+      reactions: [{ name: 'r1', reactants: ['A'], products: ['Unknown'], rateConstant: 1, rate: '' }],
       observables: [],
-      parameters: [],
-      rules: [],
+      parameters: {},
+      reactionRules: [],
       functions: [],
       compartments: [],
-      compartmentMappings: []
+      moleculeTypes: []
     };
-    await expect(simulatePSA(model, { t_end: 1, n_steps: 1, seed: 42 })).rejects.toThrow('PSA simulation error: species "Unknown" not found in model species list.');
+    await expect(simulatePSA(model, { t_end: 1, n_steps: 1, seed: 42, method: 'psa' })).rejects.toThrow('PSA simulation error: species "Unknown" not found in model species list.');
   });
 });
