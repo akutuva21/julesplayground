@@ -11,7 +11,6 @@
 
 import { BNGLParser } from '../graph/core/BNGLParser';
 import { GraphCanonicalizer } from '../graph/core/Canonical';
-import { getExpressionDependencies } from '../../parser/ExpressionDependencies';
 import { GraphMatcher } from '../graph/core/Matcher';
 import { countEmbeddingDegeneracy } from '../graph/core/degeneracy';
 import { registerCacheClearCallback } from '../../featureFlags';
@@ -421,20 +420,35 @@ export const isFunctionalRateExpr = (
 ): boolean => {
     if (!rateExpr) return false;
 
-    // Use ANTLR parser to extract all dependencies (observables, functions, parameters)
-    const dependencies = getExpressionDependencies(rateExpr);
+    const len = rateExpr.length;
+    let i = 0;
 
-    for (const dep of dependencies) {
-        if (observableNames.has(dep)) return true;
-        if (functionNames.has(dep)) return true;
-        if (changingParams.has(dep)) return true;
+    while (i < len) {
+        const code = rateExpr.charCodeAt(i);
+
+        // Check if it's the start of an identifier (A-Z, a-z, _)
+        if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 95) {
+            const start = i;
+            i++;
+            while (i < len) {
+                const c = rateExpr.charCodeAt(i);
+                // Continue if identifier character (A-Z, a-z, 0-9, _)
+                if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 95) {
+                    i++;
+                } else {
+                    break;
+                }
+            }
+
+            const identifier = rateExpr.substring(start, i);
+
+            if (observableNames.has(identifier)) return true;
+            if (functionNames.has(identifier)) return true;
+            if (changingParams.has(identifier)) return true;
+        } else {
+            i++;
+        }
     }
 
-    // Fallback: if the parser missed a user-defined function call, detect it via regex.
-    if (functionNames.size > 0) {
-        const escapedNames = Array.from(functionNames).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-        const fnRegex = new RegExp(`\\b(?:${escapedNames.join('|')})\\s*\\(`);
-        if (fnRegex.test(rateExpr)) return true;
-    }
     return false;
 };
