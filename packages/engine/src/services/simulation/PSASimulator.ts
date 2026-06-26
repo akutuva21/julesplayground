@@ -447,7 +447,7 @@ export class PSASimulator {
       const matchingIndices: number[] = [];
       const coefficients: number[] = [];
 
-      let patterns = splitObservablePatterns(obs.pattern);
+      const patterns = splitObservablePatterns(obs.pattern);
 
       for (let i = 0; i < numSpecies; i++) {
         let count = 0;
