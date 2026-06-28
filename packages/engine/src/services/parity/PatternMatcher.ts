@@ -11,7 +11,6 @@
 
 import { BNGLParser } from '../graph/core/BNGLParser';
 import { GraphCanonicalizer } from '../graph/core/Canonical';
-import { getExpressionDependencies } from '../../parser/ExpressionDependencies';
 import { GraphMatcher } from '../graph/core/Matcher';
 import { countEmbeddingDegeneracy } from '../graph/core/degeneracy';
 import { registerCacheClearCallback } from '../../featureFlags';
@@ -421,20 +420,64 @@ export const isFunctionalRateExpr = (
 ): boolean => {
     if (!rateExpr) return false;
 
-    // Use ANTLR parser to extract all dependencies (observables, functions, parameters)
-    const dependencies = getExpressionDependencies(rateExpr);
+    const len = rateExpr.length;
+    let i = 0;
 
-    for (const dep of dependencies) {
-        if (observableNames.has(dep)) return true;
-        if (functionNames.has(dep)) return true;
-        if (changingParams.has(dep)) return true;
+    while (i < len) {
+        let charCode = rateExpr.charCodeAt(i);
+
+        // Skip numbers including floating point and scientific notation
+        if (charCode >= 48 && charCode <= 57) { // 0-9
+            while (i < len) {
+                charCode = rateExpr.charCodeAt(i);
+                // Numbers, dots, or e/E for scientific notation
+                if ((charCode >= 48 && charCode <= 57) || charCode === 46 || charCode === 101 || charCode === 69) {
+                    // Check for +/- after e/E
+                    if ((charCode === 101 || charCode === 69) && i + 1 < len) {
+                        const nextCharCode = rateExpr.charCodeAt(i + 1);
+                        if (nextCharCode === 43 || nextCharCode === 45) { // + or -
+                            i++;
+                        }
+                    }
+                    i++;
+                } else {
+                    break;
+                }
+            }
+            continue;
+        }
+
+        // Check if character starts an identifier (a-z, A-Z, _)
+        if (
+            (charCode >= 65 && charCode <= 90) || // A-Z
+            (charCode >= 97 && charCode <= 122) || // a-z
+            charCode === 95 // _
+        ) {
+            const start = i;
+            i++;
+            // Continue while character is identifier part (a-z, A-Z, 0-9, _)
+            while (i < len) {
+                const c = rateExpr.charCodeAt(i);
+                if (
+                    (c >= 65 && c <= 90) || // A-Z
+                    (c >= 97 && c <= 122) || // a-z
+                    (c >= 48 && c <= 57) || // 0-9
+                    c === 95 // _
+                ) {
+                    i++;
+                } else {
+                    break;
+                }
+            }
+            const token = rateExpr.substring(start, i);
+
+            if (observableNames.has(token) || functionNames.has(token) || changingParams.has(token)) {
+                return true;
+            }
+        } else {
+            i++;
+        }
     }
 
-    // Fallback: if the parser missed a user-defined function call, detect it via regex.
-    if (functionNames.size > 0) {
-        const escapedNames = Array.from(functionNames).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-        const fnRegex = new RegExp(`\\b(?:${escapedNames.join('|')})\\s*\\(`);
-        if (fnRegex.test(rateExpr)) return true;
-    }
     return false;
 };
