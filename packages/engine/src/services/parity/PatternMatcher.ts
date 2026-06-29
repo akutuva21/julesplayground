@@ -11,7 +11,6 @@
 
 import { BNGLParser } from '../graph/core/BNGLParser';
 import { GraphCanonicalizer } from '../graph/core/Canonical';
-import { getExpressionDependencies } from '../../parser/ExpressionDependencies';
 import { GraphMatcher } from '../graph/core/Matcher';
 import { countEmbeddingDegeneracy } from '../graph/core/degeneracy';
 import { registerCacheClearCallback } from '../../featureFlags';
@@ -411,8 +410,8 @@ export function countPatternMatches(speciesStr: string, patternStr: string): num
 }
 
 // Helper to check if a rate expression contains observable, function, OR changing parameter references
-// This implementation uses a robust parser (getExpressionDependencies) so it is NOT the cause of
-// the "observable-dependent rate" false positive in NFsim validation.
+// This implementation uses a fast zero-allocation character scanning loop instead of the ANTLR parser
+// to avoid significant overhead in the hot simulation path.
 export const isFunctionalRateExpr = (
     rateExpr: string,
     observableNames: Set<string>,
@@ -421,20 +420,33 @@ export const isFunctionalRateExpr = (
 ): boolean => {
     if (!rateExpr) return false;
 
-    // Use ANTLR parser to extract all dependencies (observables, functions, parameters)
-    const dependencies = getExpressionDependencies(rateExpr);
+    const len = rateExpr.length;
+    let start = -1;
+    for (let i = 0; i <= len; i++) {
+        const c = i < len ? rateExpr.charCodeAt(i) : 0;
+        const isIdentChar =
+            (c >= 65 && c <= 90) || // A-Z
+            (c >= 97 && c <= 122) || // a-z
+            (c >= 48 && c <= 57) || // 0-9
+            (c === 95); // _
 
-    for (const dep of dependencies) {
-        if (observableNames.has(dep)) return true;
-        if (functionNames.has(dep)) return true;
-        if (changingParams.has(dep)) return true;
-    }
-
-    // Fallback: if the parser missed a user-defined function call, detect it via regex.
-    if (functionNames.size > 0) {
-        const escapedNames = Array.from(functionNames).map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-        const fnRegex = new RegExp(`\\b(?:${escapedNames.join('|')})\\s*\\(`);
-        if (fnRegex.test(rateExpr)) return true;
+        if (isIdentChar) {
+            if (start === -1) {
+                // Must start with letter or underscore
+                const isStartChar = (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+                if (isStartChar) {
+                    start = i;
+                }
+            }
+        } else {
+            if (start !== -1) {
+                const token = rateExpr.substring(start, i);
+                if (observableNames.has(token) || functionNames.has(token) || changingParams.has(token)) {
+                    return true;
+                }
+                start = -1;
+            }
+        }
     }
     return false;
 };
