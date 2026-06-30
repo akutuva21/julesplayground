@@ -1,1 +1,0 @@
-2026-06-19: Replaced ANTLR parser AST generation with a zero-allocation `charCodeAt` character scanning loop for math dependency parsing in isFunctionalRateExpr, reducing overhead in hot network expansion path.
