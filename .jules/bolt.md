@@ -1,1 +1,0 @@
-- Optimized `isFunctionalRateExpr` in `PatternMatcher.ts` by replacing ANTLR AST parsing with zero-allocation charCodeAt scanning, reducing dependency checking overhead by > 90%.
