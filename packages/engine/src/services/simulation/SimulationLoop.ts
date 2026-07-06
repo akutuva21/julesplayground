@@ -2554,7 +2554,8 @@ export async function simulate(
         })),
         updateParameters: (nextParams: Record<string, number>) => {
           if (model.parameters) {
-            for (const key of Object.keys(nextParams)) {
+            for (const key in nextParams) {
+              if (!Object.prototype.hasOwnProperty.call(nextParams, key)) continue;
               if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
               setSafeNumericField(model.parameters as Record<string, number>, key, nextParams[key]);
             }
