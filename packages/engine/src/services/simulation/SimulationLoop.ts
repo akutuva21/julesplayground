@@ -328,6 +328,25 @@ export async function buildOdeSystem(
   return handle;
 }
 
+/**
+ * Main entry point for executing simulations of a BNGL model.
+ *
+ * This function orchestrates the simulation pipeline:
+ * 1. Auto-expands the model network if rules are present but reactions are not.
+ * 2. Resolves and manages simulation phases (e.g., parameter/concentration changes between phases).
+ * 3. Selects and configures the appropriate ODE, SSA, or NFsim solver based on model properties and options.
+ * 4. Evaluates rate functions, tracks state variables, and yields formatted results.
+ *
+ * Invariants:
+ * - Engine functions must remain browser-API-free; they must execute purely in Node/Worker contexts.
+ * - MCP tools must rely on this engine function for simulation rather than reimplementing simulation logic.
+ *
+ * @param _jobId - A numeric identifier for the simulation job.
+ * @param inputModel - The parsed BioNetGen model object (BNGLModel) to be simulated.
+ * @param options - Configuration options specifying the solver ('ode', 'ssa', 'nfsim', 'auto', etc.), timing constraints, and output steps.
+ * @param callbacks - An object with a `checkCancelled` function for aborting the run, and a `postMessage` function to emit progress/state updates.
+ * @returns A promise that resolves to the complete SimulationResults.
+ */
 export async function simulate(
   _jobId: number,
   inputModel: BNGLModel,
@@ -1288,14 +1307,11 @@ export async function simulate(
       const numReactions = concreteReactions.length;
 
       // Pre-compute: which reactions depend on which species? (for sparse influence tracking)
-      const speciesDependents: Map<number, number[]> = new Map();
+      const speciesDependents: number[][] = new Array(numSpecies);
+      for (let i = 0; i < numSpecies; i++) speciesDependents[i] = [];
       for (let i = 0; i < numReactions; i++) {
         for (let j = 0; j < concreteReactions[i].reactants.length; j++) {
-          const speciesIdx = concreteReactions[i].reactants[j];
-          if (!speciesDependents.has(speciesIdx)) {
-            speciesDependents.set(speciesIdx, []);
-          }
-          speciesDependents.get(speciesIdx)!.push(i);
+          speciesDependents[concreteReactions[i].reactants[j]].push(i);
         }
       }
       // Precompute rxnUpdateRxn for SSA incremental propensity updates
@@ -1305,16 +1321,12 @@ export async function simulate(
         const rxn = concreteReactions[r];
         const deps = new Set<number>();
         for (const idx of rxn.reactants) {
-          const dependentRxns = speciesDependents.get(idx);
-          if (dependentRxns) {
-            for (let i = 0; i < dependentRxns.length; i++) deps.add(dependentRxns[i]);
-          }
+          const dependentRxns = speciesDependents[idx];
+          for (let i = 0; i < dependentRxns.length; i++) deps.add(dependentRxns[i]);
         }
         for (const idx of rxn.products) {
-          const dependentRxns = speciesDependents.get(idx);
-          if (dependentRxns) {
-            for (let i = 0; i < dependentRxns.length; i++) deps.add(dependentRxns[i]);
-          }
+          const dependentRxns = speciesDependents[idx];
+          for (let i = 0; i < dependentRxns.length; i++) deps.add(dependentRxns[i]);
         }
         rxnUpdateRxn[r] = new Int32Array(Array.from(deps));
       }
@@ -1840,8 +1852,7 @@ export async function simulate(
             const products = firedRxn.products;
 
             const processSpecies = (speciesIdx: number) => {
-              const deps = speciesDependents.get(speciesIdx);
-              if (!deps) return;
+              const deps = speciesDependents[speciesIdx];
               for (let k = 0; k < deps.length; k++) {
                 const depIdx = deps[k];
                 // Check if we already recorded this one
