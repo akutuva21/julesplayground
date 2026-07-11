@@ -1,0 +1,3 @@
+## 2024-07-11 - [Optimize GDAT Parsing and Parameter Update]
+**Learning:** Found two specific performance bottlenecks in the codebase related to intermediate array allocations in hot paths: `.split()` on each line during parsing and `Object.keys()` on every step during parameter update. By replacing them with zero-allocation character scanning loops and `for...in` loops respectively, we avoid unnecessary allocations.
+**Action:** When working in hot execution loops that parse string or evaluate objects over large data sets, explicitly avoid array allocations and `Object.keys()`. Replace `.split()` with an inline scanning approach where possible. Use `for...in` along with `hasOwnProperty` instead of `Object.keys()`.
