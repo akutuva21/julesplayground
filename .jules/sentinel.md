@@ -1,4 +1,0 @@
-## 2025-02-23 - Prevented potential DOM XSS via innerHTML in UMAP visualization
-**Vulnerability:** Found `legend.innerHTML = '';` in `public/umap.html`. While currently used only for clearing, using `innerHTML` invokes the HTML parser and is considered an unsafe practice that can easily lead to Cross-Site Scripting (XSS) if later modified to include data.
-**Learning:** Even innocent-looking DOM clearing operations can be flagged by security audits and present a risk if developers later use `innerHTML` to inject dynamic content instead of just clearing it.
-**Prevention:** Replaced `innerHTML = ''` with `textContent = ''`, which is faster and safer as it doesn't invoke the HTML parser, complying with the memory instruction to prefer `textContent = ''` or `replaceChildren()` to prevent potential XSS vulnerabilities when clearing elements.
