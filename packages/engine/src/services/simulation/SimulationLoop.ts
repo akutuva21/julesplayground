@@ -1445,7 +1445,7 @@ export async function simulate(
         speciesObsOffsets = new Int32Array(numSpecies + 1);
         const counts = new Int32Array(numSpecies);
         // TypedArrays (Int32Array/Uint8Array/Float64Array) only accept integer keys
-        // and are immune to prototype pollution. Use Reflect.set as a guard.
+        // and are immune to prototype pollution.
         for (let i = 0; i < numObservables; i++) {
           const obs = concreteObservables[i];
           for (let j = 0; j < obs.indices.length; j++) {
