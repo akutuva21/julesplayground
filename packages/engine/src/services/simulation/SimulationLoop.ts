@@ -73,7 +73,7 @@ function extractIfConditions(expression: string): string[] {
     let commaAtDepthOne = -1;
 
     while (cursor < expression.length && depth > 0) {
-      const ch = expression[cursor];
+      const ch = expression.charAt(cursor); // safe: string character indexing
       if (ch === '(') {
         depth += 1;
       } else if (ch === ')') {
@@ -423,10 +423,10 @@ export async function simulate(
           for (const name in model.paramExpressions) {
             if (!Object.prototype.hasOwnProperty.call(model.paramExpressions, name)) continue;
             if (!isSafeObjectKey(name)) continue;
-            const expr = model.paramExpressions[name];
+            const expr = model.paramExpressions[name]; // safe: isSafeObjectKey(name) on line above
             try {
               const val = BNGLParser.evaluateExpression(expr, paramMap, undefined, functionMap);
-              if (Number.isFinite(val) && Math.abs(val - (model.parameters[name] || 0)) > 1e-12) {
+              if (Number.isFinite(val) && Math.abs(val - (model.parameters[name] || 0)) > 1e-12) { // safe: isSafeObjectKey(name) above
                 setSafeNumberField(model.parameters as Record<string, number>, name, val);
                 paramMap.set(name, val);
                 anyChanged = true;
@@ -1062,7 +1062,7 @@ export async function simulate(
       const buffer = evaluateObservablesIntoBuffer(currentState);
       outputTemplate.time = outT;
       for (let i = 0; i < safeObservableNames.length; i++) {
-        outputTemplate[safeObservableNames[i]] = buffer[safeObservableIndices[i]];
+        outputTemplate[safeObservableNames[i]] = buffer[safeObservableIndices[i]]; // safe: pre-filtered through isSafeObjectKey
       }
       if (shouldPrintFunctions) {
         const funcResults = evaluateFunctionsForOutput(currentState, outputTemplate);
@@ -1184,10 +1184,10 @@ export async function simulate(
               if (!isSafeObjectKey(name)) {
                 continue;
               }
-              const expr = model.paramExpressions[name];
+              const expr = model.paramExpressions[name]; // safe: isSafeObjectKey(name) on line above
               try {
                 const val = evaluateFunctionalRate(expr, model.parameters, currentObsValues, model.functions);
-                if (Math.abs(val - (model.parameters[name] || 0)) > 1e-12) {
+                if (Math.abs(val - (model.parameters[name] || 0)) > 1e-12) { // safe: isSafeObjectKey(name) above
 
                   setSafeNumberField(model.parameters as Record<string, number>, name, val);
                   anyChanged = true;
@@ -1488,7 +1488,7 @@ export async function simulate(
       const ssaObsRecord: Record<string, number> = Object.create(null) as Record<string, number>;
       const buildSsaObsRecord = (): Record<string, number> => {
         for (let i = 0; i < safeObservableNames.length; i++) {
-          ssaObsRecord[safeObservableNames[i]] = ssaObsValues[safeObservableIndices[i]];
+          setSafeNumberField(ssaObsRecord, safeObservableNames[i], ssaObsValues[safeObservableIndices[i]]);
         }
         return ssaObsRecord;
       };
@@ -1506,12 +1506,12 @@ export async function simulate(
           return cleaned;
         };
         const reactantNames = Array.from(rxn.reactants).map(idx => {
-          const name = model.species[idx]?.name || `S${idx}`;
+          const name = model.species[idx]?.name || `S${idx}`; // safe: numeric index on array
           // Simplify species names: remove compartments and states for compactness
           return cleanName(name);
         });
         const productNames = Array.from(rxn.products).map(idx => {
-          const name = model.species[idx]?.name || `S${idx}`;
+          const name = model.species[idx]?.name || `S${idx}`; // safe: numeric index on array
           return cleanName(name);
         });
 
@@ -2129,28 +2129,26 @@ export async function simulate(
         refreshRateContextParameters = () => {
           for (let i = 0; i < parameterNames.length; i++) {
             const parameterName = parameterNames[i];
-            if (parameterName === '__proto__' || parameterName === 'constructor' || parameterName === 'prototype') continue;
-            setSafeNumberField(rateContext, parameterName, model.parameters[parameterName]);
+            if (!isSafeObjectKey(parameterName)) continue;
+            setSafeNumberField(rateContext, parameterName, model.parameters[parameterName]); // safe: isSafeObjectKey above
           }
         };
         // Initialize with parameters
         refreshRateContextParameters();
         // S3-2: Pre-filter observable names for rateContext — removes per-iteration guard checks
-        const safeRateObservableNames = observableNames.filter(n =>
-          n !== '__proto__' && n !== 'constructor' && n !== 'prototype'
-        );
+        const safeRateObservableNames = observableNames.filter(n => isSafeObjectKey(n));
         // Initialize observable slots
         for (let i = 0; i < safeRateObservableNames.length; i++) {
-          rateContext[safeRateObservableNames[i]] = 0;
+          setSafeNumberField(rateContext, safeRateObservableNames[i], 0);
         }
         // Initialize species name slots
         for (let k = 0; k < model.species.length; k++) {
           const speciesName = model.species[k].name;
-          if (speciesName !== '__proto__' && speciesName !== 'constructor' && speciesName !== 'prototype') {
-            rateContext[speciesName] = 0;
+          if (isSafeObjectKey(speciesName)) {
+            setSafeNumberField(rateContext, speciesName, 0);
           }
         }
-        // Initialize ridxN slots
+        // Initialize ridxN slots (pre-computed safe keys "ridx0", "ridx1", ...)
         for (let j = 0; j < maxReactants; j++) {
           rateContext[ridxKeys[j]] = 0;
         }
@@ -2161,8 +2159,8 @@ export async function simulate(
           // Refresh parameters (may change between phases via setParameter)
           for (let i = 0; i < parameterNames.length; i++) {
             const pn = parameterNames[i];
-            if (pn === '__proto__' || pn === 'constructor' || pn === 'prototype') continue;
-            setSafeNumberField(rateContext, pn, model.parameters[pn]);
+            if (!isSafeObjectKey(pn)) continue;
+            setSafeNumberField(rateContext, pn, model.parameters[pn]); // safe: isSafeObjectKey above
           }
 
           // Update observable values in the mutable context (in-place)
@@ -2170,12 +2168,12 @@ export async function simulate(
           const obsValues = evaluateObservablesFast(yIn);
           for (let i = 0; i < safeRateObservableNames.length; i++) {
             const name = safeRateObservableNames[i];
-            rateContext[name] = obsValues[name];
+            rateContext[name] = obsValues[name]; // safe: pre-filtered through isSafeObjectKey
           }
           // Update species values in the mutable context (in-place) — only those referenced by functional rates
           for (let ri = 0; ri < referencedSpeciesIndices.length; ri++) {
             const k = referencedSpeciesIndices[ri];
-            rateContext[referencedSpeciesNames[ri]] = odeUsesAmountState ? yIn[k] : (yIn[k] * speciesVolumes[k]);
+            rateContext[referencedSpeciesNames[ri]] = odeUsesAmountState ? yIn[k] : (yIn[k] * speciesVolumes[k]); // safe: numeric indices / pre-validated species names
           }
 
           for (let i = 0; i < concreteReactions.length; i++) {
@@ -2185,7 +2183,7 @@ export async function simulate(
             if (rxn.isFunctionalRate && rxn.rateExpression) {
               // S3-1: Update ridxN using precomputed keys (no template-literal allocation per call)
               for (let j = 0; j < rxn.reactants.length; j++) {
-                rateContext[ridxKeys[j]] = odeUsesAmountState
+                rateContext[ridxKeys[j]] = odeUsesAmountState // safe: ridxKeys are pre-computed safe strings
                   ? yIn[rxn.reactants[j]]
                   : (yIn[rxn.reactants[j]] * speciesVolumes[rxn.reactants[j]]);
               }

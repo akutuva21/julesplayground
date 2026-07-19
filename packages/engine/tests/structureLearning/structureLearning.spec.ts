@@ -326,15 +326,6 @@ describe('StructureScorer', () => {
       includeEnzymatic: false,
     }).slice(0, 1); // Just one rule
 
-    const mockSimulator = async () => ({
-      headers: ['time', 'Xp'],
-      data: [
-        { time: 0, Xp: 0 },
-        { time: 1, Xp: 50 },
-        { time: 2, Xp: 80 },
-      ],
-    });
-
     const mockFitter = async () => ({
       bestFit: { k_X_s_u_to_p: 0.5 },
       bestScore: 10.0, // SSE

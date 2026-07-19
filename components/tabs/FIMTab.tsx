@@ -172,23 +172,6 @@ export const FIMTab: React.FC<FIMTabProps> = ({ model }) => {
     if (controller) controller.abort();
   }, [controller]);
 
-  const runPreset = useCallback((preset: 'quick' | 'standard') => {
-    const config = preset === 'quick'
-      ? { method: 'ode' as const, t_end: 60, n_steps: 80 }
-      : { method: 'ode' as const, t_end: 200, n_steps: 150 };
-    void handleCompute(config);
-  }, [handleCompute]);
-
-  const activePreset = useMemo<'quick' | 'standard' | 'custom'>(() => {
-    if (analysisConfig.method === 'ode' && analysisConfig.t_end === 60 && analysisConfig.n_steps === 80) {
-      return 'quick';
-    }
-    if (analysisConfig.method === 'ode' && analysisConfig.t_end === 200 && analysisConfig.n_steps === 150) {
-      return 'standard';
-    }
-    return 'custom';
-  }, [analysisConfig]);
-
   const selectionSummary = useMemo(() => {
     const coverage = new Set<string>();
     const uncovered: string[] = [];

@@ -182,6 +182,15 @@ export class JITCompiler {
         return (hash >>> 0).toString(16);
     }
 
+    private createFn(args: string[], body: string): Function {
+        for (const a of args) {
+            if (a !== '__proto__' && a !== 'constructor' && a !== 'prototype' && !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(a)) {
+                throw new Error(`Invalid function argument name: ${a}`);
+            }
+        }
+        return new Function(...args, body);
+    }
+
     private buildReactionSignature(
         reactions: Array<{
             reactantIndices: Array<number | string>;
@@ -883,7 +892,7 @@ export class JITCompiler {
             }
 
             source += "return aTotal;\n";
-            return new Function("state", "propensities", source) as (state: Float64Array, propensities: Float64Array) => number;
+            return this.createFn(["state", "propensities"], source) as (state: Float64Array, propensities: Float64Array) => number;
         } catch (e) {
             console.warn('[JITCompiler] Failed to compile SSA propensities:', e);
             return null;
@@ -994,7 +1003,7 @@ export class JITCompiler {
             }
 
             source += "return aTotal;\n";
-            return new Function("state", "propensities", source) as (state: Float64Array, propensities: Float64Array) => number;
+            return this.createFn(["state", "propensities"], source) as (state: Float64Array, propensities: Float64Array) => number;
         } catch (e) {
             console.warn('[JITCompiler] Failed to compile SSA propensities with functional rates:', e);
             return null;
@@ -1102,7 +1111,7 @@ export class JITCompiler {
 
             source += '}\nreturn totalDelta;\n';
 
-            return new Function('firedRxnIdx', 'state', 'propensities', 'fenwickAdd', source) as
+            return this.createFn(['firedRxnIdx', 'state', 'propensities', 'fenwickAdd'], source) as
                 (firedRxnIdx: number, state: Float64Array, propensities: Float64Array,
                     fenwickAdd: (idx: number, delta: number) => void) => number;
         } catch (e) {
@@ -1252,7 +1261,7 @@ export class JITCompiler {
 
             source += '}\nreturn totalDelta;\n';
 
-            const fn = new Function('firedRxnIdx', 'state', 'propensities', 'fenwickAdd', source) as
+            const fn = this.createFn(['firedRxnIdx', 'state', 'propensities', 'fenwickAdd'], source) as
                 (firedRxnIdx: number, state: Float64Array, propensities: Float64Array,
                     fenwickAdd: (idx: number, delta: number) => void) => number;
 
