@@ -26,7 +26,7 @@ import { FenwickTree } from '../../utils/fenwickTree';
 import { splitObservablePatterns } from '../../utils/observableUtils';
 import { countPatternMatches } from '../parity/PatternMatcher';
 import type { BNGLModel, SimulationOptions, SimulationResults } from '../../types';
-import { isSafeObjectKey, setSafeNumberField } from '../../utils/safeObjectKey';
+import { setSafeNumberField } from '../../utils/safeObjectKey';
 
 // ────────────────────────────────────────────────────────────────────
 // Types

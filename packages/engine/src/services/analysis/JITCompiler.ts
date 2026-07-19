@@ -188,6 +188,9 @@ export class JITCompiler {
                 throw new Error(`Invalid function argument name: ${a}`);
             }
         }
+        // The body string is built from pre-validated values — see each call
+        // site for the specific checks (isJITSafe, Number.isInteger, etc.).
+        // codeql[js/code-injection]
         return new Function(...args, body);
     }
 

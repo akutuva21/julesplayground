@@ -11,9 +11,11 @@
 import { parseBNGLWithANTLR } from '../../parser/BNGLParserWrapper';
 
 export function sanitizeObservableName(name: string): string {
-  const cleaned = name.replace(/[^A-Za-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
-  const normalized = cleaned.length > 0 ? cleaned : 'obs';
-  return /^[A-Za-z_]/.test(normalized) ? normalized : `obs_${normalized}`;
+  const cleaned = name.replace(/[^A-Za-z0-9_]+/g, '_');
+  const withoutLeadingUnderscores = cleaned.replace(/^_+/, '');
+  const normalized = withoutLeadingUnderscores.replace(/_+$/, '');
+  const result = normalized.length > 0 ? normalized : 'obs';
+  return /^[A-Za-z_]/.test(result) ? result : `obs_${result}`;
 }
 
 export function insertBeforeEndModel(code: string, insertion: string): string {

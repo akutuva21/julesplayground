@@ -24,7 +24,7 @@ import { countPatternMatches } from '../parity/PatternMatcher';
 import { SeededRandom } from '../../utils/random';
 import type { SimulationOptions, SimulationResults, BNGLModel } from '../../types';
 import { splitObservablePatterns } from '../../utils/observableUtils';
-import { isSafeObjectKey, setSafeNumberField } from '../../utils/safeObjectKey';
+import { setSafeNumberField } from '../../utils/safeObjectKey';
 
 // ────────────────────────────────────────────────────────────────────
 // Reaction classification constants (matches C++ RxnClassifier)

@@ -8,7 +8,6 @@
 import { getFeatureFlags, registerCacheClearCallback } from '../../featureFlags';
 import { SafeExpressionEvaluator as SafeExpressionEvaluatorStatic } from '../../utils/safeExpressionEvaluator';
 import { compileExpressionToBytecode } from '../analysis/ExpressionBytecodeCompiler';
-import { isIdentifierChar } from '../../utils/stringUtils';
 import { OP_STOP } from './opcodeAliases';
 // console.log("ExpressionEvaluator module loaded");
 

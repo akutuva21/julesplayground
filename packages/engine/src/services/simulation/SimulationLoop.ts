@@ -1062,7 +1062,7 @@ export async function simulate(
       const buffer = evaluateObservablesIntoBuffer(currentState);
       outputTemplate.time = outT;
       for (let i = 0; i < safeObservableNames.length; i++) {
-        outputTemplate[safeObservableNames[i]] = buffer[safeObservableIndices[i]]; // safe: pre-filtered through isSafeObjectKey
+        setSafeNumberField(outputTemplate, safeObservableNames[i], buffer[safeObservableIndices[i]]);
       }
       if (shouldPrintFunctions) {
         const funcResults = evaluateFunctionsForOutput(currentState, outputTemplate);
@@ -2168,12 +2168,12 @@ export async function simulate(
           const obsValues = evaluateObservablesFast(yIn);
           for (let i = 0; i < safeRateObservableNames.length; i++) {
             const name = safeRateObservableNames[i];
-            rateContext[name] = obsValues[name]; // safe: pre-filtered through isSafeObjectKey
+            setSafeNumberField(rateContext, name, obsValues[name]);
           }
           // Update species values in the mutable context (in-place) — only those referenced by functional rates
           for (let ri = 0; ri < referencedSpeciesIndices.length; ri++) {
             const k = referencedSpeciesIndices[ri];
-            rateContext[referencedSpeciesNames[ri]] = odeUsesAmountState ? yIn[k] : (yIn[k] * speciesVolumes[k]); // safe: numeric indices / pre-validated species names
+            setSafeNumberField(rateContext, referencedSpeciesNames[ri], odeUsesAmountState ? yIn[k] : (yIn[k] * speciesVolumes[k]));
           }
 
           for (let i = 0; i < concreteReactions.length; i++) {
