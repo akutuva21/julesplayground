@@ -8,13 +8,12 @@ import {
 import { filterCandidates } from '../../src/services/verification/CandidateFilter';
 import {
   scoreStructure,
-  assembleModelCode,
 } from '../../src/services/verification/StructureScorer';
 import {
   structureSearch,
-  assembleModel,
   type StructureSearchConfig,
 } from '../../src/services/inference/StructureABCSMC';
+import { assembleModel } from '../../src/services/inference/modelAssembly';
 import type { BNGLMoleculeType } from '../../src/types';
 
 // ── Shared fixtures ──────────────────────────────────────────────────
@@ -293,7 +292,7 @@ describe('StructureScorer', () => {
       includeSynthesis: false,
       includeEnzymatic: false,
     });
-    const code = assembleModelCode(
+    const code = assembleModel(
       rules,
       { kf: 1.0 },
       simpleMoleculeTypes,

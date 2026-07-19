@@ -44,7 +44,7 @@ import { generateThreeRegisters } from './utils/summaryUtils.js';
 import { checkPlausibility, detectCompilationSurprise } from './utils/plausibilityUtils.js';
 import { normalizeWhitespace } from './utils/codeUtils.js';
 import { queryPathwayCommons } from '../pathwayCommons/pathwayCommonsService.js';
-import type { StiffnessResult, DynamicsResult, ProfileLikelihoodResult, RuleAttributionEntry } from './types.js';
+import type { StiffnessResult, DynamicsResult, ProfileLikelihoodResult, RuleAttributionEntry, ContactMapStep } from './types.js';
 
 export async function diagnoseModelDeep(args: {
     code?: string;
@@ -404,17 +404,22 @@ export async function diagnoseModelDeep(args: {
                 const routeMolecules = route?.nodes ?? [];
 
                 // Concrete contact-map steps for the implicated rules (unchanged).
-                const contactMapPath: Array<{ molecule: string; site?: string; interaction: string; rule: string }> = [];
+                const contactMapPath: ContactMapStep[] = [];
                 if (contactMapEdges && Array.isArray(contactMapEdges)) {
                     for (const ruleDesc of implicatedRuleDescriptors.slice(0, 5)) {
                         const ruleEdges = contactMapEdges.filter((edge: any) => edge.ruleIds?.includes(ruleDesc.name) || edge.ruleLabels?.includes(ruleDesc.name));
                         for (const edge of ruleEdges.slice(0, 3)) {
                             const fromMatch = edge.from?.match(/^([A-Za-z][A-Za-z0-9_]*)/);
                             const molecule = fromMatch ? fromMatch[1] : 'unknown';
+                            const rawInteraction = edge.interactionType || 'binding';
+                            let interaction: 'binding' | 'state_change' | 'synthesis' | 'degradation' = 'binding';
+                            if (rawInteraction === 'state_change' || rawInteraction === 'synthesis' || rawInteraction === 'degradation') {
+                                interaction = rawInteraction;
+                            }
                             contactMapPath.push({
                                 molecule,
                                 site: edge.from?.includes('(') ? edge.from?.match(/\(([^)]+)\)/)?.[1] : undefined,
-                                interaction: edge.interactionType || 'binding',
+                                interaction,
                                 rule: ruleDesc.name,
                             });
                         }

@@ -13,7 +13,7 @@
  */
 
 export function buildStoichiometryMatrix<T>(
-    reactions: Array<{ reactants: T[]; products: T[] }>,
+    reactions: Array<{ reactants: ArrayLike<T>; products: ArrayLike<T> }>,
     numSpecies: number,
     indexOf: (entry: T) => number | undefined,
 ): number[][] {
@@ -23,12 +23,14 @@ export function buildStoichiometryMatrix<T>(
 
     for (let r = 0; r < reactions.length; r++) {
         const rxn = reactions[r];
-        for (const entry of rxn.reactants) {
-            const idx = indexOf(entry);
+        const reactants = rxn.reactants;
+        for (let i = 0; i < reactants.length; i++) {
+            const idx = indexOf(reactants[i]);
             if (idx !== undefined) S[idx][r] -= 1;
         }
-        for (const entry of rxn.products) {
-            const idx = indexOf(entry);
+        const products = rxn.products;
+        for (let i = 0; i < products.length; i++) {
+            const idx = indexOf(products[i]);
             if (idx !== undefined) S[idx][r] += 1;
         }
     }

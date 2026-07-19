@@ -7,13 +7,13 @@ import { Card } from '../ui/Card';
 import { CHART_COLORS } from '../../src/utils/chartColors';
 import { SafeExpressionEvaluator } from '@bngplayground/engine';
 import {
-import { toggleSetMember } from '../../services/collections';
   ExternalLegend,
   InlineLegend,
   LEGEND_THRESHOLD,
   formatTooltipNumber,
   formatYAxisTick,
 } from '../charts/InteractiveLegend';
+import { toggleSetMember } from '../../services/collections';
 
 interface ExpressionEvaluatorTabProps {
   results: SimulationResults | null;

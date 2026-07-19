@@ -199,7 +199,8 @@ export { enumerateRules, countCandidateRules } from './services/verification/Rul
 export type { CandidateRule, EnumerationConfig } from './services/verification/RuleEnumerator';
 export { filterCandidates } from './services/verification/CandidateFilter';
 export { scoreStructure } from './services/verification/StructureScorer';
-export { structureSearch, assembleModel } from './services/inference/StructureABCSMC';
+export { structureSearch } from './services/inference/StructureABCSMC';
+export { assembleModel } from './services/inference/modelAssembly';
 export type { StructureSearchConfig, StructureSearchResult, StructureParticle } from './services/inference/StructureABCSMC';
 
 // ── Bifurcation Analysis ────────────────────────────────────────────

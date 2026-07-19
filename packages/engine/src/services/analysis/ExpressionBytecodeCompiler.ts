@@ -21,7 +21,6 @@ import {
     OP_NEG,
     OP_EXP,
     OP_LOG,
-    OP_LOG,
     OP_SQRT,
     OP_ABS,
     OP_SIN,
