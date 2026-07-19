@@ -25,6 +25,7 @@ import { buildCSRStoichiometry, sparseCSRDgemv, shouldUseSparse } from './Sparse
 import { buildCSRObservableMatrix, evaluateObservablesCSR, shouldUseCSRObservables, type CSRObservableMatrix } from './CSRObservableEvaluator';
 import { DenseOutputBuffer } from './DenseOutput';
 import { generateExpandedNetwork } from './NetworkExpansion';
+import { isSafeObjectKey, setSafeNumberField } from '../../utils/safeObjectKey';
 // import * as fs from 'node:fs';
 
 interface ConcreteReaction {
@@ -50,33 +51,8 @@ interface ConcreteObservable {
   volumes?: Float64Array | number[];
 }
 
-const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-const SAFE_OBJECT_KEY_PATTERN = /^[A-Za-z_@:.!~(),+\-][A-Za-z0-9_@:.!~(),+\-]*$/;
 
-// Memoize key-safety results. Species/observable/parameter names form a small,
-// fixed vocabulary that is re-validated once per output row per field in the hot
-// output path; caching turns that into one regex test per distinct key. The
-// cache is bounded to avoid unbounded growth in a long-lived worker.
-const SAFE_KEY_CACHE = new Set<string>();
-const UNSAFE_KEY_CACHE = new Set<string>();
-const KEY_CACHE_MAX = 100000;
 
-function isSafeObjectKey(key: string): boolean {
-  if (SAFE_KEY_CACHE.has(key)) return true;
-  if (UNSAFE_KEY_CACHE.has(key)) return false;
-  const safe = SAFE_OBJECT_KEY_PATTERN.test(key) && !UNSAFE_OBJECT_KEYS.has(key);
-  if (SAFE_KEY_CACHE.size + UNSAFE_KEY_CACHE.size >= KEY_CACHE_MAX) {
-    SAFE_KEY_CACHE.clear();
-    UNSAFE_KEY_CACHE.clear();
-  }
-  (safe ? SAFE_KEY_CACHE : UNSAFE_KEY_CACHE).add(key);
-  return safe;
-}
-
-function setSafeNumericField(target: Record<string, number>, key: string, value: number): void {
-  if (!isSafeObjectKey(key)) return;
-  target[key] = value;
-}
 
 function setSafeArrayField<T>(target: Record<string, T[]>, key: string, value: T[]): void {
   if (!isSafeObjectKey(key)) return;
@@ -432,7 +408,7 @@ export async function simulate(
         }
 
         if (model.parameters && model.parameters[change.parameter] !== newVal) {
-          setSafeNumericField(model.parameters as Record<string, number>, change.parameter, newVal);
+          setSafeNumberField(model.parameters as Record<string, number>, change.parameter, newVal);
           paramMap.set(change.parameter, newVal);
           if (model.paramExpressions) {
             delete model.paramExpressions[change.parameter];
@@ -451,7 +427,7 @@ export async function simulate(
             try {
               const val = BNGLParser.evaluateExpression(expr, paramMap, undefined, functionMap);
               if (Number.isFinite(val) && Math.abs(val - (model.parameters[name] || 0)) > 1e-12) {
-                setSafeNumericField(model.parameters as Record<string, number>, name, val);
+                setSafeNumberField(model.parameters as Record<string, number>, name, val);
                 paramMap.set(name, val);
                 anyChanged = true;
               }
@@ -1056,7 +1032,7 @@ export async function simulate(
     const evaluateObservablesFast = (currentState: Float64Array) => {
       const buffer = evaluateObservablesIntoBuffer(currentState);
       // ⚡ Bolt Optimization: Use pre-filtered safe observable names to directly assign values,
-      // avoiding repeated regex validation via setSafeNumericField in the hot loop.
+      // avoiding repeated regex validation via setSafeNumberField in the hot loop.
       for (let i = 0; i < safeObservableNames.length; i++) {
         observableValuesRecord[safeObservableNames[i]] = buffer[safeObservableIndices[i]];
       }
@@ -1070,13 +1046,13 @@ export async function simulate(
         if (f.args && f.args.length > 0) continue;
         if (f.name === '__proto__' || f.name === 'constructor' || f.name === 'prototype') continue;
         try {
-          setSafeNumericField(
+          setSafeNumberField(
             results,
             f.name,
             evaluateFunctionalRate(f.expression, model.parameters, observableValues, model.functions)
           );
         } catch {
-          setSafeNumericField(results, f.name, 0);
+          setSafeNumberField(results, f.name, 0);
         }
       }
       return results;
@@ -1180,7 +1156,7 @@ export async function simulate(
           }
           if (model.parameters && model.parameters[change.parameter] !== newVal) {
 
-            setSafeNumericField(model.parameters as Record<string, number>, change.parameter, newVal);
+            setSafeNumberField(model.parameters as Record<string, number>, change.parameter, newVal);
 
             // PARITY FIX: If a parameter is explicitly set, we should stop re-evaluating it 
             // from its original expression (if it had one). 
@@ -1213,7 +1189,7 @@ export async function simulate(
                 const val = evaluateFunctionalRate(expr, model.parameters, currentObsValues, model.functions);
                 if (Math.abs(val - (model.parameters[name] || 0)) > 1e-12) {
 
-                  setSafeNumericField(model.parameters as Record<string, number>, name, val);
+                  setSafeNumberField(model.parameters as Record<string, number>, name, val);
                   anyChanged = true;
                 }
               } catch (e: unknown) {
@@ -1738,7 +1714,7 @@ export async function simulate(
           const outT0 = toBngGridTime(globalTime, phaseTEnd, phaseNSteps, 0);
           pushDataRow(phase.suffix, outT0, state as Float64Array);
           const speciesPoint0: Record<string, number> = { time: outT0 };
-          for (let i = 0; i < numSpecies; i++) setSafeNumericField(speciesPoint0, speciesHeaders[i], state[i]);
+          for (let i = 0; i < numSpecies; i++) setSafeNumberField(speciesPoint0, speciesHeaders[i], state[i]);
           appendSpeciesSnapshot(phase.suffix, speciesPoint0);
         }
         let totalEvents = 0;
@@ -1968,7 +1944,7 @@ export async function simulate(
                 pushDataRow(phase.suffix, outT, state as Float64Array);
                 const sp: Record<string, number> = { time: outT };
                 for (let k = 0; k < numSpecies; k++) {
-                  setSafeNumericField(sp, speciesHeaders[k], state[k]);
+                  setSafeNumberField(sp, speciesHeaders[k], state[k]);
                 }
                 appendSpeciesSnapshot(phase.suffix, sp);
               }
@@ -1992,7 +1968,7 @@ export async function simulate(
             const outT = toBngGridTime(globalTime, phaseTEnd, phaseNSteps, nextOutIdx);
             pushDataRow(phase.suffix, outT, state as Float64Array);
             const sp: Record<string, number> = { time: outT };
-            for (let k = 0; k < numSpecies; k++) setSafeNumericField(sp, speciesHeaders[k], state[k]);
+            for (let k = 0; k < numSpecies; k++) setSafeNumberField(sp, speciesHeaders[k], state[k]);
             appendSpeciesSnapshot(phase.suffix, sp);
             nextOutIdx++;
           }
@@ -2154,7 +2130,7 @@ export async function simulate(
           for (let i = 0; i < parameterNames.length; i++) {
             const parameterName = parameterNames[i];
             if (parameterName === '__proto__' || parameterName === 'constructor' || parameterName === 'prototype') continue;
-            setSafeNumericField(rateContext, parameterName, model.parameters[parameterName]);
+            setSafeNumberField(rateContext, parameterName, model.parameters[parameterName]);
           }
         };
         // Initialize with parameters
@@ -2186,7 +2162,7 @@ export async function simulate(
           for (let i = 0; i < parameterNames.length; i++) {
             const pn = parameterNames[i];
             if (pn === '__proto__' || pn === 'constructor' || pn === 'prototype') continue;
-            setSafeNumericField(rateContext, pn, model.parameters[pn]);
+            setSafeNumberField(rateContext, pn, model.parameters[pn]);
           }
 
           // Update observable values in the mutable context (in-place)
@@ -2569,7 +2545,7 @@ export async function simulate(
             for (const key in nextParams) {
               if (Object.prototype.hasOwnProperty.call(nextParams, key)) {
                 if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
-                setSafeNumericField(model.parameters as Record<string, number>, key, nextParams[key]);
+                setSafeNumberField(model.parameters as Record<string, number>, key, nextParams[key]);
               }
             }
           }
@@ -3060,7 +3036,7 @@ export async function simulate(
             const wgpuSuffix = phases[0]?.suffix;
             appendDataRow(wgpuSuffix, { time, ...obsValues });
             const sp: Record<string, number> = { time };
-            for (let j = 0; j < numSpecies; j++) setSafeNumericField(sp, speciesHeaders[j], conc[j]);
+            for (let j = 0; j < numSpecies; j++) setSafeNumberField(sp, speciesHeaders[j], conc[j]);
             appendSpeciesSnapshot(wgpuSuffix, sp);
           }
           const defaultWgpuSuffix = dataBySuffix.__default__ ? '__default__' : (Object.keys(dataBySuffix)[0] || '__default__');
@@ -3406,7 +3382,7 @@ export async function simulate(
         const obsValues = evaluateObservablesFast(y);
         appendDataRow(phase.suffix, { time: outT0, ...obsValues, ...evaluateFunctionsForOutput(y, obsValues) });
         const s0: Record<string, number> = { time: outT0 };
-        for (let i = 0; i < numSpecies; i++) setSafeNumericField(s0, speciesHeaders[i], stateValueToSpeciesOutput(y[i], i));
+        for (let i = 0; i < numSpecies; i++) setSafeNumberField(s0, speciesHeaders[i], stateValueToSpeciesOutput(y[i], i));
         appendSpeciesSnapshot(phase.suffix, s0);
       }
 
@@ -3477,7 +3453,7 @@ export async function simulate(
             const obsValues = evaluateObservablesFast(y);
             appendDataRow(phase.suffix, { time: outT, ...obsValues, ...evaluateFunctionsForOutput(y, obsValues) });
             const sp: Record<string, number> = { time: outT };
-            for (let k = 0; k < numSpecies; k++) setSafeNumericField(sp, speciesHeaders[k], stateValueToSpeciesOutput(y[k], k));
+            for (let k = 0; k < numSpecies; k++) setSafeNumberField(sp, speciesHeaders[k], stateValueToSpeciesOutput(y[k], k));
             appendSpeciesSnapshot(phase.suffix, sp);
 
             if (isCbnglSimpleModel && cbnglTraceSteps.has(i)) {
@@ -3607,7 +3583,7 @@ export async function simulate(
         if (lastRecordedT !== finalT) {
           // Record final species state for multi-phase propagation
           const spFinal: Record<string, number> = { time: finalT };
-          for (let k = 0; k < numSpecies; k++) setSafeNumericField(spFinal, speciesHeaders[k], stateValueToSpeciesOutput(y[k], k));
+          for (let k = 0; k < numSpecies; k++) setSafeNumberField(spFinal, speciesHeaders[k], stateValueToSpeciesOutput(y[k], k));
           appendSpeciesSnapshot(phase.suffix, spFinal);
         }
       }

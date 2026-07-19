@@ -217,6 +217,31 @@ export type { NullclineConfig, NullclineResult } from './services/analysis/Nullc
 
 // ── Temporal Information Theory ─────────────────────────────────────
 export { analyzeReactionInformation, compareCausalGraphs, buildStructuralEdges } from './services/analysis/ReactionInformationTheory';
+export {
+    extractMoleculeNames,
+    parseMoleculeTokens,
+    extractBindingRequirements,
+    type MoleculeToken,
+    type MoleculeTokenComponent,
+    type BindingRequirement,
+} from './services/patterns/patternTokens';
+export {
+    buildDirectedReactionGraph,
+    type ReactionLike,
+    type DirectedEdge,
+} from './services/patterns/reactionGraph';
+export { isSafeObjectKey, setSafeNumberField } from './utils/safeObjectKey';
+export { normalizeWhitespace, collapseWhitespace, escapeRegExp } from './utils/stringUtils';
+export {
+    sanitizeObservableName,
+    insertBeforeEndModel,
+    hasSimulateAction,
+    hasObservablesBlock,
+    hasGenerateNetworkAction,
+    ensureDefaultObservables,
+    ensureDefaultActions,
+} from './services/indra/indraModelPrep';
+export { updateMassActionRates } from './services/analysis/DoseResponse';
 export type { ReactionITConfig, ReactionITResult, MutualInformationResult, TransferEntropyResult, PhaseLockingResult } from './services/analysis/ReactionInformationTheory';
 
 export { analyzeResiduals } from './services/analysis/AnalyzeResiduals';

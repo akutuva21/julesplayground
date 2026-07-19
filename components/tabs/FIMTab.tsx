@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import { FIMHeatmap } from '../../components/FIMHeatmap';
 import { formatValue } from '../../src/utils/formatValue';
+import { toggleArrayMember } from '../../services/collections';
 
 interface FIMTabProps {
   model: BNGLModel | null;
@@ -108,7 +109,7 @@ export const FIMTab: React.FC<FIMTabProps> = ({ model }) => {
   }, [model]);
 
   const toggleParam = (p: string) => {
-    setSelected((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
+    setSelected((prev) => toggleArrayMember(prev, p));
   };
 
   const handleCompute = useCallback(async (overrideConfig?: { method?: 'ode' | 'ssa'; t_end: number; n_steps: number }) => {
