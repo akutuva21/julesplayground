@@ -49,5 +49,5 @@ export function setSafeNumberField(
     value: number,
 ): void {
     if (!isSafeObjectKey(key)) return;
-    Object.assign(target, { [key]: value });
+    Reflect.set(target, key, value);
 }
