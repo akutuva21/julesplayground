@@ -12,9 +12,10 @@ import { parseBNGLWithANTLR } from '../../parser/BNGLParserWrapper';
 
 export function sanitizeObservableName(name: string): string {
   const cleaned = name.replace(/[^A-Za-z0-9_]+/g, '_');
-  const withoutLeadingUnderscores = cleaned.replace(/^_+/, '');
-  const normalized = withoutLeadingUnderscores.replace(/_+$/, '');
-  const result = normalized.length > 0 ? normalized : 'obs';
+  let s = cleaned;
+  while (s.startsWith('_')) s = s.slice(1);
+  while (s.endsWith('_')) s = s.slice(0, -1);
+  const result = s.length > 0 ? s : 'obs';
   return /^[A-Za-z_]/.test(result) ? result : `obs_${result}`;
 }
 

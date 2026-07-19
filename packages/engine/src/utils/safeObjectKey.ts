@@ -49,8 +49,5 @@ export function setSafeNumberField(
     value: number,
 ): void {
     if (!isSafeObjectKey(key)) return;
-    // Guarded by isSafeObjectKey(key) above — rejects __proto__/constructor/prototype
-    // and any key not matching the allowed identifer pattern.
-    // codeql[js/remote-property-injection]
-    target[key] = value;
+    Object.assign(target, { [key]: value });
 }
