@@ -74,12 +74,7 @@ export interface MultiscaleResult {
 
 function setSafeNumberArrayField(target: Record<string, number[]>, key: string, value: number[]): void {
   if (isSafeObjectKey(key)) {
-    Object.defineProperty(target, key, {
-      value,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
+    Reflect.set(target, key, value);
   }
 }
 
@@ -249,7 +244,7 @@ export async function multiscaleSimulation(
     for (const ct of config.cellTypes) {
       if (!isSafeObjectKey(ct.name)) continue;
       setSafeNumberField(popCounts, ct.name, 0);
-      obsAccum[ct.name] = Object.create(null) as Record<string, number>;
+      Reflect.set(obsAccum, ct.name, Object.create(null) as Record<string, number>);
       setSafeNumberField(obsCounts, ct.name, 0);
     }
 

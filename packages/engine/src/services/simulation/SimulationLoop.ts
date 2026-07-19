@@ -56,7 +56,7 @@ interface ConcreteObservable {
 
 function setSafeArrayField<T>(target: Record<string, T[]>, key: string, value: T[]): void {
   if (isSafeObjectKey(key)) {
-    target[key] = value;
+    Reflect.set(target, key, value);
   }
 }
 
