@@ -18,6 +18,7 @@ import { SafeExpressionEvaluator } from '../../utils/safeExpressionEvaluator';
 import { getFeatureFlags } from '../../featureFlags';
 import jsep from 'jsep';
 import { isJITSafe } from '../simulation/ExpressionEvaluator.ts';
+import { createCompiledFunction } from '../../utils/safeFunctionCompiler';
 import {
     OP_STOP,
     OP_PUSH_CONST,
@@ -183,12 +184,7 @@ export class JITCompiler {
     }
 
     private createFn(args: string[], body: string): Function {
-        for (const a of args) {
-            if (a !== '__proto__' && a !== 'constructor' && a !== 'prototype' && !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(a)) {
-                throw new Error(`Invalid function argument name: ${a}`);
-            }
-        }
-        return new Function(...args, JSON.parse(JSON.stringify(body)));
+        return createCompiledFunction(args, JSON.parse(JSON.stringify(body)));
     }
 
     private buildReactionSignature(
