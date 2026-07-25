@@ -46,7 +46,9 @@ describe('BNGL writer strict-parser compatibility', () => {
       new Map(),
       [],
       new Set(),
-      false
+      false,
+      new Set(),
+      true
     );
 
     expect(section).toContain(
