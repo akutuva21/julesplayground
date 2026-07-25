@@ -571,9 +571,8 @@ class VF2State {
     } else {
       // PERF: In hot graph matching paths, pre-allocate arrays and use manual
       // loops instead of .map() to avoid intermediate closures and GC pressure.
-      const numMolecules = pattern.molecules.length;
-      this.nodeOrdering = new Array(numMolecules);
-      for (let i = 0; i < numMolecules; i++) {
+      this.nodeOrdering = new Array(pLen);
+      for (let i = 0; i < pLen; i++) {
         this.nodeOrdering[i] = i;
       }
     }
@@ -585,8 +584,8 @@ class VF2State {
     this.frontierSize = 0;
 
     let maxComps = 0;
-    this.componentOrders = new Array(pattern.molecules.length);
-    for (let m = 0; m < pattern.molecules.length; m++) {
+    this.componentOrders = new Array(pLen);
+    for (let m = 0; m < pLen; m++) {
       const mol = pattern.molecules[m];
       const compCount = mol.components.length;
       // PERF: In hot graph matching paths, pre-allocate arrays and use manual
