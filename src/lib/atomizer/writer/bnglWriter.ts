@@ -2191,6 +2191,12 @@ export function generateBNGL(
   sections.push(writeMoleculeTypes(augmentedMoleculeTypes, molTypeAnnotations));
   mark('writeMoleculeTypes', t);
 
+  // Build parameter dictionary early so it can be passed to writeSeedSpecies
+  const paramDict = new Map<string, number | string>();
+  for (const [id, param] of model.parameters) {
+    paramDict.set(id, param.value);
+  }
+
   // Seed species
   t = Date.now();
   const { section: speciesSection, patternToId, sbmlToBnglId, idToPattern } = writeSeedSpecies(
@@ -2272,11 +2278,6 @@ export function generateBNGL(
   }
 
   // Functions (includes assignment rules and concentration scaling)
-  const paramDict = new Map<string, number | string>();
-  for (const [id, param] of model.parameters) {
-    paramDict.set(id, param.value);
-  }
-
   t = Date.now();
   // Collector for time-dependent rate functions emitted by the reaction writer; injected into the
   // functions section (recorded by index) after the reaction rules are written.
