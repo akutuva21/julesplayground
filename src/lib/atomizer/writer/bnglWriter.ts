@@ -261,12 +261,14 @@ export function bnglFunction(
       // the label AND the lookup by the same name so the emitted BNGL binds AND is numerically
       // correct.
       const obsName = standardizeName(match);
-      if (isSaturationRate && speciesWithConcFunctions.has(obsName)) {
-        return `${obsName}_amt`;
-      } else if (speciesWithConcFunctions.has(obsName)) {
-        return `_c_${obsName}()`;
+      const isConc = speciesWithConcFunctions.has(obsName) || speciesWithConcFunctions.has(mappedId);
+      const baseName = speciesWithConcFunctions.has(mappedId) ? mappedId : obsName;
+      if (isSaturationRate && isConc) {
+        return `${baseName}_amt`;
+      } else if (isConc) {
+        return `_c_${baseName}()`;
       } else {
-        return `${obsName}_amt`;
+        return `${baseName}_amt`;
       }
     }
 
@@ -1179,7 +1181,8 @@ export function writeFunctions(
   rateRules: Array<{ variable: string; math: string }> = [],
   rateRuleFluxTargets: Set<string> = new Set(),
   forceRuleOnlyFastPath: boolean = false,
-  compartmentIds: Set<string> = new Set()
+  compartmentIds: Set<string> = new Set(),
+  keepParameterized: boolean = false
 ): string {
   const lines: string[] = [];
   const functionNameMap = new Map<string, string>();
@@ -1242,7 +1245,7 @@ export function writeFunctions(
     // cannot contain arguments" - so the parameterized standalone definition must NOT be
     // emitted. The inlined call sites already carry the expanded body. Zero-argument
     // functionDefinitions are fine and still emitted below.
-    if (func.arguments && func.arguments.length > 0) continue;
+    if (!keepParameterized && func.arguments && func.arguments.length > 0) continue;
     const name = functionNameMap.get(id) || sanitizeFunctionIdentifier(id);
     const argumentMap = new Map<string, string>();
     const args = (func.arguments || []).map((arg, idx) => {
@@ -2138,6 +2141,11 @@ export function generateBNGL(
     s.species.renumberBonds();
   }
 
+  const paramDict = new Map<string, number | string>();
+  for (const [id, param] of model.parameters) {
+    paramDict.set(id, param.value);
+  }
+
   sections.push('begin model');
   sections.push('');
 
@@ -2259,11 +2267,6 @@ export function generateBNGL(
   }
 
   // Functions (includes assignment rules and concentration scaling)
-  const paramDict = new Map<string, number | string>();
-  for (const [id, param] of model.parameters) {
-    paramDict.set(id, param.value);
-  }
-
   t = Date.now();
   // Collector for time-dependent rate functions emitted by the reaction writer; injected into the
   // functions section (recorded by index) after the reaction rules are written.
