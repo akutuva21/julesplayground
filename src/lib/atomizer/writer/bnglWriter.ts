@@ -1974,6 +1974,11 @@ export function generateBNGL(
 
   const sections: string[] = [];
 
+  const paramDict = new Map<string, number | string>();
+  for (const [id, param] of model.parameters) {
+    paramDict.set(id, param.value);
+  }
+
   // Collect assignment rules for processing
   const assignmentRules: Array<{ variable: string; math: string }> = [];
   const rateRules: Array<{ variable: string; math: string }> = [];
@@ -2272,11 +2277,6 @@ export function generateBNGL(
   }
 
   // Functions (includes assignment rules and concentration scaling)
-  const paramDict = new Map<string, number | string>();
-  for (const [id, param] of model.parameters) {
-    paramDict.set(id, param.value);
-  }
-
   t = Date.now();
   // Collector for time-dependent rate functions emitted by the reaction writer; injected into the
   // functions section (recorded by index) after the reaction rules are written.
