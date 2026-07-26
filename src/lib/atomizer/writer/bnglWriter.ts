@@ -260,13 +260,25 @@ export function bnglFunction(
       // (BIOMD0000000013's Calvin-cycle saturation terms are a clean example). Reference both
       // the label AND the lookup by the same name so the emitted BNGL binds AND is numerically
       // correct.
+      //
+      // In bnglFunction, when resolving whether to generate a concentration function or an
+      // amount-based observable, check if speciesWithConcFunctions contains either the standardized
+      // SBML ID (obsName) or the consolidated/mapped BNGL ID (mappedId) to ensure both test
+      // assertions and real model generations resolve correctly.
       const obsName = standardizeName(match);
-      if (isSaturationRate && speciesWithConcFunctions.has(obsName)) {
-        return `${obsName}_amt`;
-      } else if (speciesWithConcFunctions.has(obsName)) {
-        return `_c_${obsName}()`;
+      const mappedObsName = standardizeName(mappedId);
+      const useId = speciesWithConcFunctions.has(mappedObsName)
+        ? mappedObsName
+        : speciesWithConcFunctions.has(obsName)
+        ? obsName
+        : mappedObsName;
+
+      if (isSaturationRate && speciesWithConcFunctions.has(useId)) {
+        return `${useId}_amt`;
+      } else if (speciesWithConcFunctions.has(useId)) {
+        return `_c_${useId}()`;
       } else {
-        return `${obsName}_amt`;
+        return `${useId}_amt`;
       }
     }
 
@@ -1179,7 +1191,8 @@ export function writeFunctions(
   rateRules: Array<{ variable: string; math: string }> = [],
   rateRuleFluxTargets: Set<string> = new Set(),
   forceRuleOnlyFastPath: boolean = false,
-  compartmentIds: Set<string> = new Set()
+  compartmentIds: Set<string> = new Set(),
+  keepParameterized: boolean = false
 ): string {
   const lines: string[] = [];
   const functionNameMap = new Map<string, string>();
@@ -1242,7 +1255,7 @@ export function writeFunctions(
     // cannot contain arguments" - so the parameterized standalone definition must NOT be
     // emitted. The inlined call sites already carry the expanded body. Zero-argument
     // functionDefinitions are fine and still emitted below.
-    if (func.arguments && func.arguments.length > 0) continue;
+    if (!keepParameterized && func.arguments && func.arguments.length > 0) continue;
     const name = functionNameMap.get(id) || sanitizeFunctionIdentifier(id);
     const argumentMap = new Map<string, string>();
     const args = (func.arguments || []).map((arg, idx) => {
