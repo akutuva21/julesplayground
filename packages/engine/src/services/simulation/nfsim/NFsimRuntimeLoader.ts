@@ -462,6 +462,7 @@ export async function ensureNFsimRuntime(): Promise<NFsimRuntime | null> {
       const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
       const resolvedWasmUrl = wasmUrl ?? `${normalizedBase}nfsim.wasm`;
 
+      console.log('[ensureNFsimRuntime] factory function check:', typeof factory, 'hasFactory:', !!factory);
       if (factory && typeof factory === 'function') {
         const moduleArg: Record<string, unknown> = {
           locateFile: (p: string) => (p.endsWith('.wasm') ? resolvedWasmUrl : p),
@@ -469,8 +470,11 @@ export async function ensureNFsimRuntime(): Promise<NFsimRuntime | null> {
           printErr: (msg: string) => console.error(`[NFsim Err] ${msg}`)
         };
         globalThis.Module = moduleArg;
+        console.log('[ensureNFsimRuntime] Awaiting factory moduleArg...');
         const module = await factory(moduleArg);
+        console.log('[ensureNFsimRuntime] Factory resolved successfully.');
         const runtime = createRuntimeFromModule(module);
+        console.log('[ensureNFsimRuntime] Runtime created from module:', !!runtime);
         if (!runtime) {
           throw new Error(
             'NFsim module factory loaded successfully but did not produce a compatible runtime. ' +
