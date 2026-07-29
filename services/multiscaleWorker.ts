@@ -16,6 +16,22 @@ import type { MultiscaleConfig, MultiscaleResult, MultiscaleModelDefinition } fr
 CVODESolver.cvodeModuleFactory = () =>
   import('./cvode_loader.js').then((m: any) => m.default ?? m);
 
+if (typeof self !== 'undefined' && typeof self.addEventListener === 'function') {
+  self.addEventListener('error', (event) => {
+    const errMsg = event.error instanceof Error ? event.error.message : (event.message || 'Unknown worker error');
+    const response: MultiscaleWorkerResponse = { type: 'error', message: errMsg };
+    self.postMessage(response);
+    event.preventDefault();
+  });
+
+  self.addEventListener('unhandledrejection', (event) => {
+    const errMsg = event.reason instanceof Error ? event.reason.message : String(event.reason ?? 'Unhandled rejection in worker');
+    const response: MultiscaleWorkerResponse = { type: 'error', message: errMsg };
+    self.postMessage(response);
+    event.preventDefault();
+  });
+}
+
 /** Messages from main thread -> worker */
 export type MultiscaleWorkerRequest =
   | { type: 'run'; config: MultiscaleConfig }
