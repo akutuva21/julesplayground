@@ -1,3 +1,0 @@
-## 2024-08-16 - Explicit focus rings required on inline chart buttons
-**Learning:** Bespoke action buttons embedded in chart UI (like the Export dropdown in ResultsChart) often lack the default design system's focus styles because they don't inherit from generic `Button` components. This leaves keyboard navigators guessing where their focus is.
-**Action:** When implementing custom inline controls (e.g., scale toggles, filter toggles, export buttons) in data visualization wrappers, ensure keyboard accessibility by explicitly adding `focus-visible` styling (e.g., `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`) to bespoke buttons that don't inherit default UI component focus rings.
