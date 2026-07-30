@@ -192,12 +192,19 @@ export class BnglWorkerPool {
             
             // Listen for internal error messages from our own error trapping in the worker
             worker.addEventListener('message', (event: MessageEvent<WorkerResponse>) => {
-                if (event.data.type === 'worker_internal_error') {
-                   const payload = event.data.payload;
+                const data = event.data ?? {};
+                if (data.type === 'worker_internal_error') {
+                   const payload = data.payload;
                    const errorMsg = payload?.message || 'Worker internal error';
                    console.error(`[Pool] Worker ${i} internal error reported:`, payload);
                    this.rejectAllPendingOnWorker(worker, new Error(`Worker internal error: ${errorMsg}`));
                 }
+            });
+
+            // Register global messageerror listener to prevent pending promises from hanging
+            worker.addEventListener('messageerror', (event) => {
+                console.error(`[Pool] Worker ${i} failed to deserialize message:`, event.data);
+                this.rejectAllPendingOnWorker(worker, new Error('Worker posted an unserializable message'));
             });
 
             this.workers.push(worker);
@@ -218,7 +225,7 @@ export class BnglWorkerPool {
             const messageId = generateSecureMessageId();
 
             const handler = (event: MessageEvent<WorkerResponse>) => {
-                const { id, type, payload } = event.data;
+                const { id, type, payload } = event.data ?? {};
                 if (type === 'worker_internal_error') {
                     worker.removeEventListener('message', handler);
                     const errorMsg = (payload as any)?.message || 'Worker internal error';
@@ -338,7 +345,7 @@ export class BnglWorkerPool {
         return new Promise((resolve, reject) => {
             const messageId = generateSecureMessageId();
             const handler = (event: MessageEvent<WorkerResponse>) => {
-                const { id, type, payload } = event.data;
+                const { id, type, payload } = event.data ?? {};
                 if (type === 'worker_internal_error') {
                     worker.removeEventListener('message', handler);
                     const errorMsg = (payload as any)?.message || 'Worker internal error';
@@ -377,7 +384,7 @@ export class BnglWorkerPool {
         return new Promise((resolve, reject) => {
             const messageId = generateSecureMessageId();
             const handler = (event: MessageEvent<WorkerResponse>) => {
-                const { id, type, payload } = event.data;
+                const { id, type, payload } = event.data ?? {};
                 if (type === 'worker_internal_error') {
                     worker.removeEventListener('message', handler);
                     const errorMsg = (payload as any)?.message || 'Worker internal error';
@@ -421,7 +428,7 @@ export class BnglWorkerPool {
         return new Promise((resolve, reject) => {
             const messageId = generateSecureMessageId();
             const handler = (event: MessageEvent<WorkerResponse>) => {
-                const { id, type, payload } = event.data;
+                const { id, type, payload } = event.data ?? {};
                 if (type === 'worker_internal_error') {
                     worker.removeEventListener('message', handler);
                     const errorMsg = (payload as any)?.message || 'Worker internal error';
@@ -463,7 +470,8 @@ export class BnglWorkerPool {
         return new Promise((resolve, reject) => {
             const messageId = generateSecureMessageId();
             const handler = (event: MessageEvent<WorkerResponse>) => {
-                if (event.data.id !== messageId) return;
+                const { id } = event.data ?? {};
+                if (id !== messageId) return;
                 worker.removeEventListener('message', handler);
                 this.removePendingRequest(worker, req);
                 resolve();
