@@ -3386,7 +3386,7 @@ export class NetworkGenerator {
           for (const [key1, partners] of fullProductGraph.adjacency) {
             if (invalidInterComplexBond) break;
             const mol1Idx = parseInt(key1, 10);
-            const mol1 = fullProductGraph.molecules[mol1Idx];
+            const mol1: any = fullProductGraph.molecules[mol1Idx];
             if (!mol1) continue;
             getMolKeyFromMol(mol1); // Ensures _sourceR and _sourceM are initialized
             const r1 = (mol1 as any)._sourceR;
@@ -3398,7 +3398,7 @@ export class NetworkGenerator {
               if (seenBondIds.has(bondId)) continue;
               seenBondIds.add(bondId);
               const mol2Idx = parseInt(key2, 10);
-              const mol2 = fullProductGraph.molecules[mol2Idx];
+              const mol2: any = fullProductGraph.molecules[mol2Idx];
               if (!mol2) continue;
               getMolKeyFromMol(mol2); // Ensures _sourceR and _sourceM are initialized
               const r2 = (mol2 as any)._sourceR;
