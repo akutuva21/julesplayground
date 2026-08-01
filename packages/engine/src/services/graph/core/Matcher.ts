@@ -830,19 +830,11 @@ class VF2State {
       return false;
     }
 
-    const requiredCounts = new Map<string, number>();
-    for (const comp of patternMol.components) {
-      requiredCounts.set(comp.name, (requiredCounts.get(comp.name) ?? 0) + 1);
-    }
+    const requiredCounts = patternMol.componentCounts;
+    const targetCounts = targetMol.componentCounts;
 
     for (const [name, count] of requiredCounts.entries()) {
-      let available = 0;
-      for (const targetComp of targetMol.components) {
-        if (targetComp.name === name) {
-          available += 1;
-        }
-      }
-      if (available < count) {
+      if ((targetCounts.get(name) ?? 0) < count) {
         return false;
       }
     }
