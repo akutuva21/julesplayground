@@ -421,8 +421,14 @@ export class GraphMatcher {
       return;
     }
 
-    const candidates = state.getCandidatePairs();
-    for (const [pNode, tNode] of candidates) {
+    const candidateResult = state.getCandidateTargetNodes();
+    if (!candidateResult) return;
+
+    const pNode = candidateResult.pNode;
+    const tNodes = candidateResult.tNodes;
+
+    for (let i = 0; i < tNodes.length; i++) {
+      const tNode = tNodes[i];
       // Early exit if we've hit the iteration limit
       if (iterationCount.value > MAX_VF2_ITERATIONS) {
         return;
@@ -453,8 +459,14 @@ export class GraphMatcher {
       return state.tryGetMatch();
     }
 
-    const candidates = state.getCandidatePairs();
-    for (const [pNode, tNode] of candidates) {
+    const candidateResult = state.getCandidateTargetNodes();
+    if (!candidateResult) return null;
+
+    const pNode = candidateResult.pNode;
+    const tNodes = candidateResult.tNodes;
+
+    for (let i = 0; i < tNodes.length; i++) {
+      const tNode = tNodes[i];
       if (state.isFeasible(pNode, tNode)) {
         state.addPair(pNode, tNode);
         const result = this.vf2BacktrackFirst(state, iterationCount);
@@ -707,9 +719,10 @@ class VF2State {
    * adjacent to the current core), falling back to uncovered nodes following the precomputed
    * ordering. Target candidates are filtered with quick feasibility and neighbourhood degree
    * consistency before being returned for recursive exploration.
+   *
+   * Optimized to completely avoid allocating tuple arrays [pNode, tNode][] during backtracking.
    */
-  getCandidatePairs(): [number, number][] {
-    const pairs: [number, number][] = [];
+  getCandidateTargetNodes(): { pNode: number; tNodes: number[] } | null {
     const pCore = this.corePattern;
     const tCore = this.coreTarget;
 
@@ -722,7 +735,7 @@ class VF2State {
       return this.frontierSize;
     })();
 
-    if (patternCandidatesSize === 0) return pairs;
+    if (patternCandidatesSize === 0) return null;
 
     let nextPatternIdx: number | undefined;
     for (const idx of this.nodeOrdering) {
@@ -733,16 +746,13 @@ class VF2State {
     }
 
     if (nextPatternIdx === undefined) {
-      return pairs;
+      return null;
     }
 
     // NOTE: When the next pattern node is NOT in the pattern frontier (i.e., it's from
     // a disconnected component in the pattern), we must consider ALL uncovered target nodes,
     // not just the target frontier. This is essential for patterns like "A.B" where A and B
     // are not directly bonded but must be in the same species/complex.
-    // 
-    // BNG semantics: "A.B" means A and B are in the same complex, but they don't need to
-    // be directly bonded. They could be connected through intermediate molecules.
     const isNextPatternNodeInFrontier = patternFrontierSize > 0 && bits[nextPatternIdx] === 1;
 
     if (isNextPatternNodeInFrontier) {
@@ -751,6 +761,7 @@ class VF2State {
       this.computeUncoveredTargetNodes();
     }
 
+    const tNodes: number[] = [];
     // Iterate target candidates in order (bitset naturally gives ascending order)
     for (let tIdx = 0; tIdx < tCore.length; tIdx++) {
       if (bits[tIdx] !== 1) continue;
@@ -764,10 +775,10 @@ class VF2State {
         continue;
       }
 
-      pairs.push([nextPatternIdx, tIdx]);
+      tNodes.push(tIdx);
     }
 
-    return pairs;
+    return { pNode: nextPatternIdx, tNodes };
   }
 
   isFeasible(pMol: number, tMol: number): boolean {
