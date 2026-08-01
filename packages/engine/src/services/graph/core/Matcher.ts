@@ -2,10 +2,6 @@ import { SpeciesGraph } from './SpeciesGraph.ts';
 import { Component } from './Component.ts';
 import { countEmbeddingDegeneracy } from './degeneracy.ts';
 
-const getNeighborMolecules = (graph: SpeciesGraph, molIdx: number): number[] => {
-  return graph.neighborList[molIdx] ?? [];
-};
-
 export interface MatchMap {
   moleculeMap: Map<number, number>;      // pattern mol => target mol
   componentMap: Map<string, string>;     // "pMol.pCompIdx" => "tMol.tCompIdx"
@@ -79,10 +75,11 @@ export class GraphMatcher {
     const ordering: number[] = [];
     const visited = new Set<number>();
     const labelFrequency = this.buildTargetLabelFrequency(target);
-    const components = this.findConnectedComponents(pattern);
+    const patternNeighbors = pattern.neighborList; // Get once!
+    const components = this.findConnectedComponentsWithNeighbors(pattern, patternNeighbors);
 
     for (const component of components) {
-      const root = this.selectBfsRoot(component, pattern, labelFrequency);
+      const root = this.selectBfsRootWithNeighbors(component, pattern, labelFrequency, patternNeighbors);
       if (root === undefined) {
         continue;
       }
@@ -99,7 +96,9 @@ export class GraphMatcher {
 
         for (let i = levelIndex; i < levelEnd; i++) {
           const node = queue[i];
-          for (const neighbor of getNeighborMolecules(pattern, node)) {
+          const nList = patternNeighbors[node] ?? [];
+          for (let ni = 0; ni < nList.length; ni++) {
+            const neighbor = nList[ni];
             if (!component.has(neighbor) || visited.has(neighbor) || nextLevelSet.has(neighbor)) {
               continue;
             }
@@ -115,8 +114,8 @@ export class GraphMatcher {
         const freq = new Array(k);
         for (let ni = 0; ni < k; ni++) {
           const node = nextLevel[ni];
-          covered[ni] = this.countCoveredNeighbors(pattern, node, visited);
-          degree[ni] = getNeighborMolecules(pattern, node).length;
+          covered[ni] = this.countCoveredNeighborsWithNeighbors(node, visited, patternNeighbors);
+          degree[ni] = (patternNeighbors[node] ?? []).length;
           freq[ni] = labelFrequency.get(pattern.molecules[node].name) ?? 0;
         }
         // sort indices by covered desc, degree desc, freq asc, index asc
@@ -153,7 +152,7 @@ export class GraphMatcher {
     return freq;
   }
 
-  private static findConnectedComponents(graph: SpeciesGraph): Array<Set<number>> {
+  private static findConnectedComponentsWithNeighbors(graph: SpeciesGraph, neighbors: number[][]): Array<Set<number>> {
     const visited = new Set<number>();
     const components: Array<Set<number>> = [];
 
@@ -180,7 +179,9 @@ export class GraphMatcher {
         visited.add(node);
         component.add(node);
 
-        for (const neighbor of getNeighborMolecules(graph, node)) {
+        const nList = neighbors[node] ?? [];
+        for (let ni = 0; ni < nList.length; ni++) {
+          const neighbor = nList[ni];
           if (!visited.has(neighbor)) {
             stack.push(neighbor);
           }
@@ -193,17 +194,18 @@ export class GraphMatcher {
     return components;
   }
 
-  private static selectBfsRoot(
+  private static selectBfsRootWithNeighbors(
     component: Set<number>,
     pattern: SpeciesGraph,
-    labelFrequency: Map<string, number>
+    labelFrequency: Map<string, number>,
+    neighbors: number[][]
   ): number | undefined {
     let bestNode: number | undefined;
     let bestDegree = -1;
     let bestLabelFrequency = Number.POSITIVE_INFINITY;
 
     for (const node of component) {
-      const degree = getNeighborMolecules(pattern, node).length;
+      const degree = (neighbors[node] ?? []).length;
       const freq = labelFrequency.get(pattern.molecules[node].name) ?? 0;
 
       if (
@@ -220,13 +222,15 @@ export class GraphMatcher {
     return bestNode;
   }
 
-  private static countCoveredNeighbors(
-    pattern: SpeciesGraph,
+  private static countCoveredNeighborsWithNeighbors(
     node: number,
-    visited: Set<number>
+    visited: Set<number>,
+    neighbors: number[][]
   ): number {
     let covered = 0;
-    for (const neighbor of getNeighborMolecules(pattern, node)) {
+    const nList = neighbors[node] ?? [];
+    for (let ni = 0; ni < nList.length; ni++) {
+      const neighbor = nList[ni];
       if (visited.has(neighbor)) {
         covered += 1;
       }
@@ -527,6 +531,8 @@ interface PendingComponentResult {
 class VF2State {
   pattern: SpeciesGraph;
   target: SpeciesGraph;
+  patternNeighbors: number[][];
+  targetNeighbors: number[][];
   corePattern: Int32Array;
   coreTarget: Int32Array;
   coreSize: number;
@@ -557,6 +563,8 @@ class VF2State {
   ) {
     this.pattern = pattern;
     this.target = target;
+    this.patternNeighbors = pattern.neighborList;
+    this.targetNeighbors = target.neighborList;
     const pLen = pattern.molecules.length;
     const tLen = target.molecules.length;
     this.corePattern = new Int32Array(pLen);
@@ -605,7 +613,9 @@ class VF2State {
     let count = 0;
     for (let pIdx = 0; pIdx < core.length; pIdx++) {
       if (core[pIdx] === -1) continue;
-      for (const neighbor of getNeighborMolecules(this.pattern, pIdx)) {
+      const nList = this.patternNeighbors[pIdx] ?? [];
+      for (let ni = 0; ni < nList.length; ni++) {
+        const neighbor = nList[ni];
         if (core[neighbor] === -1 && bits[neighbor] === 0) {
           bits[neighbor] = 1;
           count++;
@@ -623,7 +633,9 @@ class VF2State {
     let count = 0;
     for (let tIdx = 0; tIdx < core.length; tIdx++) {
       if (core[tIdx] === -1) continue;
-      for (const neighbor of getNeighborMolecules(this.target, tIdx)) {
+      const nList = this.targetNeighbors[tIdx] ?? [];
+      for (let ni = 0; ni < nList.length; ni++) {
+        const neighbor = nList[ni];
         if (core[neighbor] === -1 && bits[neighbor] === 0) {
           bits[neighbor] = 1;
           count++;
@@ -666,7 +678,9 @@ class VF2State {
   private neighborConsistencyCheck(pNode: number, tNode: number): boolean {
     let patternUncovered = 0;
     const pCore = this.corePattern;
-    for (const neighbor of getNeighborMolecules(this.pattern, pNode)) {
+    const pList = this.patternNeighbors[pNode] ?? [];
+    for (let ni = 0; ni < pList.length; ni++) {
+      const neighbor = pList[ni];
       if (pCore[neighbor] === -1) {
         patternUncovered += 1;
       }
@@ -674,7 +688,9 @@ class VF2State {
 
     let targetUncovered = 0;
     const tCore = this.coreTarget;
-    for (const neighbor of getNeighborMolecules(this.target, tNode)) {
+    const tList = this.targetNeighbors[tNode] ?? [];
+    for (let ni = 0; ni < tList.length; ni++) {
+      const neighbor = tList[ni];
       if (tCore[neighbor] === -1) {
         targetUncovered += 1;
       }
@@ -849,7 +865,9 @@ class VF2State {
     const patternNameOnlyCounts = new Map<string, number>();
 
     const addPatternNeighbors = (sourceIdx: number, skipCandidate: boolean) => {
-      for (const neighbor of getNeighborMolecules(this.pattern, sourceIdx)) {
+      const pList = this.patternNeighbors[sourceIdx] ?? [];
+      for (let ni = 0; ni < pList.length; ni++) {
+        const neighbor = pList[ni];
         if (pCore[neighbor] !== -1) {
           continue;
         }
@@ -882,7 +900,9 @@ class VF2State {
     const targetNameOnlyCounts = new Map<string, number>();
 
     const addTargetNeighbors = (sourceIdx: number, skipCandidate: boolean) => {
-      for (const neighbor of getNeighborMolecules(this.target, sourceIdx)) {
+      const tList = this.targetNeighbors[sourceIdx] ?? [];
+      for (let ni = 0; ni < tList.length; ni++) {
+        const neighbor = tList[ni];
         if (tCore[neighbor] !== -1) {
           continue;
         }
@@ -925,7 +945,9 @@ class VF2State {
     const patternCounts = new Map<string, number>();
     const patternNameOnlyCounts = new Map<string, number>();
 
-    for (const neighbor of getNeighborMolecules(this.pattern, pMol)) {
+    const pList = this.patternNeighbors[pMol] ?? [];
+    for (let ni = 0; ni < pList.length; ni++) {
+      const neighbor = pList[ni];
       if (pCore[neighbor] !== -1) {
         continue;
       }
@@ -949,7 +971,9 @@ class VF2State {
     const targetCounts = new Map<string, number>();
     const targetNameOnlyCounts = new Map<string, number>();
 
-    for (const neighbor of getNeighborMolecules(this.target, tMol)) {
+    const tList = this.targetNeighbors[tMol] ?? [];
+    for (let ni = 0; ni < tList.length; ni++) {
+      const neighbor = tList[ni];
       if (tCore[neighbor] !== -1) {
         continue;
       }
@@ -1017,12 +1041,9 @@ class VF2State {
 
       const storedMap = this.componentMatches.get(pMolIdx);
 
-      let perMolMap: Map<number, number> | null = null;
-      if (storedMap && this.isStoredComponentMapConsistent(pMolIdx, tMolIdx, storedMap)) {
-        perMolMap = storedMap;
-      } else {
-        perMolMap = this.matchComponentsWithBondConsistency(pMolIdx, tMolIdx);
-      }
+      const perMolMap = (storedMap && this.isStoredComponentMapConsistent(pMolIdx, tMolIdx, storedMap))
+        ? storedMap
+        : this.matchComponentsWithBondConsistency(pMolIdx, tMolIdx);
 
       if (!perMolMap) {
         return null;
