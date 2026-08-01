@@ -303,30 +303,17 @@ export class GraphMatcher {
    * along with fast topological checks (bond count, max degree, and bound components) to prune rejections in O(1) time.
    */
   public static canPossiblyMatch(pattern: SpeciesGraph, target: SpeciesGraph): boolean {
-    // 0. Fingerprint check
-    const patternList = pattern.wildcardFreeFingerprintList;
-    const targetFp = target.fingerprint;
-    for (let i = 0; i < patternList.length; i++) {
-      const entry = patternList[i];
-      const tarCount = targetFp.get(entry[0]) ?? 0;
-      if (tarCount < entry[1]) {
-        return false;
-      }
-    }
-
     // 1. Read cached topological aggregates for pattern
-    const patternCounts = pattern.molTypeCounts;
     const patternBonds = pattern.bondCount;
     const patternBoundComps = pattern.boundCompCount;
     const maxPatternDegree = pattern.maxDegree;
 
     // 2. Read cached topological aggregates for target
-    const targetCounts = target.molTypeCounts;
     const targetBonds = target.bondCount;
     const targetBoundComps = target.boundCompCount;
     const maxTargetDegree = target.maxDegree;
 
-    // 3. Topological rejections
+    // 3. Topological rejections (extremely cheap O(1) checks first!)
     if (targetBonds < patternBonds) {
       return false;
     }
@@ -337,7 +324,37 @@ export class GraphMatcher {
       return false;
     }
 
-    // 3.5 Type-connectivity check
+    const targetTotal = target.molecules.length;
+    const patternTotal = pattern.molecules.length;
+    if (targetTotal < patternTotal) {
+      return false;
+    }
+
+    // 4. Name-based molecule count checks (cheap map queries before full fingerprint check)
+    const patternCounts = pattern.molTypeCounts;
+    const targetCounts = target.molTypeCounts;
+
+    for (const [molType, count] of patternCounts) {
+      if (molType === '*') {
+        continue;
+      }
+      if ((targetCounts.get(molType) || 0) < count) {
+        return false;
+      }
+    }
+
+    // 0. Fingerprint check (deferred after topological checks to avoid map/string hashing overhead)
+    const patternList = pattern.wildcardFreeFingerprintList;
+    const targetFp = target.fingerprint;
+    for (let i = 0; i < patternList.length; i++) {
+      const entry = patternList[i];
+      const tarCount = targetFp.get(entry[0]) ?? 0;
+      if (tarCount < entry[1]) {
+        return false;
+      }
+    }
+
+    // 3.5 Type-connectivity check (run only if the rest matches)
     const patternBondsMap = pattern.typeBonds;
     const targetBondsMap = target.typeBonds;
     for (const [pairKey, patCount] of patternBondsMap.entries()) {
@@ -350,21 +367,7 @@ export class GraphMatcher {
       }
     }
 
-    // 4. Name-based molecule count checks
-    const targetTotal = target.molecules.length;
-    const patternTotal = pattern.molecules.length;
-
-    for (const [molType, count] of patternCounts) {
-      if (molType === '*') {
-        // '*' matches anything, don't check name-based counts for these
-        continue;
-      }
-      if ((targetCounts.get(molType) || 0) < count) {
-        return false;
-      }
-    }
-
-    return targetTotal >= patternTotal;
+    return true;
   }
 
   /**
