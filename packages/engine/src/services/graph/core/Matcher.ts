@@ -537,7 +537,6 @@ interface BondEndpoint {
 interface PendingComponentResult {
   patternMolIdx: number;
   targetMolIdx: number;
-  mapping: Map<number, number>;
 }
 
 /**
@@ -551,7 +550,7 @@ class VF2State {
   corePattern: Int32Array;
   coreTarget: Int32Array;
   coreSize: number;
-  componentMatches: Map<number, Map<number, number>>;
+  componentMatchesArray: Int32Array[];
   pendingComponentResult?: PendingComponentResult;
   bondPartnerLookup: Map<string, BondEndpoint>;
   nodeOrdering: number[];
@@ -587,7 +586,13 @@ class VF2State {
     this.coreTarget = new Int32Array(tLen);
     this.coreTarget.fill(-1);
     this.coreSize = 0;
-    this.componentMatches = new Map();
+    this.componentMatchesArray = new Array(pLen);
+    for (let i = 0; i < pLen; i++) {
+      const cCount = pattern.molecules[i].components.length;
+      const arr = new Int32Array(cCount);
+      arr.fill(-1);
+      this.componentMatchesArray[i] = arr;
+    }
     this.bondPartnerLookup = pattern.bondPartnerLookup;
     if (nodeOrdering.length) {
       this.nodeOrdering = nodeOrdering;
@@ -792,8 +797,8 @@ class VF2State {
       return false;
     }
 
-    const componentMapping = this.matchComponents(pMol, tMol);
-    if (!componentMapping) {
+    const isMatched = this.matchComponents(pMol, tMol);
+    if (!isMatched) {
       if (shouldLogGraphMatcher) {
         console.log(`[GraphMatcher] Component match failed for P${pMol} -> T${tMol}`);
       }
@@ -806,8 +811,7 @@ class VF2State {
 
     this.pendingComponentResult = {
       patternMolIdx: pMol,
-      targetMolIdx: tMol,
-      mapping: componentMapping
+      targetMolIdx: tMol
     };
 
     return true;
@@ -1019,10 +1023,12 @@ class VF2State {
       this.pendingComponentResult.patternMolIdx === p &&
       this.pendingComponentResult.targetMolIdx === t
     ) {
-      this.componentMatches.set(p, new Map(this.pendingComponentResult.mapping));
+      const arr = this.componentMatchesArray[p];
+      arr.set(this.scratchAssignment.subarray(0, arr.length));
     } else {
-      const fallback = this.matchComponents(p, t) ?? new Map<number, number>();
-      this.componentMatches.set(p, fallback);
+      this.matchComponents(p, t);
+      const arr = this.componentMatchesArray[p];
+      arr.set(this.scratchAssignment.subarray(0, arr.length));
     }
 
     this.pendingComponentResult = undefined;
@@ -1033,7 +1039,7 @@ class VF2State {
     this.corePattern[p] = -1;
     this.coreTarget[t] = -1;
     this.coreSize--;
-    this.componentMatches.delete(p);
+    this.componentMatchesArray[p].fill(-1);
   }
 
   tryGetMatch(): MatchMap | null {
@@ -1045,18 +1051,24 @@ class VF2State {
       if (tMolIdx === -1) continue;
       molMap.set(pMolIdx, tMolIdx);
 
-      const storedMap = this.componentMatches.get(pMolIdx);
+      const storedArr = this.componentMatchesArray[pMolIdx];
+      const isConsistent = storedArr && this.isStoredComponentMapConsistent(pMolIdx, tMolIdx, storedArr);
 
-      const perMolMap = (storedMap && this.isStoredComponentMapConsistent(pMolIdx, tMolIdx, storedMap))
-        ? storedMap
-        : this.matchComponentsWithBondConsistency(pMolIdx, tMolIdx);
-
-      if (!perMolMap) {
-        return null;
-      }
-
-      for (const [pCompIdx, tCompIdx] of perMolMap.entries()) {
-        componentMap.set(`${pMolIdx}.${pCompIdx}`, `${tMolIdx}.${tCompIdx}`);
+      if (isConsistent) {
+        for (let pCompIdx = 0; pCompIdx < storedArr.length; pCompIdx++) {
+          const tCompIdx = storedArr[pCompIdx];
+          if (tCompIdx !== -1) {
+            componentMap.set(`${pMolIdx}.${pCompIdx}`, `${tMolIdx}.${tCompIdx}`);
+          }
+        }
+      } else {
+        const perMolMap = this.matchComponentsWithBondConsistency(pMolIdx, tMolIdx);
+        if (!perMolMap) {
+          return null;
+        }
+        for (const [pCompIdx, tCompIdx] of perMolMap.entries()) {
+          componentMap.set(`${pMolIdx}.${pCompIdx}`, `${tMolIdx}.${tCompIdx}`);
+        }
       }
     }
 
@@ -1069,18 +1081,17 @@ class VF2State {
   private isStoredComponentMapConsistent(
     pMolIdx: number,
     tMolIdx: number,
-    storedMap: Map<number, number>
+    storedArr: Int32Array
   ): boolean {
     const patternMol = this.pattern.molecules[pMolIdx];
     const targetMol = this.target.molecules[tMolIdx];
     if (!patternMol || !targetMol) return false;
 
-    // If the stored map is incomplete, we must recompute.
-    if (storedMap.size < patternMol.components.length) return false;
-
     // Injective within molecule.
     const seenTargets = new Set<number>();
-    for (const [pCompIdx, tCompIdx] of storedMap.entries()) {
+    for (let pCompIdx = 0; pCompIdx < storedArr.length; pCompIdx++) {
+      const tCompIdx = storedArr[pCompIdx];
+      if (tCompIdx === -1) return false;
       if (seenTargets.has(tCompIdx)) return false;
       seenTargets.add(tCompIdx);
       const pComp = patternMol.components[pCompIdx];
@@ -1092,8 +1103,8 @@ class VF2State {
     // Bond consistency across already-mapped molecules: any pattern bond to a mapped partner
     // must correspond to a bond to the partner molecule in the target.
     for (let pCompIdx = 0; pCompIdx < patternMol.components.length; pCompIdx++) {
-      const mappedTargetCompIdx = storedMap.get(pCompIdx);
-      if (mappedTargetCompIdx === undefined) return false;
+      const mappedTargetCompIdx = storedArr[pCompIdx];
+      if (mappedTargetCompIdx === -1) return false;
       const pComp = patternMol.components[pCompIdx];
 
       for (const [bondLabel] of pComp.edges.entries()) {
@@ -1107,14 +1118,14 @@ class VF2State {
         if (this.corePattern[partnerMolIdx] === -1) continue;
 
         const targetPartnerMolIdx = this.corePattern[partnerMolIdx];
-        const partnerStoredMap = this.componentMatches.get(partnerMolIdx);
-        if (!partnerStoredMap) {
+        const partnerStoredArr = this.componentMatchesArray[partnerMolIdx];
+        if (!partnerStoredArr) {
           // Can't validate without partner's mapping.
           return false;
         }
 
-        const targetPartnerCompIdx = partnerStoredMap.get(partner.compIdx);
-        if (targetPartnerCompIdx === undefined) {
+        const targetPartnerCompIdx = partnerStoredArr[partner.compIdx];
+        if (targetPartnerCompIdx === -1) {
           return false;
         }
 
@@ -1377,14 +1388,14 @@ class VF2State {
     return `${molIdx}.${compIdx}.${bondLabel}`;
   }
 
-  private matchComponents(pMolIdx: number, tMolIdx: number): Map<number, number> | null {
+  private matchComponents(pMolIdx: number, tMolIdx: number): boolean {
     const profStart = performance.now();
     const patternMol = this.pattern.molecules[pMolIdx];
     const targetMol = this.target.molecules[tMolIdx];
     if (patternMol.components.length === 0) {
       GraphMatcher.matchComponentsTime += performance.now() - profStart;
       GraphMatcher.matchComponentsCount++;
-      return new Map();
+      return true;
     }
 
     // X-1 guard: bitmask overflows for >31 target components
@@ -1407,19 +1418,9 @@ class VF2State {
     const success = this.assignComponentsBacktrack(
       pMolIdx, tMolIdx, this.orderScratch, 0, assignment, 0, iterationCount
     );
-    if (!success) {
-      GraphMatcher.matchComponentsTime += performance.now() - profStart;
-      GraphMatcher.matchComponentsCount++;
-      return null;
-    }
-
-    const result = new Map<number, number>();
-    for (let i = 0; i < nComps; i++) {
-      if (assignment[i] !== -1) result.set(i, assignment[i]);
-    }
     GraphMatcher.matchComponentsTime += performance.now() - profStart;
     GraphMatcher.matchComponentsCount++;
-    return result;
+    return success;
   }
 
   private assignComponentsBacktrack(
@@ -1616,10 +1617,10 @@ class VF2State {
     return false;
   }
 
-  private matchComponentsLarge(pMolIdx: number, tMolIdx: number): Map<number, number> | null {
+  private matchComponentsLarge(pMolIdx: number, tMolIdx: number): boolean {
     const patternMol = this.pattern.molecules[pMolIdx];
     const nComps = patternMol.components.length;
-    if (nComps === 0) return new Map();
+    if (nComps === 0) return true;
 
     const cachedOrder = this.componentOrders[pMolIdx];
     for (let i = 0; i < nComps; i++) this.orderScratch[i] = cachedOrder[i];
@@ -1632,13 +1633,7 @@ class VF2State {
     const success = this.assignComponentsBacktrackLarge(
       pMolIdx, tMolIdx, this.orderScratch, 0, assignment, this.largeUsedFlags, iterationCount
     );
-    if (!success) return null;
-
-    const result = new Map<number, number>();
-    for (let i = 0; i < nComps; i++) {
-      if (assignment[i] !== -1) result.set(i, assignment[i]);
-    }
-    return result;
+    return success;
   }
 
   private getComponentCandidates(
