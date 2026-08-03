@@ -6,8 +6,8 @@ vi.mock('@bngplayground/engine', async (importOriginal) => {
   const original = await importOriginal<typeof import('@bngplayground/engine')>();
   return {
     ...original,
-    computeDoseResponse: vi.fn().mockImplementation((...args) => original.computeDoseResponse(...args)),
-    computeDoseResponseBySimulation: vi.fn().mockImplementation((...args) => original.computeDoseResponseBySimulation(...args)),
+    computeDoseResponse: vi.fn().mockImplementation((...args: Parameters<typeof original.computeDoseResponse>) => original.computeDoseResponse(...args)),
+    computeDoseResponseBySimulation: vi.fn().mockImplementation((...args: Parameters<typeof original.computeDoseResponseBySimulation>) => original.computeDoseResponseBySimulation(...args)),
   };
 });
 
@@ -141,7 +141,7 @@ describe('dose_response handler', () => {
             inputParameter: 'L_total',
             failedDoses: [],
             curves: [{ observable: 'Bound', doses: [], responses: [] }],
-        } as any);
+        } as unknown as Awaited<ReturnType<typeof engine.computeDoseResponse>>);
 
         spySim.mockResolvedValueOnce({
             failedDoses: [],
