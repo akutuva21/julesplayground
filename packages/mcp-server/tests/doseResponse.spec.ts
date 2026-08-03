@@ -6,8 +6,8 @@ vi.mock('@bngplayground/engine', async (importOriginal) => {
   const original = await importOriginal<typeof import('@bngplayground/engine')>();
   return {
     ...original,
-    computeDoseResponse: vi.fn().mockImplementation((...args) => original.computeDoseResponse(...args)),
-    computeDoseResponseBySimulation: vi.fn().mockImplementation((...args) => original.computeDoseResponseBySimulation(...args)),
+    computeDoseResponse: vi.fn(original.computeDoseResponse),
+    computeDoseResponseBySimulation: vi.fn(original.computeDoseResponseBySimulation),
   };
 });
 
