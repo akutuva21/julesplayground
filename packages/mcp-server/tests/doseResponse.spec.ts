@@ -141,7 +141,7 @@ describe('dose_response handler', () => {
             inputParameter: 'L_total',
             failedDoses: [],
             curves: [{ observable: 'Bound', doses: [], responses: [] }],
-        } as any);
+        } as unknown as Awaited<ReturnType<typeof engine.computeDoseResponse>>);
 
         spySim.mockResolvedValueOnce({
             failedDoses: [],
