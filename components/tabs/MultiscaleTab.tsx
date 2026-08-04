@@ -157,6 +157,10 @@ export const MultiscaleTab: React.FC<MultiscaleTabProps> = ({ bnglCode: _bnglCod
       const msg: MultiscaleWorkerRequest = { type: 'run_from_definition', definition: parsed };
       worker.postMessage(msg);
     } catch (err: any) {
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
       setError(err.message || 'Failed to start simulation');
       setIsRunning(false);
     }
@@ -186,7 +190,9 @@ export const MultiscaleTab: React.FC<MultiscaleTabProps> = ({ bnglCode: _bnglCod
       const parsed = JSON.parse(definition);
       maxX = parsed.domain?.size?.[0] || 200;
       maxY = parsed.domain?.size?.[1] || 200;
-    } catch {}
+    } catch {
+      /* ignore invalid JSON */
+    }
 
     const scaleX = w / maxX;
     const scaleY = h / maxY;
