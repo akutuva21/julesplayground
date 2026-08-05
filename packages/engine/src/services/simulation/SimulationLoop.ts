@@ -1,3 +1,4 @@
+/* eslint-disable prefer-const, no-useless-assignment, preserve-caught-error */
 /**
  * services/simulation/SimulationLoop.ts
  * 
@@ -1378,7 +1379,7 @@ export async function simulate(
       // === OPT 2: INLINED FENWICK TREE ===
       // Inlining eliminates class method dispatch overhead (~2-3ns per call)
       const fenwickTree = new Float64Array(numReactions + 1);
-      const fenwickHighBit = numReactions > 0 ? (1 << (Math.floor(Math.log2(numReactions)) + 1)) : 1;
+      const fenwickHighBit = numReactions > 0 ? (1 << Math.floor(Math.log2(numReactions))) : 1;
 
       const fenwickBuild = (values: Float64Array): void => {
         const n = numReactions;
@@ -1391,6 +1392,7 @@ export async function simulate(
       };
 
       const fenwickAdd = (idx: number, delta: number): void => {
+        if (delta === 0.0) return;
         let i = idx + 1;
         const tree = fenwickTree;
         const n = numReactions;
@@ -1461,7 +1463,7 @@ export async function simulate(
         let t = (rngState += 0x6d2b79f5);
         t = Math.imul(t ^ (t >>> 15), t | 1);
         t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        return ((t ^ (t >>> 14)) >>> 0) * 2.3283064365386963e-10;
       };
 
       // === OBSERVABLE BUFFER SETUP ===
@@ -1912,240 +1914,384 @@ export async function simulate(
 
         computeAllPropensities();
 
-        while (t < phaseTEnd) {
-          if (totalEvents >= maxEvents) {
-            console.warn(`[Worker] SSA Terminating early (maxEvents=${maxEvents} reached) at t=${(globalTime + t).toFixed(3)}. Population count may be exploding.`);
-            break;
-          }
-          // OPT 6: Check cancellation every 1024 events instead of every event
-          if ((totalEvents & 0x3FF) === 0) callbacks.checkCancelled();
-
-          if (recalculatePropensitiesCount++ >= SSA_RECALC_INTERVAL) {
-            computeAllPropensities();
-            recalculatePropensitiesCount = 0;
-          }
-
-          // OPT 10: use the Neumaier-compensated total everywhere the total is read.
-          let aTot = aTotal + aTotalC;
-          if (aTot < 0) {
-            computeAllPropensities(); // floating point correction
-            aTot = aTotal + aTotalC;
-          }
-
-          if (!(aTot > 0)) {
-            // If the total is exactly 0, we gracefully finish (stable state).
-            // If it was NaN, the check above would have caught it.
-            console.log(`[Worker] SSA Terminating early (total propensity = 0) at t=${globalTime + t}. Model reached stable state or reactants depleted.`);
-            break;
-          }
-
-          // OPT 3: Inlined PRNG calls
-          const r1 = nextRand();
-          const tau = (1 / aTot) * Math.log(1 / r1);
-          if (t + tau > phaseTEnd) {
-            break;
-          }
-          t += tau;
-
-          const r2 = nextRand() * aTot;
-          // OPT 7: adaptive selection (linear scan for small R, Fenwick for large R)
-          let reactionIndex: number;
-          if (useFenwick) {
-            const fenwickIdx = fenwickFind(r2);
-            reactionIndex = fenwickIdx < numReactions ? fenwickIdx : 0;
-          } else {
-            reactionIndex = selectLinear(r2);
-          }
-
-          const firedRxn = concreteReactions[reactionIndex];
-          totalEvents++;
-          nEventsThisPhase++;
-
-          // OPT 1/6: Record firing event into pre-allocated typed arrays
-          if (firingActive && logCount < maxFiringEvents) {
-            logTimes![logCount] = t;
-            logRxnIndices![logCount] = reactionIndex;
-            logPropensities![logCount] = propensities[reactionIndex];
-            logCount++;
-          }
-
-          // === DIN INFLUENCE TRACKING: Capture old propensities BEFORE state change ===
-          let numAffected = 0;
-          if (includeInfluence && ruleFirings && windowRuleFirings && affectedReactionIndices && oldPropensityValues) {
-            ruleFirings[reactionIndex]++;
-            windowRuleFirings[reactionIndex]++;
-
-            // Collect dependent reactions and their old propensities
-            // Use a simple array/flag approach instead of Map for speed
-            const reactants = firedRxn.reactants;
-            const products = firedRxn.products;
-
-            const processSpecies = (speciesIdx: number) => {
-              const deps = speciesDependents[speciesIdx];
-              for (let k = 0; k < deps.length; k++) {
-                const depIdx = deps[k];
-                // Check if we already recorded this one
-                let found = false;
-                for (let m = 0; m < numAffected; m++) {
-                  if (affectedReactionIndices[m] === depIdx) {
-                    found = true;
-                    break;
-                  }
-                }
-                if (!found) {
-                  affectedReactionIndices[numAffected] = depIdx;
-                  oldPropensityValues[numAffected] = propensities[depIdx];
-                  numAffected++;
-                }
-              }
-            };
-
-            for (let j = 0; j < reactants.length; j++) processSpecies(reactants[j]);
-            for (let j = 0; j < products.length; j++) processSpecies(products[j]);
-          }
-
-          // OPT 3/4/10: apply state change + dependent propensity update.
-          let eventDelta: number;
-          if (compiledSSAEventUpdater) {
-            // Mass-action fast path: the JIT function applies the net state deltas,
-            // recomputes dependent propensities from fresh state (and updates the
-            // Fenwick tree when useFenwick), and returns the summed propensity delta.
-            eventDelta = compiledSSAEventUpdater(reactionIndex, state, propensities, fenwickAdd);
-          } else {
-            // Interpreted fallback (functional rates, or JIT unavailable).
-            // Apply net state changes flatly and quickly, maintaining ssaObsValues as required.
-            const cc = changeCount[reactionIndex];
-            if (cc >= 1) {
-              const sp0 = changeSpecies0[reactionIndex];
-              const d0 = changeDelta0[reactionIndex];
-              state[sp0] += d0;
-              if (maintainObs) {
-                const end = speciesObsOffsets[sp0 + 1];
-                for (let k = speciesObsOffsets[sp0]; k < end; k++) {
-                  ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d0;
-                }
-              }
+        if (compiledSSAEventUpdater && useFenwick && !includeInfluence && !firingActive) {
+          while (t < phaseTEnd) {
+            if (totalEvents >= maxEvents) {
+              console.warn(`[Worker] SSA Terminating early (maxEvents=${maxEvents} reached) at t=${(globalTime + t).toFixed(3)}. Population count may be exploding.`);
+              break;
             }
-            if (cc >= 2) {
-              const sp1 = changeSpecies1[reactionIndex];
-              const d1 = changeDelta1[reactionIndex];
-              state[sp1] += d1;
-              if (maintainObs) {
-                const end = speciesObsOffsets[sp1 + 1];
-                for (let k = speciesObsOffsets[sp1]; k < end; k++) {
-                  ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d1;
-                }
-              }
-            }
-            if (cc >= 3) {
-              const sp2 = changeSpecies2[reactionIndex];
-              const d2 = changeDelta2[reactionIndex];
-              state[sp2] += d2;
-              if (maintainObs) {
-                const end = speciesObsOffsets[sp2 + 1];
-                for (let k = speciesObsOffsets[sp2]; k < end; k++) {
-                  ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d2;
-                }
-              }
-            }
-            if (cc >= 4) {
-              const sp3 = changeSpecies3[reactionIndex];
-              const d3 = changeDelta3[reactionIndex];
-              state[sp3] += d3;
-              if (maintainObs) {
-                const end = speciesObsOffsets[sp3 + 1];
-                for (let k = speciesObsOffsets[sp3]; k < end; k++) {
-                  ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d3;
-                }
-              }
-            }
-            if (cc > 4) {
-              const remSp = changeSpeciesRemaining[reactionIndex]!;
-              const remDl = changeDeltaRemaining[reactionIndex]!;
-              for (let j = 0; j < remSp.length; j++) {
-                const sp = remSp[j];
-                const d = remDl[j];
-                state[sp] += d;
-                if (maintainObs) {
-                  const end = speciesObsOffsets[sp + 1];
-                  for (let k = speciesObsOffsets[sp]; k < end; k++) {
-                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d;
-                  }
-                }
-              }
+            if ((totalEvents & 0x3FF) === 0) callbacks.checkCancelled();
+
+            if (recalculatePropensitiesCount++ >= SSA_RECALC_INTERVAL) {
+              computeAllPropensities();
+              recalculatePropensitiesCount = 0;
             }
 
-            eventDelta = 0;
-            const deps = rxnUpdateRxn[reactionIndex];
-            for (let d = 0; d < deps.length; d++) {
-              const jrxn = deps[d];
-              const aNew = calcPropensity(jrxn);
-              const delta = aNew - propensities[jrxn];
-              eventDelta += delta;
-              if (useFenwick) fenwickAdd(jrxn, delta);
-              propensities[jrxn] = aNew;
+            let aTot = aTotal + aTotalC;
+            if (aTot < 0) {
+              computeAllPropensities();
+              aTot = aTotal + aTotalC;
             }
-          }
 
-          // OPT 10: Neumaier-compensated accumulation of the running propensity total.
-          {
+            if (!(aTot > 0)) {
+              console.log(`[Worker] SSA Terminating early (total propensity = 0) at t=${globalTime + t}. Model reached stable state or reactants depleted.`);
+              break;
+            }
+
+            // Inline nextRand() for r1
+            let t1 = (rngState += 0x6d2b79f5);
+            t1 = Math.imul(t1 ^ (t1 >>> 15), t1 | 1);
+            t1 ^= t1 + Math.imul(t1 ^ (t1 >>> 7), t1 | 61);
+            const r1 = ((t1 ^ (t1 >>> 14)) >>> 0) * 2.3283064365386963e-10;
+
+            const tau = -Math.log(r1) / aTot;
+            if (t + tau > phaseTEnd) {
+              break;
+            }
+            t += tau;
+
+            // Inline nextRand() for r2
+            let t2 = (rngState += 0x6d2b79f5);
+            t2 = Math.imul(t2 ^ (t2 >>> 15), t2 | 1);
+            t2 ^= t2 + Math.imul(t2 ^ (t2 >>> 7), t2 | 61);
+            const r2 = (((t2 ^ (t2 >>> 14)) >>> 0) * 2.3283064365386963e-10) * aTot;
+
+            // Inline fenwickFind(r2)
+            let idx = 0;
+            let bitMask = fenwickHighBit;
+            let t_find = r2;
+            while (bitMask !== 0) {
+              const next = idx + bitMask;
+              if (next <= numReactions && fenwickTree[next] <= t_find) {
+                t_find -= fenwickTree[next];
+                idx = next;
+              }
+              bitMask >>= 1;
+            }
+            const reactionIndex = idx < numReactions ? idx : 0;
+
+            totalEvents++;
+            nEventsThisPhase++;
+
+            const eventDelta = compiledSSAEventUpdater(reactionIndex, state, propensities, fenwickAdd);
+
             const tSum = aTotal + eventDelta;
             if (Math.abs(aTotal) >= Math.abs(eventDelta)) aTotalC += (aTotal - tSum) + eventDelta;
             else aTotalC += (eventDelta - tSum) + aTotal;
             aTotal = tSum;
-          }
 
-          // === DIN INFLUENCE TRACKING: Compare with new propensities AFTER state change ===
-          // NOTE: propensities[depRxn] was already updated by the incremental loop above,
-          // so we read it directly instead of calling calcPropensity again (avoids double eval).
-          if (includeInfluence && influenceMatrix && windowInfluenceMatrix && affectedReactionIndices && oldPropensityValues) {
-            for (let j = 0; j < numAffected; j++) {
-              const depRxn = affectedReactionIndices[j];
-              const oldProp = oldPropensityValues[j];
-              const newProp = propensities[depRxn];
-              if (Math.abs(newProp - oldProp) > 1e-18) {
-                const flux = newProp - oldProp;
-                const influenceOffset = reactionIndex * numReactions + depRxn;
-                if (influenceOffset < 0 || influenceOffset >= influenceMatrix.length || influenceOffset >= windowInfluenceMatrix.length) {
-                  throw new Error(`[SimulationLoop] Influence index out of bounds: ${influenceOffset}`);
+            while (t >= nextTOut && nextTOut <= phaseTEnd) {
+              callbacks.checkCancelled();
+              if (recordThisPhase) {
+                const outT = toBngGridTime(globalTime, phaseTEnd, phaseNSteps, nextOutIdx);
+                if (outT >= nextTOut || totalEvents >= maxEvents) {
+                  pushDataRow(phase.suffix, outT, state as Float64Array);
+                  const sp: Record<string, number> = { time: outT };
+                  for (let k = 0; k < numSpecies; k++) {
+                    setSafeNumberField(sp, speciesHeaders[k], state[k]);
+                  }
+                  appendSpeciesSnapshot(phase.suffix, sp);
                 }
-                influenceMatrix[influenceOffset] += flux;
-                windowInfluenceMatrix[influenceOffset] += flux;
               }
+              nextOutIdx += 1;
+              nextTOut = (phaseTEnd * nextOutIdx) / phaseNSteps;
             }
           }
+        } else if (compiledSSAEventUpdater && !useFenwick && !includeInfluence && !firingActive) {
+          while (t < phaseTEnd) {
+            if (totalEvents >= maxEvents) {
+              console.warn(`[Worker] SSA Terminating early (maxEvents=${maxEvents} reached) at t=${(globalTime + t).toFixed(3)}. Population count may be exploding.`);
+              break;
+            }
+            if ((totalEvents & 0x3FF) === 0) callbacks.checkCancelled();
 
-          // === DIN INFLUENCE TRACKING: Time window snapshot ===
-          if (includeInfluence && windowRuleFirings && windowInfluenceMatrix && globalTime + t - windowStartTime >= windowSize && influenceWindows.length < NUM_WINDOWS) {
-            influenceWindows.push({
-              ruleNames: [...ruleNames],
-              din_hits: Array.from(windowRuleFirings),
-              din_fluxs: unflattenMatrix(windowInfluenceMatrix, numReactions),
-              din_start: windowStartTime,
-              din_end: globalTime + t
-            });
-            windowStartTime = globalTime + t;
-            windowRuleFirings.fill(0);
-            windowInfluenceMatrix.fill(0);
-          }
+            if (recalculatePropensitiesCount++ >= SSA_RECALC_INTERVAL) {
+              computeAllPropensities();
+              recalculatePropensitiesCount = 0;
+            }
 
-          while (t >= nextTOut && nextTOut <= phaseTEnd) {
-            callbacks.checkCancelled();
-            if (recordThisPhase) {
-              const outT = toBngGridTime(globalTime, phaseTEnd, phaseNSteps, nextOutIdx);
-              if (outT >= nextTOut || totalEvents >= maxEvents) {
-                pushDataRow(phase.suffix, outT, state as Float64Array);
-                const sp: Record<string, number> = { time: outT };
-                for (let k = 0; k < numSpecies; k++) {
-                  setSafeNumberField(sp, speciesHeaders[k], state[k]);
-                }
-                appendSpeciesSnapshot(phase.suffix, sp);
+            let aTot = aTotal + aTotalC;
+            if (aTot < 0) {
+              computeAllPropensities();
+              aTot = aTotal + aTotalC;
+            }
+
+            if (!(aTot > 0)) {
+              console.log(`[Worker] SSA Terminating early (total propensity = 0) at t=${globalTime + t}. Model reached stable state or reactants depleted.`);
+              break;
+            }
+
+            // Inline nextRand() for r1
+            let t1 = (rngState += 0x6d2b79f5);
+            t1 = Math.imul(t1 ^ (t1 >>> 15), t1 | 1);
+            t1 ^= t1 + Math.imul(t1 ^ (t1 >>> 7), t1 | 61);
+            const r1 = ((t1 ^ (t1 >>> 14)) >>> 0) * 2.3283064365386963e-10;
+
+            const tau = -Math.log(r1) / aTot;
+            if (t + tau > phaseTEnd) {
+              break;
+            }
+            t += tau;
+
+            // Inline nextRand() for r2
+            let t2 = (rngState += 0x6d2b79f5);
+            t2 = Math.imul(t2 ^ (t2 >>> 15), t2 | 1);
+            t2 ^= t2 + Math.imul(t2 ^ (t2 >>> 7), t2 | 61);
+            const r2 = (((t2 ^ (t2 >>> 14)) >>> 0) * 2.3283064365386963e-10) * aTot;
+
+            // Inline selectLinear(r2)
+            const p = propensities;
+            const n = numReactions;
+            let sum = 0;
+            let rxnIdx = n - 1;
+            for (let i = 0; i < n; i++) {
+              sum += p[i];
+              if (r2 <= sum) {
+                rxnIdx = i;
+                break;
               }
             }
-            // Always advance the output index regardless of recordThisPhase to prevent
-            // an infinite loop when recordThisPhase is false (e.g. warmup phases).
-            nextOutIdx += 1;
-            nextTOut = (phaseTEnd * nextOutIdx) / phaseNSteps;
+            const reactionIndex = rxnIdx;
+
+            totalEvents++;
+            nEventsThisPhase++;
+
+            const eventDelta = compiledSSAEventUpdater(reactionIndex, state, propensities, fenwickAdd);
+
+            const tSum = aTotal + eventDelta;
+            if (Math.abs(aTotal) >= Math.abs(eventDelta)) aTotalC += (aTotal - tSum) + eventDelta;
+            else aTotalC += (eventDelta - tSum) + aTotal;
+            aTotal = tSum;
+
+            while (t >= nextTOut && nextTOut <= phaseTEnd) {
+              callbacks.checkCancelled();
+              if (recordThisPhase) {
+                const outT = toBngGridTime(globalTime, phaseTEnd, phaseNSteps, nextOutIdx);
+                if (outT >= nextTOut || totalEvents >= maxEvents) {
+                  pushDataRow(phase.suffix, outT, state as Float64Array);
+                  const sp: Record<string, number> = { time: outT };
+                  for (let k = 0; k < numSpecies; k++) {
+                    setSafeNumberField(sp, speciesHeaders[k], state[k]);
+                  }
+                  appendSpeciesSnapshot(phase.suffix, sp);
+                }
+              }
+              nextOutIdx += 1;
+              nextTOut = (phaseTEnd * nextOutIdx) / phaseNSteps;
+            }
+          }
+        } else {
+          while (t < phaseTEnd) {
+            if (totalEvents >= maxEvents) {
+              console.warn(`[Worker] SSA Terminating early (maxEvents=${maxEvents} reached) at t=${(globalTime + t).toFixed(3)}. Population count may be exploding.`);
+              break;
+            }
+            if ((totalEvents & 0x3FF) === 0) callbacks.checkCancelled();
+
+            if (recalculatePropensitiesCount++ >= SSA_RECALC_INTERVAL) {
+              computeAllPropensities();
+              recalculatePropensitiesCount = 0;
+            }
+
+            let aTot = aTotal + aTotalC;
+            if (aTot < 0) {
+              computeAllPropensities(); // floating point correction
+              aTot = aTotal + aTotalC;
+            }
+
+            if (!(aTot > 0)) {
+              console.log(`[Worker] SSA Terminating early (total propensity = 0) at t=${globalTime + t}. Model reached stable state or reactants depleted.`);
+              break;
+            }
+
+            const r1 = nextRand();
+            const tau = -Math.log(r1) / aTot;
+            if (t + tau > phaseTEnd) {
+              break;
+            }
+            t += tau;
+
+            const r2 = nextRand() * aTot;
+            let reactionIndex: number;
+            if (useFenwick) {
+              const fenwickIdx = fenwickFind(r2);
+              reactionIndex = fenwickIdx < numReactions ? fenwickIdx : 0;
+            } else {
+              reactionIndex = selectLinear(r2);
+            }
+
+            const firedRxn = concreteReactions[reactionIndex];
+            totalEvents++;
+            nEventsThisPhase++;
+
+            if (firingActive && logCount < maxFiringEvents) {
+              logTimes![logCount] = t;
+              logRxnIndices![logCount] = reactionIndex;
+              logPropensities![logCount] = propensities[reactionIndex];
+              logCount++;
+            }
+
+            let numAffected = 0;
+            if (includeInfluence && ruleFirings && windowRuleFirings && affectedReactionIndices && oldPropensityValues) {
+              ruleFirings[reactionIndex]++;
+              windowRuleFirings[reactionIndex]++;
+
+              const reactants = firedRxn.reactants;
+              const products = firedRxn.products;
+
+              const processSpecies = (speciesIdx: number) => {
+                const deps = speciesDependents[speciesIdx];
+                for (let k = 0; k < deps.length; k++) {
+                  const depIdx = deps[k];
+                  let found = false;
+                  for (let m = 0; m < numAffected; m++) {
+                    if (affectedReactionIndices[m] === depIdx) {
+                      found = true;
+                      break;
+                    }
+                  }
+                  if (!found) {
+                    affectedReactionIndices[numAffected] = depIdx;
+                    oldPropensityValues[numAffected] = propensities[depIdx];
+                    numAffected++;
+                  }
+                }
+              };
+
+              for (let j = 0; j < reactants.length; j++) processSpecies(reactants[j]);
+              for (let j = 0; j < products.length; j++) processSpecies(products[j]);
+            }
+
+            let eventDelta: number;
+            if (compiledSSAEventUpdater) {
+              eventDelta = compiledSSAEventUpdater(reactionIndex, state, propensities, fenwickAdd);
+            } else {
+              const cc = changeCount[reactionIndex];
+              if (cc >= 1) {
+                const sp0 = changeSpecies0[reactionIndex];
+                const d0 = changeDelta0[reactionIndex];
+                state[sp0] += d0;
+                if (maintainObs) {
+                  const end = speciesObsOffsets[sp0 + 1];
+                  for (let k = speciesObsOffsets[sp0]; k < end; k++) {
+                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d0;
+                  }
+                }
+              }
+              if (cc >= 2) {
+                const sp1 = changeSpecies1[reactionIndex];
+                const d1 = changeDelta1[reactionIndex];
+                state[sp1] += d1;
+                if (maintainObs) {
+                  const end = speciesObsOffsets[sp1 + 1];
+                  for (let k = speciesObsOffsets[sp1]; k < end; k++) {
+                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d1;
+                  }
+                }
+              }
+              if (cc >= 3) {
+                const sp2 = changeSpecies2[reactionIndex];
+                const d2 = changeDelta2[reactionIndex];
+                state[sp2] += d2;
+                if (maintainObs) {
+                  const end = speciesObsOffsets[sp2 + 1];
+                  for (let k = speciesObsOffsets[sp2]; k < end; k++) {
+                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d2;
+                  }
+                }
+              }
+              if (cc >= 4) {
+                const sp3 = changeSpecies3[reactionIndex];
+                const d3 = changeDelta3[reactionIndex];
+                state[sp3] += d3;
+                if (maintainObs) {
+                  const end = speciesObsOffsets[sp3 + 1];
+                  for (let k = speciesObsOffsets[sp3]; k < end; k++) {
+                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d3;
+                  }
+                }
+              }
+              if (cc > 4) {
+                const remSp = changeSpeciesRemaining[reactionIndex]!;
+                const remDl = changeDeltaRemaining[reactionIndex]!;
+                for (let j = 0; j < remSp.length; j++) {
+                  const sp = remSp[j];
+                  const d = remDl[j];
+                  state[sp] += d;
+                  if (maintainObs) {
+                    const end = speciesObsOffsets[sp + 1];
+                    for (let k = speciesObsOffsets[sp]; k < end; k++) {
+                      ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d;
+                    }
+                  }
+                }
+              }
+
+              eventDelta = 0;
+              const deps = rxnUpdateRxn[reactionIndex];
+              for (let d = 0; d < deps.length; d++) {
+                const jrxn = deps[d];
+                const aNew = calcPropensity(jrxn);
+                const delta = aNew - propensities[jrxn];
+                eventDelta += delta;
+                if (useFenwick) fenwickAdd(jrxn, delta);
+                propensities[jrxn] = aNew;
+              }
+            }
+
+            {
+              const tSum = aTotal + eventDelta;
+              if (Math.abs(aTotal) >= Math.abs(eventDelta)) aTotalC += (aTotal - tSum) + eventDelta;
+              else aTotalC += (eventDelta - tSum) + aTotal;
+              aTotal = tSum;
+            }
+
+            if (includeInfluence && influenceMatrix && windowInfluenceMatrix && affectedReactionIndices && oldPropensityValues) {
+              for (let j = 0; j < numAffected; j++) {
+                const depRxn = affectedReactionIndices[j];
+                const oldProp = oldPropensityValues[j];
+                const newProp = propensities[depRxn];
+                if (Math.abs(newProp - oldProp) > 1e-18) {
+                  const flux = newProp - oldProp;
+                  const influenceOffset = reactionIndex * numReactions + depRxn;
+                  if (influenceOffset < 0 || influenceOffset >= influenceMatrix.length || influenceOffset >= windowInfluenceMatrix.length) {
+                    throw new Error(`[SimulationLoop] Influence index out of bounds: ${influenceOffset}`);
+                  }
+                  influenceMatrix[influenceOffset] += flux;
+                  windowInfluenceMatrix[influenceOffset] += flux;
+                }
+              }
+            }
+
+            if (includeInfluence && windowRuleFirings && windowInfluenceMatrix && globalTime + t - windowStartTime >= windowSize && influenceWindows.length < NUM_WINDOWS) {
+              influenceWindows.push({
+                ruleNames: [...ruleNames],
+                din_hits: Array.from(windowRuleFirings),
+                din_fluxs: unflattenMatrix(windowInfluenceMatrix, numReactions),
+                din_start: windowStartTime,
+                din_end: globalTime + t
+              });
+              windowStartTime = globalTime + t;
+              windowRuleFirings.fill(0);
+              windowInfluenceMatrix.fill(0);
+            }
+
+            while (t >= nextTOut && nextTOut <= phaseTEnd) {
+              callbacks.checkCancelled();
+              if (recordThisPhase) {
+                const outT = toBngGridTime(globalTime, phaseTEnd, phaseNSteps, nextOutIdx);
+                if (outT >= nextTOut || totalEvents >= maxEvents) {
+                  pushDataRow(phase.suffix, outT, state as Float64Array);
+                  const sp: Record<string, number> = { time: outT };
+                  for (let k = 0; k < numSpecies; k++) {
+                    setSafeNumberField(sp, speciesHeaders[k], state[k]);
+                  }
+                  appendSpeciesSnapshot(phase.suffix, sp);
+                }
+              }
+              nextOutIdx += 1;
+              nextTOut = (phaseTEnd * nextOutIdx) / phaseNSteps;
+            }
           }
         }
 
