@@ -16,8 +16,17 @@ describe('WorkerPool batch method', () => {
                     this.handlers = this.handlers.filter(h => h !== handler);
                 }
             });
+            _onerrorHandler: any = null;
             postMessage = vi.fn((req) => {
                 const { id, data } = req;
+                if (data === '__TRIGGER_ERROR__') {
+                    setTimeout(() => {
+                        if (this._onerrorHandler) {
+                            this._onerrorHandler({ message: 'Mocked worker crash' });
+                        }
+                    }, 0);
+                    return;
+                }
                 // Auto-respond for batch tasks
                 setTimeout(() => {
                     this.trigger({
@@ -39,7 +48,7 @@ describe('WorkerPool batch method', () => {
                 this.handlers.push((event: any) => handler(event));
             }
             set onerror(handler: any) {
-                // simple mock
+                this._onerrorHandler = handler;
             }
 
             constructor() {
@@ -114,6 +123,37 @@ describe('WorkerPool batch method', () => {
         // It should have used all workers ideally
         const workersWithTasks = mockWorkerInsts.filter(w => w.postMessage.mock.calls.length > 0);
         expect(workersWithTasks.length).toBeGreaterThan(0);
+
+        pool.terminate();
+    });
+
+    it('rejects all pending and in-flight tasks when the pool is terminated', async () => {
+        const pool = new WorkerPool('/dummy-worker.js', 2);
+        await pool.initialize();
+
+        // Submit tasks but don't wait for them yet
+        const p1 = pool.submit('RUN_SIMULATION', 1);
+        const p2 = pool.submit('RUN_SIMULATION', 2);
+
+        // Terminate the pool immediately
+        pool.terminate();
+
+        await expect(p1).rejects.toThrow('Worker pool was terminated');
+        await expect(p2).rejects.toThrow('Worker pool was terminated');
+    });
+
+    it('does not stall the task queue and processes subsequent tasks when a worker crashes', async () => {
+        const pool = new WorkerPool('/dummy-worker.js', 1);
+        await pool.initialize();
+
+        // Submit a task that will trigger an error
+        const p1 = pool.submit('RUN_SIMULATION', '__TRIGGER_ERROR__');
+        // Submit a subsequent valid task
+        const p2 = pool.submit('RUN_SIMULATION', 42);
+
+        await expect(p1).rejects.toThrow('Worker error: Mocked worker crash');
+        const result = await p2;
+        expect(result).toEqual({ processed: 42 });
 
         pool.terminate();
     });
