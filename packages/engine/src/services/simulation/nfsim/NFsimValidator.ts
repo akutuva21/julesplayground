@@ -101,6 +101,14 @@ export class NFsimValidator {
     for (const rule of rules) {
       const rate = String(rule.rate ?? '');
 
+      // NFsim does not support DeleteMolecules if the reaction degrades all reactants/has no products.
+      if (rule.deleteMolecules && (!rule.products || rule.products.length === 0 || rule.products.every(p => p === '0' || p.trim() === ''))) {
+        errors.push({
+          type: ValidationErrorType.MISSING_REQUIREMENTS,
+          message: `NFsim does not support the DeleteMolecules keyword on reaction rules that delete all reactants (degradation rules): ${rule.reactants?.join(' + ') || ''} -> ${rule.products?.join(' + ') || '0'}`
+        });
+      }
+
       // TotalRate modifiers ARE supported by NFsim (nfsim/src/NFinput/NFinput.cpp
       // lines 2230-2243, 2707). The parser and XML writer already handle this correctly.
       // No validation block needed.
