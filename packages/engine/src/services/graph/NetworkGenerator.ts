@@ -3345,6 +3345,58 @@ export class NetworkGenerator {
 
     const _profStart = profilingEnabled ? performance.now() : 0;
     try {
+      // Check if we can use the fast-path for pure state change
+      const isPureStateChange =
+        reactantGraphs.length === 1 &&
+        rule.changeStates.length > 0 &&
+        rule.addBonds.length === 0 &&
+        rule.deleteBonds.length === 0 &&
+        rule.deleteMolecules.length === 0 &&
+        rule.addMolecules.length === 0 &&
+        (rule.changeCompartments ? rule.changeCompartments.length === 0 : true) &&
+        !rule.isMoveConnected;
+
+      if (isPureStateChange && matches && matches[0]) {
+        const targetGraph = reactantGraphs[0].clone();
+        const match = matches[0];
+        let valid = true;
+
+        for (const [molPatternIdx, compPatternIdx, newState] of rule.changeStates) {
+          const targetMolIdx = match.moleculeMap.get(molPatternIdx);
+          if (targetMolIdx === undefined) {
+            valid = false;
+            break;
+          }
+          const targetCompKey = match.componentMap.get(`${molPatternIdx}.${compPatternIdx}`);
+          if (!targetCompKey) {
+            valid = false;
+            break;
+          }
+          const dotIdx = targetCompKey.indexOf('.');
+          if (dotIdx === -1) {
+            valid = false;
+            break;
+          }
+          const targetCompIdx = Number(targetCompKey.slice(dotIdx + 1));
+          const targetMol = targetGraph.molecules[targetMolIdx];
+          if (!targetMol || !targetMol.components[targetCompIdx]) {
+            valid = false;
+            break;
+          }
+          targetMol.components[targetCompIdx].state = newState;
+        }
+
+        if (valid) {
+          // Set _sourceKey for backward compatibility if needed by downstream
+          for (let i = 0; i < targetGraph.molecules.length; i++) {
+            targetGraph.molecules[i]._sourceKey = `0:${i}`;
+            targetGraph.molecules[i]._sourceR = 0;
+            targetGraph.molecules[i]._sourceM = i;
+          }
+          return [targetGraph];
+        }
+      }
+
       if (shouldLogNetworkGenerator) {
         debugNetworkLog(
           `[applyTransformation] Rule ${rule.name}, ${reactantGraphs.length} reactants -> ${rule.products.length} products`
