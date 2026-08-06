@@ -69,15 +69,9 @@ const visitorDebugLog = (...args: unknown[]): void => {
 
 export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements BNGParserVisitor<unknown> {
   public hasCompartments: boolean = true;
-  private moleculeTypesMap: Map<string, BNGLMoleculeType> | null = null;
+  private moleculeTypesMap = new Map<string, BNGLMoleculeType>();
 
   private getMoleculeType(name: string): BNGLMoleculeType | undefined {
-    if (!this.moleculeTypesMap) {
-      this.moleculeTypesMap = new Map();
-      for (const mt of this.moleculeTypes) {
-        this.moleculeTypesMap.set(mt.name, mt);
-      }
-    }
     return this.moleculeTypesMap.get(name);
   }
 
@@ -473,9 +467,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
 
     const mt = { name, components };
     this.moleculeTypes.push(mt);
-    if (this.moleculeTypesMap) {
-      this.moleculeTypesMap.set(name, mt);
-    }
+    this.moleculeTypesMap.set(name, mt);
   }
 
   // Seed species block
@@ -1455,6 +1447,10 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
     ctx: Parser.Species_defContext,
     options: { completeMissingComponents?: boolean } = {}
   ): string {
+    const cacheKey = options.completeMissingComponents ? '_speciesStr_complete' : '_speciesStr_literal';
+    if ((ctx as any)[cacheKey] !== undefined) {
+      return (ctx as any)[cacheKey];
+    }
     const molPatterns = ctx.molecule_pattern();
     if (!molPatterns || molPatterns.length === 0) return '';
 
@@ -1659,6 +1655,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
       }
     }
 
+    (ctx as any)[cacheKey] = res;
     return res;
   }
 

@@ -107,23 +107,19 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
       if (!/molecules/i.test(src)) {
         return { normalized: src, warned: false };
       }
-      const lines = src.split(/\r\n|\n/);
       let warned = false;
-      const out = lines.map(line => {
-        const trimmedStart = line.replace(/^\s*/, '');
-        // Skip commented lines
-        if (/^#/.test(trimmedStart)) return line;
-        if (/^\s*begin\s+molecules\b/i.test(line)) {
-          warned = true;
-          return line.replace(/begin\s+molecules\b/i, 'begin molecule types');
-        }
-        if (/^\s*end\s+molecules\b/i.test(line)) {
-          warned = true;
-          return line.replace(/end\s+molecules\b/i, 'end molecule types');
-        }
-        return line;
-      });
-      return { normalized: out.join('\n'), warned };
+      const regexBegin = /^(?!\s*#)(\s*begin\s+)molecules\b/gim;
+      const regexEnd = /^(?!\s*#)(\s*end\s+)molecules\b/gim;
+      let normalized = src;
+      if (regexBegin.test(src)) {
+        warned = true;
+        normalized = normalized.replace(regexBegin, '$1molecule types');
+      }
+      if (regexEnd.test(src)) {
+        warned = true;
+        normalized = normalized.replace(regexEnd, '$1molecule types');
+      }
+      return { normalized, warned };
     }
 
     function normalizeLegacySyntax(src: string): { normalized: string; warnings: string[] } {
@@ -139,8 +135,8 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
       // detect which rules use local functions and compute per-species rates at
       // network-generation time.
       if (next.includes('::')) {
-        const localContextMatches = Array.from(next.matchAll(/%([A-Za-z_][A-Za-z0-9_]*)::/g));
-        if (localContextMatches.length > 0) {
+        const hasMatch = /%[A-Za-z_][A-Za-z0-9_]*::/.test(next);
+        if (hasMatch) {
           // Only strip the %x:: prefix from pattern positions; leave function defs/calls intact.
           next = next.replace(/%[A-Za-z_][A-Za-z0-9_]*::/g, '');
 
@@ -190,17 +186,20 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
         closeStart: number;
         closeEnd: number;
       } | null {
-        const lower = source.toLowerCase();
-        const beginToken = `begin ${beginName}`;
-        const endToken = `end ${endName}`;
-        const openStart = lower.indexOf(beginToken);
-        if (openStart < 0) return null;
+        const beginRegex = new RegExp(`begin\\s+${beginName}`, 'i');
+        const beginMatch = beginRegex.exec(source);
+        if (!beginMatch) return null;
+        const openStart = beginMatch.index;
 
         const openLineEnd = source.indexOf('\n', openStart);
         const openEnd = openLineEnd >= 0 ? openLineEnd : source.length;
         const bodyStart = openEnd < source.length ? openEnd + 1 : openEnd;
-        const closeStart = lower.indexOf(endToken, bodyStart);
-        if (closeStart < 0) return null;
+
+        const endRegexG = new RegExp(`end\\s+${endName}`, 'gi');
+        endRegexG.lastIndex = bodyStart;
+        const endMatch = endRegexG.exec(source);
+        if (!endMatch) return null;
+        const closeStart = endMatch.index;
 
         let closeEnd = source.indexOf('\n', closeStart);
         if (closeEnd < 0) closeEnd = source.length;
