@@ -194,6 +194,9 @@ export class WorkerPool {
 
     instance.busy = false;
     instance.currentTask = null;
+
+    // Process next task in queue to prevent the queue from stalling on worker errors
+    this.processQueue();
   }
 
   /**
@@ -305,6 +308,12 @@ export class WorkerPool {
       instance.worker.terminate();
     }
     this.workers = [];
+
+    // Safely reject all active and pending promises with a descriptive error
+    // instead of leaving them to hang indefinitely.
+    for (const pending of this.pendingTaskMap.values()) {
+      pending.reject(new Error('Worker pool was terminated'));
+    }
     this.pendingTaskMap.clear();
     this.taskQueue = [];
     this.isInitialized = false;
