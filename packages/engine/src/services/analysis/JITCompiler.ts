@@ -165,6 +165,8 @@ export interface JITCompileDebugContext {
  * JIT Compiler for ODE RHS functions
  */
 export class JITCompiler {
+    constructor(_model?: any) {}
+
     private cache: Map<string, JITCompiledFunction> = new Map();
     private observableCache: Map<string, JITCompiledObservableFunction> = new Map();
     private bytecodeCache: Map<string, NetworkByteCode> = new Map();
