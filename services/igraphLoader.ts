@@ -69,7 +69,7 @@ function getBaseUrl(): string {
 
 async function _loadModule(): Promise<IgraphModule> {
   // igraph_loader.js sits alongside this file in services/.
-  // Use a relative path so Vite resolves the module properly in both dev  and
+  // Use a relative path so Vite resolves the module properly in both dev and
   // prod (the previous @vite-ignore + @/ alias was never resolved at runtime).
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore — generated file may not have TS declarations
@@ -78,7 +78,15 @@ async function _loadModule(): Promise<IgraphModule> {
   const baseUrl = getBaseUrl();
 
   const wasmUrl = `${baseUrl}igraph.wasm`;
-  const mod = await loader({
+
+  let instantiationError: Error | null = null;
+  let rejectModulePromise: ((err: Error) => void) | null = null;
+
+  const instantiationPromise = new Promise<void>((_, reject) => {
+    rejectModulePromise = reject;
+  });
+
+  const modulePromise = loader({
     locateFile: (path: string) => {
       if (path.endsWith('.wasm')) {
         console.log(`[IgraphLoader] Resolving ${path} → ${wasmUrl}`);
@@ -99,13 +107,36 @@ async function _loadModule(): Promise<IgraphModule> {
       receiveInstance: (instance: WebAssembly.Instance) => void,
     ) => {
       fetch(wasmUrl, { credentials: 'same-origin' })
-        .then((r) => r.arrayBuffer())
+        .then((r) => {
+          if (r.ok === false) {
+            throw new Error(`Failed to fetch igraph.wasm: HTTP ${r.status}`);
+          }
+          return r.arrayBuffer();
+        })
         .then((buf) => WebAssembly.instantiate(buf, imports))
-        .then((result) => receiveInstance(result.instance))
-        .catch((e) => console.error('[IgraphLoader] WASM instantiation failed:', e));
+        .then((result) => {
+          receiveInstance(result.instance);
+        })
+        .catch((e) => {
+          console.error('[IgraphLoader] WASM instantiation failed:', e);
+          instantiationError = e instanceof Error ? e : new Error(String(e));
+          // Delay rejection slightly to allow near-synchronous mocked loader to resolve if any (useful for testing context)
+          setTimeout(() => {
+            if (rejectModulePromise) {
+              rejectModulePromise(instantiationError!);
+            }
+          }, 50);
+        });
       return {}; // synchronous return — Emscripten uses run-dependency system for sequencing
     },
   });
+
+  const mod = await Promise.race([
+    modulePromise,
+    instantiationPromise.then(() => {
+      throw instantiationError || new Error('WASM instantiation failed');
+    })
+  ]);
 
   return mod as unknown as IgraphModule;
 }
