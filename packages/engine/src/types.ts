@@ -394,7 +394,9 @@ export type WorkerResponse =
     | { id: number; type: 'generate_network_error'; payload: SerializedWorkerError }
     | { id: number; type: 'generate_network_progress'; payload: GeneratorProgress }
     | { id: number; type: 'analyse_network_success'; payload: IgraphAnalysisResult }
-    | { id: number; type: 'analyse_network_error'; payload: SerializedWorkerError };
+    | { id: number; type: 'analyse_network_error'; payload: SerializedWorkerError }
+    | { id: number; type: 'progress'; payload: any }
+    | { id: number | -1; type: 'warning'; payload: any };
 
 export interface AtomizerResult {
     bngl: string;
