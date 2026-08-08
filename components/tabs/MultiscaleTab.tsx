@@ -169,6 +169,10 @@ export const MultiscaleTab: React.FC<MultiscaleTabProps> = ({ bnglCode: _bnglCod
       const msg: MultiscaleWorkerRequest = { type: 'run_from_definition', definition: parsed };
       worker.postMessage(msg);
     } catch (err: any) {
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
       setError(err.message || 'Failed to start simulation');
       setIsRunning(false);
     }
