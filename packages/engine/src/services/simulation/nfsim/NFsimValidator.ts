@@ -94,11 +94,25 @@ export class NFsimValidator {
       });
     }
 
+    if (model.compartments && model.compartments.length > 0) {
+      errors.push({
+        type: ValidationErrorType.MISSING_REQUIREMENTS,
+        message: "Compartments aren't supported by NFsim."
+      });
+    }
+
     // cache observable names for fast lookup
     const observableNames = new Set((model.observables || []).map(o => o.name));
 
     const rules = model.reactionRules || [];
     for (const rule of rules) {
+      if (rule.deleteMolecules) {
+        errors.push({
+          type: ValidationErrorType.MISSING_REQUIREMENTS,
+          message: `DeleteMolecules modifier is not supported by NFsim: rule ${rule.name}`
+        });
+      }
+
       const rate = String(rule.rate ?? '');
 
       // TotalRate modifiers ARE supported by NFsim (nfsim/src/NFinput/NFinput.cpp

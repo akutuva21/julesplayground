@@ -142,18 +142,33 @@ export async function initializeNFsimHeadless() {
 
 // Generate a random valid BNGL model
 export function generateModel(rng: SeededRandom): { bngl: string; hasCompartments: boolean } {
-  const hasCompartments = rng.next() > 0.5;
+  const hasCompartments = rng.next() > 0.4;
+  const hasDependentParams = rng.next() > 0.3;
+  const hasFunctions = rng.next() > 0.3;
 
   const bnglParts: string[] = [];
 
   // 1. Parameters Block
   bnglParts.push('begin parameters');
-  bnglParts.push(`  k1 ${ (0.05 + rng.next() * 0.1).toFixed(4) }`);
-  bnglParts.push(`  k2 ${ (0.01 + rng.next() * 0.05).toFixed(4) }`);
-  bnglParts.push(`  kon ${ (0.1 + rng.next() * 0.2).toFixed(4) }`);
-  bnglParts.push(`  koff ${ (0.02 + rng.next() * 0.1).toFixed(4) }`);
-  bnglParts.push(`  kdeg ${ (0.05 + rng.next() * 0.05).toFixed(4) }`);
-  bnglParts.push(`  ksynth ${ rng.nextInt(5, 20) }`);
+  const k1 = (0.05 + rng.next() * 0.1).toFixed(4);
+  const k2 = (0.01 + rng.next() * 0.05).toFixed(4);
+  const kon = (0.1 + rng.next() * 0.2).toFixed(4);
+  const koff = (0.02 + rng.next() * 0.1).toFixed(4);
+  const kdeg = (0.05 + rng.next() * 0.05).toFixed(4);
+  const ksynth = rng.nextInt(5, 20);
+
+  bnglParts.push(`  k1 ${k1}`);
+  bnglParts.push(`  k2 ${k2}`);
+  bnglParts.push(`  kon ${kon}`);
+  bnglParts.push(`  koff ${koff}`);
+  bnglParts.push(`  kdeg ${kdeg}`);
+  bnglParts.push(`  ksynth ${ksynth}`);
+
+  if (hasDependentParams) {
+    bnglParts.push(`  k_eff k1 * k2`);
+    bnglParts.push(`  k_add k1 + 0.05`);
+    bnglParts.push(`  k_abs abs(k2 - k1)`);
+  }
   bnglParts.push('end parameters');
 
   // 2. Compartments Block (optional)
@@ -165,30 +180,48 @@ export function generateModel(rng: SeededRandom): { bngl: string; hasCompartment
     bnglParts.push('end compartments');
   }
 
-  // 3. Molecule Types Block
+  // 3. Functions Block (optional)
+  if (hasFunctions) {
+    bnglParts.push('begin functions');
+    bnglParts.push('  f_rate() = k1 * 0.8');
+    bnglParts.push('  g_rate(x) = abs(x * k2)');
+    bnglParts.push('end functions');
+  }
+
+  // 4. Molecule Types Block
   bnglParts.push('begin molecule types');
   bnglParts.push('  A(b, s~0~1)');
-  bnglParts.push('  B(a)');
-  bnglParts.push('  C()');
+  bnglParts.push('  B(a, y~u~p, active~yes~no)');
+  bnglParts.push('  C(b)');
+  bnglParts.push('  D()');
   bnglParts.push('end molecule types');
 
-  // 4. Seed Species Block
+  // 5. Seed Species Block
   bnglParts.push('begin seed species');
+  const aVal = rng.nextInt(50, 150);
+  const bVal = rng.nextInt(30, 80);
+  const cVal = rng.nextInt(10, 40);
+  const dVal = rng.nextInt(5, 15);
+
   if (hasCompartments) {
-    bnglParts.push('  A(b, s~0)@CP 100');
-    bnglParts.push('  B(a)@CP 50');
-    bnglParts.push('  C()@EC 10');
+    bnglParts.push(`  A(b, s~0)@CP ${aVal}`);
+    bnglParts.push(`  B(a, y~u, active~yes)@CP ${bVal}`);
+    bnglParts.push(`  C(b)@PM ${cVal}`);
+    bnglParts.push(`  D()@EC ${dVal}`);
   } else {
-    bnglParts.push('  A(b, s~0) 100');
-    bnglParts.push('  B(a) 50');
-    bnglParts.push('  C() 10');
+    bnglParts.push(`  A(b, s~0) ${aVal}`);
+    bnglParts.push(`  B(a, y~u, active~yes) ${bVal}`);
+    bnglParts.push(`  C(b) ${cVal}`);
+    bnglParts.push(`  D() ${dVal}`);
   }
   bnglParts.push('end seed species');
 
-  // 5. Observables Block
+  // 6. Observables Block
   bnglParts.push('begin observables');
   bnglParts.push('  Molecules A_tot A()');
   bnglParts.push('  Molecules B_tot B()');
+  bnglParts.push('  Molecules Complex A(b!1).C(b!1)');
+  bnglParts.push('  Molecules B_active B(active~yes)');
   if (hasCompartments) {
     bnglParts.push('  Species A_state0 A(s~0)@CP');
     bnglParts.push('  Species A_state1 A(s~1)@CP');
@@ -198,15 +231,30 @@ export function generateModel(rng: SeededRandom): { bngl: string; hasCompartment
   }
   bnglParts.push('end observables');
 
-  // 6. Reaction Rules Block
+  // 7. Reaction Rules Block
   bnglParts.push('begin reaction rules');
-  // State change rule
-  bnglParts.push('  A(s~0) -> A(s~1) k1');
+  // State change rule using functions if available, or simple parameters
+  const stateRate = hasFunctions ? 'f_rate()' : 'k1';
+  bnglParts.push(`  A(s~0) -> A(s~1) ${stateRate}`);
+
   // Reversible binding/unbinding rules
-  bnglParts.push('  A(b) + B(a) <-> A(b!1).B(a!1) kon, koff');
+  bnglParts.push('  A(b) + C(b) <-> A(b!1).C(b!1) kon, koff');
+
+  // Rule with DeleteMolecules modifier (deletes A from the complex, keeping C)
+  bnglParts.push('  A(b!1).C(b!1) -> C(b) kdeg DeleteMolecules');
+
+  // Rule with MatchOnce modifier
+  bnglParts.push('  B(active~yes) -> B(active~no) k2 MatchOnce');
+
   // Synthesis and degradation rules
-  bnglParts.push('  C() -> 0 kdeg');
-  bnglParts.push('  0 -> C() ksynth');
+  bnglParts.push('  D() -> 0 kdeg');
+  bnglParts.push('  0 -> D() ksynth');
+
+  // Transport rule if compartments are enabled
+  if (hasCompartments) {
+    bnglParts.push('  A(b)@CP <-> A(b)@EC k1, k2');
+  }
+
   bnglParts.push('end reaction rules');
 
   return { bngl: bnglParts.join('\n'), hasCompartments };
