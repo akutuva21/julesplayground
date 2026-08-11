@@ -377,6 +377,19 @@ export type WorkerRequest =
     | { id: number; type: 'cancel'; payload: { targetId: number } }
     | { id: number; type: 'analyse_network'; payload: NetworkAnalysisPayload };
 
+export interface WorkerProgressPayload {
+    message?: string;
+    simulationProgress?: number;
+    simulationTime?: number;
+    source?: string;
+    [key: string]: any;
+}
+
+export interface WorkerWarningPayload {
+    message: string;
+    [key: string]: any;
+}
+
 export type WorkerResponse =
     | { id: number; type: 'parse_success'; payload: BNGLModel }
     | { id: number; type: 'parse_error'; payload: SerializedWorkerError }
@@ -394,7 +407,9 @@ export type WorkerResponse =
     | { id: number; type: 'generate_network_error'; payload: SerializedWorkerError }
     | { id: number; type: 'generate_network_progress'; payload: GeneratorProgress }
     | { id: number; type: 'analyse_network_success'; payload: IgraphAnalysisResult }
-    | { id: number; type: 'analyse_network_error'; payload: SerializedWorkerError };
+    | { id: number; type: 'analyse_network_error'; payload: SerializedWorkerError }
+    | { id: number; type: 'progress'; payload: WorkerProgressPayload }
+    | { id: number; type: 'warning'; payload: WorkerWarningPayload };
 
 export interface AtomizerResult {
     bngl: string;

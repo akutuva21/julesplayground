@@ -263,5 +263,8 @@ run_build.bat
 # Fuzzer ephemeral output — regenerated each run, never committed (verified ignored)
 tests/fixtures/fuzzer/
 
+# RuleHub checkout for local testing
+/RuleHub/
+
 # End of .gitignore
 coverage
