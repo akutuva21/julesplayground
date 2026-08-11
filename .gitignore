@@ -179,6 +179,7 @@ test-results/
 /diffeq/
 /ordinarydiffeq/
 /nfsim-contribution/
+/RuleHub/
 
 # Workspace configurations
 /*.code-workspace

@@ -1400,23 +1400,6 @@ export async function simulate(
         }
       };
 
-      const fenwickFind = (target: number): number => {
-        const tree = fenwickTree;
-        const n = numReactions;
-        let idx = 0;
-        let bitMask = fenwickHighBit;
-        let t = target;
-        while (bitMask !== 0) {
-          const next = idx + bitMask;
-          if (next <= n && tree[next] <= t) {
-            t -= tree[next];
-            idx = next;
-          }
-          bitMask >>= 1;
-        }
-        return idx; // 0-based index
-      };
-
       // === OPT 7: ADAPTIVE REACTION SELECTION ===
       // For small networks a flat cumulative scan beats the Fenwick tree on
       // constant factors and cache behaviour; for large networks the O(log R)
@@ -1432,18 +1415,6 @@ export async function simulate(
       // Neumaier-compensated accumulation of the total it can be far less frequent.
       const SSA_RECALC_INTERVAL = 1000;
 
-      // Linear cumulative-sum selection: smallest i with prefixSum(0..i) >= target.
-      const selectLinear = (target: number): number => {
-        const p = propensities;
-        const n = numReactions;
-        let sum = 0;
-        for (let i = 0; i < n; i++) {
-          sum += p[i];
-          if (target <= sum) return i;
-        }
-        return n - 1;
-      };
-
       // === OPT 1: ZERO-ALLOCATION TYPED ARRAY FIRING LOG ===
       const shouldRecordFirings = !!(options as typeof options & { recordFirings?: boolean }).recordFirings;
       const maxFiringEvents = ((options as typeof options & { maxFiringEvents?: number }).maxFiringEvents) ?? 100000;
@@ -1457,12 +1428,6 @@ export async function simulate(
       // === OPT 3: INLINED PRNG (Mulberry32) ===
       // Eliminates class method dispatch overhead on every SSA event
       let rngState = (options.seed ?? 12345) | 0;
-      const nextRand = (): number => {
-        let t = (rngState += 0x6d2b79f5);
-        t = Math.imul(t ^ (t >>> 15), t | 1);
-        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-      };
 
       // === OBSERVABLE BUFFER SETUP ===
       const numObservables = concreteObservables.length;
@@ -1940,21 +1905,46 @@ export async function simulate(
           }
 
           // OPT 3: Inlined PRNG calls
-          const r1 = nextRand();
-          const tau = (1 / aTot) * Math.log(1 / r1);
+          let t1 = (rngState += 0x6d2b79f5);
+          t1 = Math.imul(t1 ^ (t1 >>> 15), t1 | 1);
+          t1 ^= t1 + Math.imul(t1 ^ (t1 >>> 7), t1 | 61);
+          const r1 = ((t1 ^ (t1 >>> 14)) >>> 0) * 2.3283064365386963e-10;
+
+          const tau = -Math.log(r1) / aTot;
           if (t + tau > phaseTEnd) {
             break;
           }
           t += tau;
 
-          const r2 = nextRand() * aTot;
+          let t2 = (rngState += 0x6d2b79f5);
+          t2 = Math.imul(t2 ^ (t2 >>> 15), t2 | 1);
+          t2 ^= t2 + Math.imul(t2 ^ (t2 >>> 7), t2 | 61);
+          const r2 = (((t2 ^ (t2 >>> 14)) >>> 0) * 2.3283064365386963e-10) * aTot;
+
           // OPT 7: adaptive selection (linear scan for small R, Fenwick for large R)
           let reactionIndex: number;
           if (useFenwick) {
-            const fenwickIdx = fenwickFind(r2);
-            reactionIndex = fenwickIdx < numReactions ? fenwickIdx : 0;
+            let idx = 0;
+            let bitMask = fenwickHighBit;
+            let targetVal = r2;
+            while (bitMask !== 0) {
+              const next = idx + bitMask;
+              if (next <= numReactions && fenwickTree[next] <= targetVal) {
+                targetVal -= fenwickTree[next];
+                idx = next;
+              }
+              bitMask >>= 1;
+            }
+            reactionIndex = idx < numReactions ? idx : 0;
           } else {
-            reactionIndex = selectLinear(r2);
+            let sum = 0;
+            let idx = 0;
+            const n = numReactions;
+            for (; idx < n; idx++) {
+              sum += propensities[idx];
+              if (r2 <= sum) break;
+            }
+            reactionIndex = idx < n ? idx : n - 1;
           }
 
           const firedRxn = concreteReactions[reactionIndex];
@@ -2082,7 +2072,14 @@ export async function simulate(
               const aNew = calcPropensity(jrxn);
               const delta = aNew - propensities[jrxn];
               eventDelta += delta;
-              if (useFenwick) fenwickAdd(jrxn, delta);
+              if (useFenwick) {
+                let i = jrxn + 1;
+                const n = numReactions;
+                while (i <= n) {
+                  fenwickTree[i] += delta;
+                  i += i & -i;
+                }
+              }
               propensities[jrxn] = aNew;
             }
           }
