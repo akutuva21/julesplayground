@@ -68,7 +68,7 @@ function getFirstActiveLine(src: string): string | null {
       continue;
     }
     if (char === 35) { // '#' - comment line, skip to end of line
-      let end = src.indexOf('\n', start);
+      const end = src.indexOf('\n', start);
       if (end === -1) {
         return null;
       }
