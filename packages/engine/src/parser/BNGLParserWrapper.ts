@@ -107,23 +107,15 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
       if (!/molecules/i.test(src)) {
         return { normalized: src, warned: false };
       }
-      const lines = src.split(/\r\n|\n/);
       let warned = false;
-      const out = lines.map(line => {
-        const trimmedStart = line.replace(/^\s*/, '');
-        // Skip commented lines
-        if (/^#/.test(trimmedStart)) return line;
-        if (/^\s*begin\s+molecules\b/i.test(line)) {
-          warned = true;
-          return line.replace(/begin\s+molecules\b/i, 'begin molecule types');
-        }
-        if (/^\s*end\s+molecules\b/i.test(line)) {
-          warned = true;
-          return line.replace(/end\s+molecules\b/i, 'end molecule types');
-        }
-        return line;
+      const normalized = src.replace(/^([^\r\n#]*\bbegin\s+)(molecules\b)/gim, (_, prefix) => {
+        warned = true;
+        return prefix + 'molecule types';
+      }).replace(/^([^\r\n#]*\bend\s+)(molecules\b)/gim, (_, prefix) => {
+        warned = true;
+        return prefix + 'molecule types';
       });
-      return { normalized: out.join('\n'), warned };
+      return { normalized, warned };
     }
 
     function normalizeLegacySyntax(src: string): { normalized: string; warnings: string[] } {
@@ -138,14 +130,10 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
       // The local function bodies and calls are preserved so NetworkExpansion.ts can
       // detect which rules use local functions and compute per-species rates at
       // network-generation time.
-      if (next.includes('::')) {
-        const localContextMatches = Array.from(next.matchAll(/%([A-Za-z_][A-Za-z0-9_]*)::/g));
-        if (localContextMatches.length > 0) {
-          // Only strip the %x:: prefix from pattern positions; leave function defs/calls intact.
-          next = next.replace(/%[A-Za-z_][A-Za-z0-9_]*::/g, '');
-
-          warnings.push('Detected local-function context syntax (%x::); local function calls preserved for per-species rate evaluation.');
-        }
+      if (next.includes('::') && /%[A-Za-z_][A-Za-z0-9_]*::/.test(next)) {
+        // Only strip the %x:: prefix from pattern positions; leave function defs/calls intact.
+        next = next.replace(/%[A-Za-z_][A-Za-z0-9_]*::/g, '');
+        warnings.push('Detected local-function context syntax (%x::); local function calls preserved for per-species rate evaluation.');
       }
 
       // Normalize legacy compartment-before-parentheses molecule syntax used in
@@ -553,6 +541,24 @@ export function validateModelSemantics(model: BNGLModel): ParseError[] {
     return errors;
   }
 
+  // Local cache for parseSpeciesGraph inside validateModelSemantics
+  const parseCache = new Map<string, { graph: any; error?: any }>();
+  const getParsedSpeciesGraph = (name: string) => {
+    if (parseCache.has(name)) {
+      const cached = parseCache.get(name)!;
+      if (cached.error) throw cached.error;
+      return cached.graph;
+    }
+    try {
+      const g = BNGLParser.parseSpeciesGraph(name);
+      parseCache.set(name, { graph: g });
+      return g;
+    } catch (e) {
+      parseCache.set(name, { graph: null, error: e });
+      throw e;
+    }
+  };
+
   // 1. Build declared molecule types map
   const declaredMoleculeTypes = new Map<string, Set<string>>();
   for (const mt of model.moleculeTypes) {
@@ -606,11 +612,13 @@ export function validateModelSemantics(model: BNGLModel): ParseError[] {
     const line = sp.line ?? 0;
     const column = sp.column ?? 0;
     try {
-      const graph = BNGLParser.parseSpeciesGraph(sp.name);
-      for (const mol of graph.molecules) {
-        const err = checkMoleculeComponents(mol, line, column, '');
-        if (err) {
-          errors.push(err);
+      const graph = getParsedSpeciesGraph(sp.name);
+      if (graph) {
+        for (const mol of graph.molecules) {
+          const err = checkMoleculeComponents(mol, line, column, '');
+          if (err) {
+            errors.push(err);
+          }
         }
       }
     } catch (e) {
@@ -626,17 +634,25 @@ export function validateModelSemantics(model: BNGLModel): ParseError[] {
     const reactantMols: any[] = [];
     for (const rStr of rule.literalReactants || rule.reactants) {
       try {
-        const graph = BNGLParser.parseSpeciesGraph(rStr);
-        reactantMols.push(...graph.molecules);
-      } catch (e) {}
+        const graph = getParsedSpeciesGraph(rStr);
+        if (graph) {
+          reactantMols.push(...graph.molecules);
+        }
+      } catch {
+        // Ignore parse errors of reactant species names
+      }
     }
 
     const productMols: any[] = [];
     for (const pStr of rule.literalProducts || rule.products) {
       try {
-        const graph = BNGLParser.parseSpeciesGraph(pStr);
-        productMols.push(...graph.molecules);
-      } catch (e) {}
+        const graph = getParsedSpeciesGraph(pStr);
+        if (graph) {
+          productMols.push(...graph.molecules);
+        }
+      } catch {
+        // Ignore parse errors of product species names
+      }
     }
 
     const reactantCounts = new Map<string, number>();

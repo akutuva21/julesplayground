@@ -1455,8 +1455,17 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
     ctx: Parser.Species_defContext,
     options: { completeMissingComponents?: boolean } = {}
   ): string {
+    const shouldComplete = options.completeMissingComponents === true;
+    const cacheKey = shouldComplete ? '_cachedSpeciesStringComplete' : '_cachedSpeciesString';
+    if ((ctx as any)[cacheKey] !== undefined) {
+      return (ctx as any)[cacheKey];
+    }
+
     const molPatterns = ctx.molecule_pattern();
-    if (!molPatterns || molPatterns.length === 0) return '';
+    if (!molPatterns || molPatterns.length === 0) {
+      (ctx as any)[cacheKey] = '';
+      return '';
+    }
 
     // DEBUG LOGGING
 
@@ -1659,6 +1668,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
       }
     }
 
+    (ctx as any)[cacheKey] = res;
     return res;
   }
 
