@@ -143,6 +143,9 @@ export async function initializeNFsimHeadless() {
 // Generate a random valid BNGL model
 export function generateModel(rng: SeededRandom): { bngl: string; hasCompartments: boolean } {
   const hasCompartments = rng.next() > 0.5;
+  const hasFunctions = rng.next() > 0.5;
+  const hasComplexStates = rng.next() > 0.5;
+  const hasRuleModifiers = rng.next() > 0.5;
 
   const bnglParts: string[] = [];
 
@@ -154,6 +157,18 @@ export function generateModel(rng: SeededRandom): { bngl: string; hasCompartment
   bnglParts.push(`  koff ${ (0.02 + rng.next() * 0.1).toFixed(4) }`);
   bnglParts.push(`  kdeg ${ (0.05 + rng.next() * 0.05).toFixed(4) }`);
   bnglParts.push(`  ksynth ${ rng.nextInt(5, 20) }`);
+
+  // Extra: Dependent parameters
+  if (rng.next() > 0.5) {
+    bnglParts.push(`  k_dep1 k1 * 2`);
+  } else {
+    bnglParts.push(`  k_dep1 abs(k2 - k1)`);
+  }
+  if (rng.next() > 0.5) {
+    bnglParts.push(`  k_dep2 cos(0.1)`);
+  } else {
+    bnglParts.push(`  k_dep2 exp(-1.5)`);
+  }
   bnglParts.push('end parameters');
 
   // 2. Compartments Block (optional)
@@ -167,7 +182,11 @@ export function generateModel(rng: SeededRandom): { bngl: string; hasCompartment
 
   // 3. Molecule Types Block
   bnglParts.push('begin molecule types');
-  bnglParts.push('  A(b, s~0~1)');
+  if (hasComplexStates) {
+    bnglParts.push('  A(b, s~0~1~2, p~U~P)');
+  } else {
+    bnglParts.push('  A(b, s~0~1)');
+  }
   bnglParts.push('  B(a)');
   bnglParts.push('  C()');
   bnglParts.push('end molecule types');
@@ -175,11 +194,19 @@ export function generateModel(rng: SeededRandom): { bngl: string; hasCompartment
   // 4. Seed Species Block
   bnglParts.push('begin seed species');
   if (hasCompartments) {
-    bnglParts.push('  A(b, s~0)@CP 100');
+    if (hasComplexStates) {
+      bnglParts.push('  A(b, s~0, p~U)@CP 100');
+    } else {
+      bnglParts.push('  A(b, s~0)@CP 100');
+    }
     bnglParts.push('  B(a)@CP 50');
     bnglParts.push('  C()@EC 10');
   } else {
-    bnglParts.push('  A(b, s~0) 100');
+    if (hasComplexStates) {
+      bnglParts.push('  A(b, s~0, p~U) 100');
+    } else {
+      bnglParts.push('  A(b, s~0) 100');
+    }
     bnglParts.push('  B(a) 50');
     bnglParts.push('  C() 10');
   }
@@ -192,22 +219,56 @@ export function generateModel(rng: SeededRandom): { bngl: string; hasCompartment
   if (hasCompartments) {
     bnglParts.push('  Species A_state0 A(s~0)@CP');
     bnglParts.push('  Species A_state1 A(s~1)@CP');
+    if (hasComplexStates) {
+      bnglParts.push('  Species A_pP A(p~P)@CP');
+    }
   } else {
     bnglParts.push('  Species A_state0 A(s~0)');
     bnglParts.push('  Species A_state1 A(s~1)');
+    if (hasComplexStates) {
+      bnglParts.push('  Species A_pP A(p~P)');
+    }
   }
   bnglParts.push('end observables');
 
-  // 6. Reaction Rules Block
+  // 6. Functions Block (optional)
+  if (hasFunctions) {
+    bnglParts.push('begin functions');
+    bnglParts.push('  f_rate() = abs(A_tot * k1)');
+    bnglParts.push('end functions');
+  }
+
+  // 7. Reaction Rules Block
   bnglParts.push('begin reaction rules');
   // State change rule
-  bnglParts.push('  A(s~0) -> A(s~1) k1');
+  if (hasFunctions) {
+    bnglParts.push('  A(s~0) -> A(s~1) f_rate');
+  } else {
+    bnglParts.push('  A(s~0) -> A(s~1) k1');
+  }
+
+  if (hasComplexStates) {
+    bnglParts.push('  A(p~U) -> A(p~P) k_dep1');
+  }
+
   // Reversible binding/unbinding rules
   bnglParts.push('  A(b) + B(a) <-> A(b!1).B(a!1) kon, koff');
+
   // Synthesis and degradation rules
   bnglParts.push('  C() -> 0 kdeg');
   bnglParts.push('  0 -> C() ksynth');
+
+  // Rule Modifiers (like MatchOnce or DeleteMolecules)
+  if (hasRuleModifiers) {
+    // DeleteMolecules rule modifier
+    bnglParts.push('  A(b) -> 0 kdeg DeleteMolecules');
+  }
+
   bnglParts.push('end reaction rules');
+
+  // Basic actions to exercise action parser
+  bnglParts.push('generate_network({overwrite=>1})');
+  bnglParts.push('simulate({method=>"ode", t_end=>1, n_steps=>10})');
 
   return { bngl: bnglParts.join('\n'), hasCompartments };
 }

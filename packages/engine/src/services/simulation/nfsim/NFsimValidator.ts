@@ -6,7 +6,8 @@ export enum ValidationErrorType {
   TOTAL_RATE_MODIFIER = 'TOTAL_RATE_MODIFIER',
   OBSERVABLE_DEPENDENT_RATE = 'OBSERVABLE_DEPENDENT_RATE',
   UNSUPPORTED_FUNCTION = 'UNSUPPORTED_FUNCTION',
-  MISSING_REQUIREMENTS = 'MISSING_REQUIREMENTS'
+  MISSING_REQUIREMENTS = 'MISSING_REQUIREMENTS',
+  UNSUPPORTED_FEATURE = 'UNSUPPORTED_FEATURE'
 }
 
 export interface ValidationIssue {
@@ -66,6 +67,20 @@ export class NFsimValidator {
 
     const recommendations: ValidationRecommendation[] = [];
 
+    if (model.compartments && model.compartments.length > 0) {
+      errors.push({
+        type: ValidationErrorType.UNSUPPORTED_FEATURE,
+        message: 'Compartments are not supported by NFsim.'
+      });
+    }
+
+    if (model.functions && model.functions.length > 0) {
+      errors.push({
+        type: ValidationErrorType.UNSUPPORTED_FEATURE,
+        message: 'User-defined functions are not supported by NFsim.'
+      });
+    }
+
     if (!model.species || model.species.length === 0) {
       errors.push({
         type: ValidationErrorType.MISSING_REQUIREMENTS,
@@ -100,6 +115,13 @@ export class NFsimValidator {
     const rules = model.reactionRules || [];
     for (const rule of rules) {
       const rate = String(rule.rate ?? '');
+
+      if (rule.deleteMolecules) {
+        errors.push({
+          type: ValidationErrorType.UNSUPPORTED_FEATURE,
+          message: 'DeleteMolecules modifier is not supported by NFsim.'
+        });
+      }
 
       // TotalRate modifiers ARE supported by NFsim (nfsim/src/NFinput/NFinput.cpp
       // lines 2230-2243, 2707). The parser and XML writer already handle this correctly.
@@ -247,11 +269,25 @@ export class NFsimValidator {
 
 let cachedValidator: NFsimValidator | null = null;
 
+/**
+ * Retrieves the singleton instance of the NFsimValidator.
+ * Lazily instantiates the validator upon the first request.
+ *
+ * @returns {NFsimValidator} The global NFsimValidator singleton instance.
+ * @invariant This function operates entirely within a Node.js or JS runtime and does not rely on browser-specific APIs.
+ */
 export function getValidator(): NFsimValidator {
   if (!cachedValidator) cachedValidator = new NFsimValidator();
   return cachedValidator;
 }
 
+/**
+ * Resets the cached singleton instance of the NFsimValidator.
+ * Primarily used for testing purposes to clear previous validation state.
+ *
+ * @returns {void}
+ * @invariant This function operates entirely within a Node.js or JS runtime and does not rely on browser-specific APIs.
+ */
 export function resetValidator(): void {
   cachedValidator = null;
 }
