@@ -58,6 +58,34 @@ const ensureExpandedNetwork = async (model: BNGLModel): Promise<BNGLModel> => {
   );
 };
 
+/**
+ * Executes a network-free simulation using the NFsim simulation engine.
+ *
+ * This function handles the full lifecycle of an NFsim execution:
+ * 1. Validates the input `BNGLModel` to ensure compatibility with NFsim (unsupported features such as
+ *    compartments, custom user functions, or `DeleteMolecules` modifiers will reject early).
+ * 2. Serializes the model into the BioNetGen XML format using `BNGXMLWriter`.
+ * 3. Configures runtime options and sets up a progress callback to intercept stdout lines,
+ *    parsing the current simulation time/progress and reporting them via worker message ports.
+ * 4. Invokes the underlying NFsim WASM runtime (`runNFsim`).
+ * 5. Adapts the resulting raw `.gdat` output into structured `SimulationResults` using the `NFsimResultAdapter`.
+ *
+ * Fallback Behavior:
+ * - If the WASM runtime fails or is unavailable, and `requireRuntime` is not explicitly set in the options,
+ *   the function will transparently fall back to an SSA (Stochastic Simulation Algorithm) run.
+ *   Before running SSA, it automatically generates/expands the model's reaction network if needed.
+ *
+ * Environment Invariant:
+ * - This function must remain safe for both browser-based Web Worker environments and Node.js/MCP server environments.
+ *   As such, any worker communication via `self.postMessage` or `globalThis.postMessage` must be strictly guarded
+ *   against `undefined` and type-checked before invocation (i.e. browser-API-free / guarded).
+ *
+ * @param inputModel - The BioNetGen Language (BNGL) model to simulate.
+ * @param options - Configuration parameters for the NFsim runner (e.g. end time, steps, seed, timeout).
+ * @param jobId - Optional unique identifier for the current simulation task, used for tracking worker progress.
+ * @returns A promise resolving to the structured `SimulationResults` including species, observables, and/or metadata.
+ * @throws {Error} If model validation fails, or if NFsim fails when `options.requireRuntime` is enabled.
+ */
 export async function runNFsimSimulation(
   inputModel: BNGLModel,
   options: NFsimSimulationOptions,
