@@ -314,53 +314,6 @@ export function getOptimalCVODEConfig(profile: StiffnessProfile): CVODEStiffConf
 }
 
 /**
- * Generate a configuration patch for CVODESolver initialization.
- * 
- * This returns code that can be applied to enhance the solver for stiff systems.
- */
-export function generateSolverPatch(config: CVODEStiffConfig): string {
-  return `
-// Apply enhanced CVODE configuration for stiff systems
-// Rationale: ${config.rationale}
-
-const stiffConfig = {
-  atol: ${config.atol},
-  rtol: ${config.rtol},
-  maxSteps: ${config.maxSteps},
-};
-
-// After solver initialization, apply additional settings:
-if (CVODESolver.module && solverMem) {
-  const mod = CVODESolver.module;
-  
-  ${config.stabLimDet ? `// Enable BDF stability limit detection
-  if (mod._set_stab_lim_det) {
-    mod._set_stab_lim_det(solverMem, ${config.stabLimDet});
-  }` : '// Stability limit detection: disabled'}
-  
-  ${config.maxOrd !== 5 ? `// Reduce maximum BDF order for stability
-  if (mod._set_max_ord) {
-    mod._set_max_ord(solverMem, ${config.maxOrd});
-  }` : '// BDF order: default (5)'}
-  
-  ${config.maxNonlinIters !== 3 ? `// Increase nonlinear solver iterations
-  if (mod._set_max_nonlin_iters) {
-    mod._set_max_nonlin_iters(solverMem, ${config.maxNonlinIters});
-  }` : '// Nonlinear iterations: default (3)'}
-  
-  ${config.nonlinConvCoef !== 0.1 ? `// Stricter nonlinear convergence
-  if (mod._set_nonlin_conv_coef) {
-    mod._set_nonlin_conv_coef(solverMem, ${config.nonlinConvCoef});
-  }` : '// Nonlinear convergence: default (0.1)'}
-  
-  ${config.maxStep > 0 ? `// Limit maximum step size
-  // This helps capture dynamics in oscillatory/stiff systems
-  // mod._set_max_step(solverMem, ${config.maxStep});` : '// Max step: unlimited'}
-}
-`;
-}
-
-/**
  * Preset configurations for known problematic models
  */
 export const MODEL_PRESETS: Record<string, Partial<CVODEStiffConfig>> = {
@@ -428,7 +381,6 @@ export function detectModelPreset(modelName: string): Partial<CVODEStiffConfig> 
 export default {
   analyzeModelStiffness,
   getOptimalCVODEConfig,
-  generateSolverPatch,
   detectModelPreset,
   MODEL_PRESETS
 };
