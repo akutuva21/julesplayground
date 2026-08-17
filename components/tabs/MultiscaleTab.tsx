@@ -112,6 +112,10 @@ export const MultiscaleTab: React.FC<MultiscaleTabProps> = ({ bnglCode: _bnglCod
         const msg = event.data ?? { type: 'error', message: 'Empty or undefined worker response' };
 
         switch (msg.type) {
+          case 'initialized':
+            // Worker has acknowledged initialization/start
+            break;
+
           case 'progress':
             setProgress(msg.fraction);
             break;
@@ -133,6 +137,10 @@ export const MultiscaleTab: React.FC<MultiscaleTabProps> = ({ bnglCode: _bnglCod
             setPopulationTimeSeries(tsData);
             setIsRunning(false);
             setProgress(1);
+            if (workerRef.current) {
+              workerRef.current.terminate();
+              workerRef.current = null;
+            }
             break;
           }
 
@@ -143,6 +151,10 @@ export const MultiscaleTab: React.FC<MultiscaleTabProps> = ({ bnglCode: _bnglCod
               workerRef.current.terminate();
               workerRef.current = null;
             }
+            break;
+
+          default:
+            console.warn('[MultiscaleTab] Received unexpected worker response:', msg);
             break;
         }
       };
