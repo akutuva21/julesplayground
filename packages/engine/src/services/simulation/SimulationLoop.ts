@@ -1470,7 +1470,7 @@ export async function simulate(
 
       // === OPT 3: INLINED PRNG (Mulberry32) ===
       // V8 inlines this compact helper in the SSA event loop.
-      let rngState = (options.seed ?? 12345) | 0;
+      let rngState = (options.seed !== undefined && options.seed !== null ? options.seed : (Math.floor(Math.random() * 2147483647))) | 0;
       const nextRand = (): number => {
         let t = (rngState += 0x6d2b79f5);
         t = Math.imul(t ^ (t >>> 15), t | 1);

@@ -23,6 +23,8 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { TimeSeriesChart, TimeSeriesSeries } from '../charts/TimeSeriesChart';
 import { toggleSetMember } from '../../services/collections';
+import { gdatFromResults, cdatFromResults } from '@bngplayground/engine';
+import { downloadTextFile, downloadCsv } from '../../src/utils/download';
 
 interface TrajectoryExplorerTabProps {
     model: BNGLModel | null;
@@ -70,7 +72,7 @@ export const TrajectoryExplorerTab: React.FC<TrajectoryExplorerTabProps> = ({ mo
                 t_end: Number(defaults.tEnd) || 100,
                 n_steps: Number(defaults.nSteps) || 100,
                 includeInfluence: false, // Disable DIN for maximum speed in explorer
-                includeSpeciesData: false,
+                includeSpeciesData: true, // Enable species data for .cdat export
                 includeExpandedNetwork: false,
                 // Stochastic seed (SSA, PLA, PSA, NFsim)
                 ...(seed ? { seed: parseInt(seed) } : {}),
@@ -136,12 +138,37 @@ export const TrajectoryExplorerTab: React.FC<TrajectoryExplorerTabProps> = ({ mo
         setIsSimulating(false);
     };
 
-    // Prepare line chart data: current run + average if possible
-    const chartData = useMemo(() => {
-        if (selectedRunIdx === null || !runs[selectedRunIdx] || !ensembleResults) return [];
-        const selectedResult = isSharedEnsembleResultsHandle(ensembleResults)
+    const selectedResult = useMemo(() => {
+        if (selectedRunIdx === null || !runs[selectedRunIdx] || !ensembleResults) return null;
+        return isSharedEnsembleResultsHandle(ensembleResults)
             ? materializeSharedSimulationResult(ensembleResults, selectedRunIdx)
             : ensembleResults[selectedRunIdx];
+    }, [selectedRunIdx, runs, ensembleResults]);
+
+    const exportGdat = () => {
+        if (!selectedResult || selectedRunIdx === null) return;
+        const gdatContent = gdatFromResults(selectedResult);
+        const runId = runs[selectedRunIdx].id;
+        downloadTextFile(gdatContent, `run_${runId}_observables.gdat`, 'text/plain');
+    };
+
+    const exportCdat = () => {
+        if (!selectedResult || selectedRunIdx === null) return;
+        const cdatContent = cdatFromResults(selectedResult);
+        const runId = runs[selectedRunIdx].id;
+        downloadTextFile(cdatContent, `run_${runId}_species.cdat`, 'text/plain');
+    };
+
+    const exportCsv = () => {
+        if (!selectedResult || selectedRunIdx === null) return;
+        const runId = runs[selectedRunIdx].id;
+        const headers = selectedResult.headers.filter(h => h !== 'time');
+        downloadCsv(selectedResult.data, headers, `run_${runId}.csv`);
+    };
+
+    // Prepare line chart data: current run + average if possible
+    const chartData = useMemo(() => {
+        if (!selectedResult) return [];
         const selectedData = selectedResult?.data ?? [];
 
         return selectedData.map((row, i) => {
@@ -151,7 +178,7 @@ export const TrajectoryExplorerTab: React.FC<TrajectoryExplorerTabProps> = ({ mo
             });
             return entry;
         });
-    }, [selectedRunIdx, runs, ensembleResults]);
+    }, [selectedResult]);
 
     const chartTimeDomain = useMemo<[number, number] | undefined>(() => {
         if (chartData.length === 0) return undefined;
@@ -448,18 +475,41 @@ export const TrajectoryExplorerTab: React.FC<TrajectoryExplorerTabProps> = ({ mo
 
                     {/* Line Chart */}
                     <Card className="p-6 flex flex-col min-h-[500px]">
-                        <div className="mb-6 flex items-center justify-between">
+                        <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
                             <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                                 📈 {selectedRunIdx !== null ? `Trajectory Overview: Run #${runs[selectedRunIdx].id}` : 'Select a run in the map'}
                             </h4>
                             {selectedRunIdx !== null && (
-                            <button
-                                onClick={() => setSelectedRunIdx(null)}
-                                aria-label="Clear selected run"
-                                className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                            >
-                                Clear Selection
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={exportGdat}
+                                    title="Export Observables as BioNetGen .gdat"
+                                    className="text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 px-2.5 py-1 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors font-medium"
+                                >
+                                    📥 .gdat
+                                </button>
+                                <button
+                                    onClick={exportCdat}
+                                    title="Export Species Concentrations as BioNetGen .cdat"
+                                    className="text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 px-2.5 py-1 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors font-medium"
+                                >
+                                    📥 .cdat
+                                </button>
+                                <button
+                                    onClick={exportCsv}
+                                    title="Export Observables as .csv"
+                                    className="text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 px-2.5 py-1 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors font-medium"
+                                >
+                                    📥 .csv
+                                </button>
+                                <button
+                                    onClick={() => setSelectedRunIdx(null)}
+                                    aria-label="Clear selected run"
+                                    className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                >
+                                    Clear
+                                </button>
+                            </div>
                             )}
                         </div>
                         <div className="flex-1 min-h-0">

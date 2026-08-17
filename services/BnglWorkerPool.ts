@@ -345,7 +345,7 @@ export class BnglWorkerPool {
                     const result = await this.simulateCachedOnWorker(
                         this.workers[taskIdx],
                         modelIds[taskIdx],
-                        { ...options, seed: taskIdx }
+                        { ...options, seed: options.seed !== undefined ? options.seed + taskIdx : taskIdx }
                     );
                     initialResults[taskIdx] = result;
                     completed++;
@@ -384,7 +384,7 @@ export class BnglWorkerPool {
                 await this.runBoundedEnsembleTasks(count, initialWaveCount, async (workerIdx, taskIdx) => {
                     const worker = this.workers[workerIdx];
                     const modelId = modelIds[workerIdx];
-                    await this.simulateCachedOnWorkerShared(worker, modelId, { ...options, seed: taskIdx }, {
+                    await this.simulateCachedOnWorkerShared(worker, modelId, { ...options, seed: options.seed !== undefined ? options.seed + taskIdx : taskIdx }, {
                         slot: taskIdx,
                         runCount: shared.runCount,
                         rowCount: shared.rowCount,
@@ -409,7 +409,7 @@ export class BnglWorkerPool {
                 const worker = this.workers[workerIdx];
                 const modelId = modelIds[workerIdx];
 
-                const res = await this.simulateCachedOnWorker(worker, modelId, { ...options, seed: taskIdx });
+                const res = await this.simulateCachedOnWorker(worker, modelId, { ...options, seed: options.seed !== undefined ? options.seed + taskIdx : taskIdx });
                 results[taskIdx] = res;
                 completed++;
                 onProgress?.(completed);

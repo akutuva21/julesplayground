@@ -28,6 +28,27 @@ export function gdatFromResults(results: SimulationResults): string {
   return lines.join('\n') + '\n';
 }
 
+/**
+ * Translates species time series data from a simulation result into a tab-delimited string
+ * conforming to the BioNetGen .cdat (species concentrations) file format specification.
+ *
+ * @param results - The simulation results object containing speciesHeaders and speciesData.
+ * @returns A tab-delimited, newline-terminated .cdat formatted string with comments starting with `#`.
+ */
+export function cdatFromResults(results: SimulationResults): string {
+  const rows = results.speciesData ?? results.data ?? [];
+  const headers = results.speciesHeaders && results.speciesHeaders.length > 0
+    ? ['time', ...results.speciesHeaders.filter(h => h !== 'time')]
+    : (results.headers.length > 0 ? results.headers : inferHeaders(rows));
+  const lines = [`# ${headers.join('\t')}`];
+
+  for (const row of rows) {
+    lines.push(headers.map((header) => formatValue(row[header])).join('\t'));
+  }
+
+  return lines.join('\n') + '\n';
+}
+
 function inferHeaders(rows: Record<string, number>[]): string[] {
   const headers = new Set<string>();
   for (const row of rows) {

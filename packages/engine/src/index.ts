@@ -46,6 +46,7 @@ export { evaluateFunctionalRate, evaluateExpressionOrParse, loadEvaluator, clear
 export { requiresCompartmentResolution, resolveCompartmentVolumes } from './services/simulation/CompartmentResolver';
 export { BNGXMLWriter } from './services/simulation/BNGXMLWriter';
 export { parseGdat } from './services/simulation/GdatParser';
+export { gdatFromResults, cdatFromResults } from './utils/gdatWriter';
 export { CVODESolver, Rosenbrock23Solver, RK45Solver, AutoSolver, FastRK4Solver, createSolver } from './services/simulation/ODESolver';
 export { PLASimulator, simulatePLA } from './services/simulation/PLASimulator';
 export type { PLAOptions } from './services/simulation/PLASimulator';
