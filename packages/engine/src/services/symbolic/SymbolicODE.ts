@@ -364,10 +364,6 @@ export function solveSymbolicSteadyState(
     const result = _solveSmallPolynomial(reducedRHS, reducedVars);
     solution = result.solution;
     isExact = result.isExact;
-  } else if (reducedVars.length <= 5) {
-    const result = _solveViaResultants(reducedRHS, reducedVars);
-    solution = result.solution;
-    isExact = result.isExact;
   } else {
     const result = _solveNumeric(system);
     solution = result.solution;
