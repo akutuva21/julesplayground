@@ -4,12 +4,24 @@
  * Parses BNGL files using the ANTLR4 grammar and converts to ParsedBNGL type.
  * Provides BNG2.pl-compatible parsing for maximum parity.
  */
-import { CharStreams, CommonTokenStream } from 'antlr4ts';
+import { CharStreams, CommonTokenStream, DefaultErrorStrategy, BailErrorStrategy } from 'antlr4ts';
+import { PredictionMode } from 'antlr4ts/atn/PredictionMode';
 import { BNGLexer } from './generated/BNGLexer';
 import { BNGParser } from './generated/BNGParser';
 import { BNGLVisitor } from './BNGLVisitor';
 import type { BNGLModel } from '../types';
 import { BNGLParser } from '../services/graph/core/BNGLParser';
+
+// Module-scope re-usable RegExp patterns to avoid re-compilation on every parse
+const LEGACY_MOLECULES_RE = /molecules/i;
+const BEGIN_MOLECULES_RE = /(^[^\S\r\n]*(?!#)begin\s+)molecules\b/gim;
+const END_MOLECULES_RE = /(^[^\S\r\n]*(?!#)end\s+)molecules\b/gim;
+const LOCAL_CONTEXT_MATCH_RE = /%([A-Za-z_][A-Za-z0-9_]*)::/g;
+const LOCAL_CONTEXT_STRIP_RE = /%[A-Za-z_][A-Za-z0-9_]*::/g;
+const LEGACY_COMP_BEFORE_PAREN_RE = /\b([A-Za-z_][A-Za-z0-9_]*)@([A-Za-z_][A-Za-z0-9_]*)\(([^(){}]*)\)/g;
+const LINE_CONTINUATION_RE = /\\\s*\r?\n\s*/g;
+const PERCENT_INHERITANCE_RE = /([,(]\s*[A-Za-z_][A-Za-z0-9_]*)%([A-Za-z0-9_+-]+)/g;
+const MODIFIER_ONLY_LINE_RE = /^\s*(?:(?:include|exclude)_(?:reactants|products)\([^)]*\)\s*)+$/i;
 
 export interface ParseError {
   line: number;
@@ -136,20 +148,20 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
     // We do this as a pre-parse normalization to preserve repository files
     // but remain compatible with BNG2.pl. We skip lines that are comments.
     function normalizeLegacyBlocks(src: string): { normalized: string; warned: boolean } {
-      if (!/molecules/i.test(src)) {
+      if (!LEGACY_MOLECULES_RE.test(src)) {
         return { normalized: src, warned: false };
       }
       let warned = false;
       let next = src;
-      const beginRe = /^[^\S\r\n]*(?!#)begin\s+molecules\b/im;
-      const endRe = /^[^\S\r\n]*(?!#)end\s+molecules\b/im;
-      if (beginRe.test(next)) {
+      if (BEGIN_MOLECULES_RE.test(next)) {
+        BEGIN_MOLECULES_RE.lastIndex = 0;
         warned = true;
-        next = next.replace(/(^[^\S\r\n]*(?!#)begin\s+)molecules\b/gim, '$1molecule types');
+        next = next.replace(BEGIN_MOLECULES_RE, '$1molecule types');
       }
-      if (endRe.test(next)) {
+      if (END_MOLECULES_RE.test(next)) {
+        END_MOLECULES_RE.lastIndex = 0;
         warned = true;
-        next = next.replace(/(^[^\S\r\n]*(?!#)end\s+)molecules\b/gim, '$1molecule types');
+        next = next.replace(END_MOLECULES_RE, '$1molecule types');
       }
       return { normalized: next, warned };
     }
@@ -167,21 +179,17 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
       // detect which rules use local functions and compute per-species rates at
       // network-generation time.
       if (next.includes('::')) {
-        const localContextMatches = Array.from(next.matchAll(/%([A-Za-z_][A-Za-z0-9_]*)::/g));
+        LOCAL_CONTEXT_MATCH_RE.lastIndex = 0;
+        const localContextMatches = Array.from(next.matchAll(LOCAL_CONTEXT_MATCH_RE));
         if (localContextMatches.length > 0) {
-          // Only strip the %x:: prefix from pattern positions; leave function defs/calls intact.
-          next = next.replace(/%[A-Za-z_][A-Za-z0-9_]*::/g, '');
-
+          next = next.replace(LOCAL_CONTEXT_STRIP_RE, '');
           warnings.push('Detected local-function context syntax (%x::); local function calls preserved for per-species rate evaluation.');
         }
       }
 
-      // Normalize legacy compartment-before-parentheses molecule syntax used in
-      // some cBNGL models: Mol@Comp(...) -> Mol(...)@Comp.
-      // This keeps semantics while matching the ANTLR grammar's expected order.
       if (next.includes('@')) {
         const legacyCompBeforeParen = next.replace(
-          /\b([A-Za-z_][A-Za-z0-9_]*)@([A-Za-z_][A-Za-z0-9_]*)\(([^(){}]*)\)/g,
+          LEGACY_COMP_BEFORE_PAREN_RE,
           (_m, mol, comp, args) => `${mol}(${String(args ?? '')})@${comp}`
         );
         if (legacyCompBeforeParen !== next) {
@@ -190,10 +198,8 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
         }
       }
 
-      // Normalize explicit line continuations used in legacy reaction rules by
-      // folding continued lines into a single logical rule line.
       if (next.includes('\\')) {
-        const joined = next.replace(/\\\s*\r?\n\s*/g, ' ');
+        const joined = next.replace(LINE_CONTINUATION_RE, ' ');
         if (joined !== next) {
           warnings.push('Joined legacy line continuations (\\) for parser compatibility.');
           next = joined;
@@ -403,7 +409,7 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
         // Fallback: if any %n patterns remain (molecule type info unavailable or
         // expansion did not apply), strip to wildcard ~? to keep rules applicable.
         // Keep molecule labels like ")%1" unchanged by anchoring to component starts.
-        const percentInheritanceNormalized = next.replace(/([,(]\s*[A-Za-z_][A-Za-z0-9_]*)%([A-Za-z0-9_+-]+)/g, '$1~?');
+        const percentInheritanceNormalized = next.replace(PERCENT_INHERITANCE_RE, '$1~?');
         if (percentInheritanceNormalized !== next) {
           warnings.push('Normalized legacy component inheritance "%" labels to wildcard state "~?" (fallback: no molecule type info available).');
           next = percentInheritanceNormalized;
@@ -413,12 +419,11 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
       // Fold standalone include/exclude_* modifier-only lines onto the previous
       // non-empty rule line instead of dropping them (semantics-preserving).
       if (/include_|exclude_/i.test(next)) {
-        const modifierOnlyLinePattern = /^\s*(?:(?:include|exclude)_(?:reactants|products)\([^)]*\)\s*)+$/i;
         const foldedLines = next.split(/\r\n|\n/);
         let foldedStandaloneModifierLines = false;
         for (let i = 0; i < foldedLines.length; i++) {
           const line = foldedLines[i];
-          if (!modifierOnlyLinePattern.test(line)) continue;
+          if (!MODIFIER_ONLY_LINE_RE.test(line)) continue;
 
           let prev = i - 1;
           while (prev >= 0 && foldedLines[prev].trim() === '') prev--;
@@ -504,28 +509,34 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
     const inputStream = CharStreams.fromString(sanitizedInput);
     const lexer = new BNGLexer(inputStream);
 
-    // Collect lexer errors
-    lexer.removeErrorListeners();
-    lexer.addErrorListener({
-      syntaxError: (_recognizer, _offendingSymbol, line, charPositionInLine, msg) => {
+    const errorListener = {
+      syntaxError: (_recognizer: unknown, _offendingSymbol: unknown, line: number, charPositionInLine: number, msg: string) => {
         errors.push({ line, column: charPositionInLine, message: msg });
       }
-    });
+    };
+
+    lexer.removeErrorListeners();
+    lexer.addErrorListener(errorListener);
 
     const tokenStream = new CommonTokenStream(lexer);
     const parser = new BNGParser(tokenStream);
-
-    // Collect parser errors
     parser.removeErrorListeners();
-    parser.addErrorListener({
-      syntaxError: (_recognizer, _offendingSymbol, line, charPositionInLine, msg) => {
-        errors.push({ line, column: charPositionInLine, message: msg });
-      }
-    });
 
-    // Parse the input
-    // Parse the input
-    const tree = parser.prog();
+    let tree: ReturnType<typeof parser.prog>;
+    // Stage 1: Fast SLL prediction mode with BailErrorStrategy
+    parser.errorHandler = new BailErrorStrategy();
+    (parser.interpreter as unknown as { predictionMode: PredictionMode }).predictionMode = PredictionMode.SLL;
+    try {
+      tree = parser.prog();
+    } catch {
+      // Stage 2: Fallback to LL prediction mode with DefaultErrorStrategy for full error recovery
+      tokenStream.seek(0);
+      parser.reset();
+      parser.errorHandler = new DefaultErrorStrategy();
+      (parser.interpreter as unknown as { predictionMode: PredictionMode }).predictionMode = PredictionMode.LL;
+      parser.addErrorListener(errorListener);
+      tree = parser.prog();
+    }
 
     // Visit the parse tree and build BNGLModel even if there are errors (best effort)
     let model: BNGLModel | undefined;
@@ -659,7 +670,9 @@ export function validateModelSemantics(model: BNGLModel): ParseError[] {
       try {
         const graph = BNGLParser.parseSpeciesGraph(rStr);
         reactantMols.push(...graph.molecules);
-      } catch (e) {}
+      } catch {
+        // Ignore species graph parse errors during semantic checks
+      }
     }
 
     const productMols: any[] = [];
@@ -667,7 +680,9 @@ export function validateModelSemantics(model: BNGLModel): ParseError[] {
       try {
         const graph = BNGLParser.parseSpeciesGraph(pStr);
         productMols.push(...graph.molecules);
-      } catch (e) {}
+      } catch {
+        // Ignore species graph parse errors during semantic checks
+      }
     }
 
     const reactantCounts = new Map<string, number>();

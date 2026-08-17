@@ -1,5 +1,6 @@
 
-import { CharStreams, CommonTokenStream } from 'antlr4ts';
+import { CharStreams, CommonTokenStream, DefaultErrorStrategy, BailErrorStrategy } from 'antlr4ts';
+import { PredictionMode } from 'antlr4ts/atn/PredictionMode';
 import { AbstractParseTreeVisitor } from 'antlr4ts/tree/AbstractParseTreeVisitor.js';
 import { BNGLexer } from './generated/BNGLexer.ts';
 import { BNGParser, Arg_nameContext, Observable_refContext, Function_callContext } from './generated/BNGParser.ts';
@@ -62,13 +63,24 @@ export function getExpressionDependencies(expression: string): Set<string> {
     try {
         const inputStream = CharStreams.fromString(expression);
         const lexer = new BNGLexer(inputStream);
+        lexer.removeErrorListeners();
         const tokenStream = new CommonTokenStream(lexer);
         const parser = new BNGParser(tokenStream);
-
-        // Turn off default error logging to avoid console spam on invalid fragments (if any)
         parser.removeErrorListeners(); 
-        
-        const tree = parser.expression();
+
+        let tree: ReturnType<typeof parser.expression>;
+        parser.errorHandler = new BailErrorStrategy();
+        (parser.interpreter as unknown as { predictionMode: PredictionMode }).predictionMode = PredictionMode.SLL;
+        try {
+            tree = parser.expression();
+        } catch {
+            tokenStream.seek(0);
+            parser.reset();
+            parser.errorHandler = new DefaultErrorStrategy();
+            (parser.interpreter as unknown as { predictionMode: PredictionMode }).predictionMode = PredictionMode.LL;
+            tree = parser.expression();
+        }
+
         const visitor = new DependencyVisitor();
         visitor.visit(tree);
 

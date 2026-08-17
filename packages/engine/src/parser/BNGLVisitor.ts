@@ -6,12 +6,6 @@ import { BNGLParser as CoreBNGLParser } from '../services/graph/core/BNGLParser.
  */
 import { AbstractParseTreeVisitor } from 'antlr4ts/tree/AbstractParseTreeVisitor.js';
 
-const getRuleIndex = (node: unknown): number | undefined => {
-  if (!node || typeof node !== 'object') return undefined;
-  const maybeRuleIndex = (node as { ruleIndex?: unknown }).ruleIndex;
-  return typeof maybeRuleIndex === 'number' ? maybeRuleIndex : undefined;
-};
-
 const getBaseComponentName = (comp: string): string => {
   let len = comp.length;
   const tildeIdx = comp.indexOf('~');
@@ -183,18 +177,18 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
   private resolveParameters(): void {
     const maxPasses = 10;
     const resolvedParams: Record<string, number> = {};
+    const paramMap = new Map<string, number>();
 
     for (let pass = 0; pass < maxPasses; pass++) {
       let allResolved = true;
       for (const [name, expr] of Object.entries(this.paramExpressions)) {
         if (name in resolvedParams) continue;
 
-        // Evaluate using current resolved params
-        const paramMap = new Map(Object.entries(resolvedParams));
         const val = CoreBNGLParser.evaluateExpression(expr, paramMap);
 
         if (!isNaN(val)) {
           resolvedParams[name] = val;
+          paramMap.set(name, val);
         } else {
           allResolved = false;
         }
@@ -1458,34 +1452,24 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
     const molPatterns = ctx.molecule_pattern();
     if (!molPatterns || molPatterns.length === 0) {
       const emptyStr = '';
-      if (shouldComplete) ctx._cachedComplete = emptyStr;
-      else ctx._cachedLiteral = emptyStr;
+      ctx._cachedComplete = emptyStr;
+      ctx._cachedLiteral = emptyStr;
       return emptyStr;
     }
 
-    // DEBUG LOGGING
-
-
-    // Check for compartment prefix
     let prefix = '';
-    // If COLON exists, we have @comp: prefix
     if (ctx.COLON()) {
-      // The compartment name matches the STRING() rule
-      // Accessing the first STRING token at this level
       const strings = ctx.STRING();
       if (strings && strings.length > 0) {
         prefix = `@${strings[0].text}:`;
-        // console.log(`[getSpeciesString] Found prefix: ${prefix}`);
       }
-    } else {
-      // console.log(`[getSpeciesString] No COLON (prefix) found in ${speciesStr}`);
     }
 
-
     const moleculeEntries: Array<{ pattern: Parser.Molecule_patternContext; compartment?: string }> = [];
-    if (ctx.children) {
-      for (const child of ctx.children) {
-        const ruleIndex = getRuleIndex(child);
+    if (this.hasCompartments && ctx.children) {
+      for (let i = 0; i < ctx.children.length; i++) {
+        const child = ctx.children[i];
+        const ruleIndex = (child as { ruleIndex?: number }).ruleIndex;
         if (ruleIndex === Parser.BNGParser.RULE_molecule_pattern) {
           moleculeEntries.push({ pattern: child as Parser.Molecule_patternContext });
           continue;
@@ -1499,82 +1483,98 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
       }
     }
     if (moleculeEntries.length === 0) {
-      for (const mp of molPatterns) {
-        moleculeEntries.push({ pattern: mp });
+      for (let i = 0; i < molPatterns.length; i++) {
+        moleculeEntries.push({ pattern: molPatterns[i] });
       }
     }
 
-    const molecules = moleculeEntries.map((entry) => {
+    const moleculesLiteral: string[] = [];
+    const moleculesComplete: string[] = [];
+
+    for (let entryIdx = 0; entryIdx < moleculeEntries.length; entryIdx++) {
+      const entry = moleculeEntries[entryIdx];
       const mp = entry.pattern;
       const nameNode = mp.STRING() || ("keyword_as_mol_name" in mp && typeof (mp as unknown as Record<string, unknown>).keyword_as_mol_name === "function" ? (mp as unknown as {keyword_as_mol_name: () => import("antlr4ts").ParserRuleContext}).keyword_as_mol_name() : undefined);
-      if (!nameNode) return '';
+      if (!nameNode) continue;
       const name = nameNode.text;
       const compListCtx = mp.component_pattern_list();
-
-      const shouldComplete = options.completeMissingComponents === true;
       const molType = this.getMoleculeType(name);
 
-      let molStr = `${name}()`;
+      let molLit = `${name}()`;
+      let molComp = `${name}()`;
 
       if (!compListCtx) {
-        // If no component list, molecule has no components (e.g., "dead" or "I")
-        // Normalize to name() to match GraphCanonicalizer and BioNetGen conventions
-        if (shouldComplete && molType && molType.components.length > 0) {
+        if (molType && molType.components.length > 0) {
           const completed = molType.components.map(buildWildcardComponent);
-          molStr = `${name}(${completed.join(',')})`;
+          molComp = `${name}(${completed.join(',')})`;
         }
       } else {
-        // Filter out undefined/empty entries (from double commas ",,")
         const compPatterns = compListCtx.component_pattern();
-        const validComps = compPatterns.filter(cp => cp && (cp.STRING() || cp.INT() || cp.keyword_as_component_name()));
-        // console.log(`[getSpeciesString] Mol ${name}, total comps: ${compPatterns.length}, valid comps: ${validComps.length}`);
+        const componentsLit: string[] = [];
+        for (let cpIdx = 0; cpIdx < compPatterns.length; cpIdx++) {
+          const cp = compPatterns[cpIdx];
+          if (!cp) continue;
+          const compNode = cp.STRING() || cp.INT() || cp.keyword_as_component_name();
+          if (!compNode) continue;
+          let comp = compNode.text;
 
-        if (validComps.length > 0) {
-          let components = validComps.map(cp => {
-            const compNode = cp.STRING() || cp.INT() || cp.keyword_as_component_name();
-            let comp = compNode ? compNode.text : '';
+          const stateCtxs = cp.state_value();
+          if (stateCtxs && stateCtxs.length > 0) {
+            for (let sIdx = 0; sIdx < stateCtxs.length; sIdx++) {
+              const stateCtx = stateCtxs[sIdx];
+              const intPart = stateCtx.INT()?.text ?? '';
+              const strPart = stateCtx.STRING()?.text ?? '';
+              const stateStr = intPart + strPart;
+              const qmark = stateCtx.QMARK();
+              comp += `~${stateStr || (qmark ? '?' : '')}`;
+            }
+          }
 
-            const stateCtxs = cp.state_value();
-            if (stateCtxs && stateCtxs.length > 0) {
-              for (const stateCtx of stateCtxs) {
-                // state_value grammar: STRING | INT STRING? | QMARK
-                // For states like "2P", INT()="2" and STRING()="P" — must concatenate both.
-                const intPart = stateCtx.INT()?.text ?? '';
-                const strPart = stateCtx.STRING()?.text ?? '';
-                const stateStr = intPart + strPart;
-                const qmark = stateCtx.QMARK();
-                comp += `~${stateStr || (qmark ? '?' : '')}`;
+          const bondSpecs = cp.bond_spec();
+          if (bondSpecs && bondSpecs.length > 0) {
+            for (let bIdx = 0; bIdx < bondSpecs.length; bIdx++) {
+              const bondCtx = bondSpecs[bIdx];
+              const bondIdCtx = bondCtx.bond_id();
+              if (bondIdCtx) {
+                comp += `!${bondIdCtx.INT()?.text || bondIdCtx.STRING()?.text || ''}`;
+              } else if (bondCtx.PLUS()) {
+                comp += '!+';
+              } else if (bondCtx.QMARK()) {
+                comp += '!?';
               }
             }
+          }
 
-            // Handle multiple bond specs (bond_spec* returns array)
-            const bondSpecs = cp.bond_spec();
-            if (bondSpecs && bondSpecs.length > 0) {
-              for (const bondCtx of bondSpecs) {
-                const bondIdCtx = bondCtx.bond_id();
-                if (bondIdCtx) {
-                  comp += `!${bondIdCtx.INT()?.text || bondIdCtx.STRING()?.text || ''}`;
-                } else if (bondCtx.PLUS()) {
-                  comp += '!+';
-                } else if (bondCtx.QMARK()) {
-                  comp += '!?';
-                }
+          componentsLit.push(comp);
+        }
+
+        molLit = `${name}(${componentsLit.join(',')})`;
+
+        if (molType && molType.components.length > 0) {
+          let canonicalOrderMatch = componentsLit.length === molType.components.length;
+          if (canonicalOrderMatch) {
+            for (let i = 0; i < componentsLit.length; i++) {
+              if (getBaseComponentName(componentsLit[i]) !== getBaseCompDef(molType.components[i])) {
+                canonicalOrderMatch = false;
+                break;
               }
             }
+          }
 
-            return comp;
-          }).filter(c => c); // Filter out empty components
-
-          if (shouldComplete && molType && molType.components.length > 0) {
+          if (canonicalOrderMatch) {
+            molComp = molLit;
+          } else {
             const byName = new Map<string, string[]>();
-            for (const comp of components) {
+            for (let cIdx = 0; cIdx < componentsLit.length; cIdx++) {
+              const comp = componentsLit[cIdx];
               const base = getBaseComponentName(comp);
               if (!byName.has(base)) byName.set(base, []);
               byName.get(base)!.push(comp);
             }
 
             const ordered: string[] = [];
-            for (const compDef of molType.components) {
+            for (let dIdx = 0; dIdx < molType.components.length; dIdx++) {
+              const compDef = molType.components[dIdx];
               const base = getBaseCompDef(compDef);
               const queue = byName.get(base);
               if (queue && queue.length > 0) {
@@ -1583,62 +1583,69 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
                 ordered.push(buildWildcardComponent(compDef));
               }
             }
-
             for (const remaining of byName.values()) {
               ordered.push(...remaining);
             }
-            components = ordered;
+            molComp = `${name}(${ordered.join(',')})`;
           }
-
-          // console.log(`[getSpeciesString] Mol ${name}, components:`, components);
-          molStr = `${name}(${components.join(',')})`;
+        } else {
+          molComp = molLit;
         }
       }
 
-      // Support molecule-level wildcards (!+, !?)
       const wildcardCtx = mp.pattern_bond_wildcard();
-      if (wildcardCtx) molStr += wildcardCtx.text;
+      if (wildcardCtx) {
+        molLit += wildcardCtx.text;
+        molComp += wildcardCtx.text;
+      }
 
       const tagCtxList = mp.molecule_tag();
       if (tagCtxList && tagCtxList.length > 0) {
-        for (const tagCtx of tagCtxList) molStr += tagCtx.text;
-      }
-
-      const attrCtx = ("molecule_attributes" in mp && typeof (mp as unknown as Record<string, unknown>).molecule_attributes === "function" ? (mp as unknown as {molecule_attributes: () => import("antlr4ts").ParserRuleContext}).molecule_attributes() : undefined);
-      if (attrCtx) molStr += attrCtx.text;
-
-      if (entry.compartment) {
-        molStr += `@${entry.compartment}`;
-      } else if (this.hasCompartments) {
-        // Only run legacy check if we actually have compartments in the file
-        const rawPatternText = mp.text?.replace(/\s+/g, '') ?? '';
-        const legacyCompBeforeParen = rawPatternText.match(/^([A-Za-z_][A-Za-z0-9_]*)@([A-Za-z0-9_]+)\(([^()]*)\)$/);
-        if (legacyCompBeforeParen && legacyCompBeforeParen[1] === name && !/@[A-Za-z0-9_]+$/.test(molStr)) {
-          const comp = legacyCompBeforeParen[2];
-          molStr += `@${comp}`;
+        for (let tIdx = 0; tIdx < tagCtxList.length; tIdx++) {
+          const tagTxt = tagCtxList[tIdx].text;
+          molLit += tagTxt;
+          molComp += tagTxt;
         }
       }
 
-      return molStr;
-    }).filter(m => m); // Filter out empty molecules
+      const attrCtx = ("molecule_attributes" in mp && typeof (mp as unknown as Record<string, unknown>).molecule_attributes === "function" ? (mp as unknown as {molecule_attributes: () => import("antlr4ts").ParserRuleContext}).molecule_attributes() : undefined);
+      if (attrCtx) {
+        const attrTxt = attrCtx.text;
+        molLit += attrTxt;
+        molComp += attrTxt;
+      }
 
-    let res = prefix + molecules.join('.');
+      if (entry.compartment) {
+        molLit += `@${entry.compartment}`;
+        molComp += `@${entry.compartment}`;
+      } else if (this.hasCompartments) {
+        const rawPatternText = mp.text?.replace(/\s+/g, '') ?? '';
+        const legacyCompBeforeParen = rawPatternText.match(/^([A-Za-z_][A-Za-z0-9_]*)@([A-Za-z0-9_]+)\(([^()]*)\)$/);
+        if (legacyCompBeforeParen && legacyCompBeforeParen[1] === name && !/@[A-Za-z0-9_]+$/.test(molLit)) {
+          const comp = legacyCompBeforeParen[2];
+          molLit += `@${comp}`;
+          molComp += `@${comp}`;
+        }
+      }
 
-    // Handle species-level suffix compartment (AT STRING at end) - e.g., A.B@PM
-    // This is distinct from molecule_compartment contexts (e.g., A@EC.B@PM).
+      moleculesLiteral.push(molLit);
+      moleculesComplete.push(molComp);
+    }
+
+    let resLiteral = prefix + moleculesLiteral.join('.');
+    let resComplete = prefix + moleculesComplete.join('.');
+
     if (this.hasCompartments && !prefix && ctx.children && ctx.children.length >= 2) {
       const last = ctx.children[ctx.children.length - 1];
       const prev = ctx.children[ctx.children.length - 2];
       const suffixComp = last?.text ?? '';
       if (prev?.text === '@' && /^[A-Za-z0-9_]+$/.test(suffixComp)) {
-        res = `${res}@${suffixComp}`;
+        resLiteral = `${resLiteral}@${suffixComp}`;
+        resComplete = `${resComplete}@${suffixComp}`;
       }
     }
 
-    // Fallback: recover compartment-before-parentheses syntax when parse-tree
-    // compartment nodes are missing in some observable contexts.
-    // Example: `B@EC()` should normalize to `B()@EC`.
-    if (this.hasCompartments && !prefix && !res.includes('@')) {
+    if (this.hasCompartments && !prefix && !resLiteral.includes('@')) {
       const rawSpeciesText = ctx.text?.replace(/\s+/g, '') ?? '';
       if (rawSpeciesText.includes('@')) {
         const normalizedRaw = rawSpeciesText.replace(
@@ -1646,31 +1653,27 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
           (_m, mol, comp, args) => `${mol}(${String(args ?? '')})@${comp}`
         );
         if (normalizedRaw.includes('@')) {
-          res = normalizedRaw;
+          resLiteral = normalizedRaw;
+          resComplete = normalizedRaw;
         }
       }
     }
 
-    // Workaround for Issue where prefix is sometimes duplicated as suffix in complex patterns
-    // e.g. E2F(...)@cell:E2F(...)
-    if (this.hasCompartments && res.includes('@') && res.includes(':')) {
-      const match = res.match(/^(.+)@([a-zA-Z0-9_]+):(.+)$/);
+    if (this.hasCompartments && resLiteral.includes('@') && resLiteral.includes(':')) {
+      const match = resLiteral.match(/^(.+)@([a-zA-Z0-9_]+):(.+)$/);
       if (match) {
         const [_, name1, comp, name2] = match;
-        // Check if name2 is duplication of name1 (with or without parens)
         if (name1 === name2 || (name1 + '()' === name2) || (name1 === name2 + '()') || name2.startsWith(name1)) {
-          res = `@${comp}:${name1}`;
+          resLiteral = `@${comp}:${name1}`;
+          resComplete = `@${comp}:${name1}`;
         }
       }
     }
 
-    if (shouldComplete) {
-      ctx._cachedComplete = res;
-    } else {
-      ctx._cachedLiteral = res;
-    }
+    ctx._cachedLiteral = resLiteral;
+    ctx._cachedComplete = resComplete;
 
-    return res;
+    return shouldComplete ? resComplete : resLiteral;
   }
 
   // Helper: Get expression text (preserving structure)
