@@ -384,7 +384,7 @@ import { simulate } from "../simulation/SimulationLoop";
 import { evaluateFunctionalRate, clearAllEvaluatorCaches } from "../simulation/ExpressionEvaluator";
 import { buildStoichiometryMatrix as buildStoichiometry } from '../../utils/stoichiometry';
 
-function cloneExpandedModel(model: BNGLModel): BNGLModel {
+export function cloneExpandedModel(model: BNGLModel): BNGLModel {
     return structuredClone(model);
 }
 

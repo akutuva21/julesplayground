@@ -200,6 +200,8 @@ export { resultant, solvePolynomialSystem, symbolicGaussianElimination, symbolic
 export { parseQuery } from './services/verification/QueryParser';
 export type { VerificationQuery, VerificationResult } from './services/verification/QueryParser';
 export { checkAbstractReachability, enumerateAbstractComplexes } from './services/verification/ContactMapReachability';
+export { buildContactMap } from './services/verification/ContactMapBuilder';
+export type { VisualContactMap, VisualContactNode, VisualContactEdge } from './services/verification/ContactMapBuilder';
 export { boundedReachabilityCheck, checkDeadlock, checkRuleFires } from './services/verification/BoundedVerifier';
 export { fullReachabilityCheck } from './services/verification/SymmetryReducedVerifier';
 
@@ -301,7 +303,7 @@ export { computeFirstPassageTimes } from './services/analysis/FirstPassageTime';
 export type { FirstPassageTimeConfig, FPTDistribution } from './services/analysis/FirstPassageTime';
 
 // ── Dose-Response ──────────────────────────────────────────────────
-export { computeDoseResponse, computeDoseResponseBySimulation } from './services/analysis/DoseResponse';
+export { computeDoseResponse, computeDoseResponseBySimulation, cloneExpandedModel } from './services/analysis/DoseResponse';
 export type { DoseResponseConfig, DoseResponseResult, DoseResponseCurve, HillFit } from './services/analysis/DoseResponse';
 
 // ── Perturbation Screen ────────────────────────────────────────────
