@@ -246,7 +246,15 @@ export class WorkerPool {
       worker.busy = true;
       worker.currentTask = taskId;
       worker.taskCount++;
-      worker.worker.postMessage(pending.task);
+      try {
+        worker.worker.postMessage(pending.task);
+      } catch (postError: any) {
+        console.error(`[WorkerPool] Failed to post message for task ${taskId}:`, postError);
+        this.pendingTaskMap.delete(taskId);
+        pending.reject(postError instanceof Error ? postError : new Error(String(postError)));
+        worker.busy = false;
+        worker.currentTask = null;
+      }
     }
   }
 

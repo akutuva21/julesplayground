@@ -40,35 +40,43 @@ class SpatialService {
     // Set state AFTER terminate (to override terminate's 'idle' state)
     this.setState('initializing');
 
-    // Create new worker
-    this.worker = new Worker(
-      new URL('./spatialWorker.ts', import.meta.url),
-      { type: 'module' }
-    );
+    try {
+      // Create new worker
+      this.worker = new Worker(
+        new URL('./spatialWorker.ts', import.meta.url),
+        { type: 'module' }
+      );
 
-    this.worker.onmessage = (event: MessageEvent<SpatialWorkerResponse>) => {
-      const data = event.data ?? { type: 'error', message: 'Empty or undefined worker response' };
-      this.handleWorkerMessage(data);
-    };
+      this.worker.onmessage = (event: MessageEvent<SpatialWorkerResponse>) => {
+        const data = event.data ?? { type: 'error', message: 'Empty or undefined worker response' };
+        this.handleWorkerMessage(data);
+      };
 
-    this.worker.onerror = (error) => {
+      this.worker.onerror = (error) => {
+        this.setState('error');
+        this.callbacks.onError?.(error.message);
+      };
+
+      this.worker.onmessageerror = (event) => {
+        console.error('[SpatialService] Worker failed to deserialize message:', event.data);
+        this.setState('error');
+        this.callbacks.onError?.('SpatialService worker failed to deserialize message');
+      };
+
+      // Send init message
+      const request: SpatialWorkerRequest = {
+        type: 'init',
+        bnglText,
+        config,
+      };
+      this.worker.postMessage(request);
+    } catch (err: any) {
+      console.error('[SpatialService] Failed to initialize spatial simulation worker:', err);
+      this.terminate();
       this.setState('error');
-      this.callbacks.onError?.(error.message);
-    };
-
-    this.worker.onmessageerror = (event) => {
-      console.error('[SpatialService] Worker failed to deserialize message:', event.data);
-      this.setState('error');
-      this.callbacks.onError?.('SpatialService worker failed to deserialize message');
-    };
-
-    // Send init message
-    const request: SpatialWorkerRequest = {
-      type: 'init',
-      bnglText,
-      config,
-    };
-    this.worker.postMessage(request);
+      const errMsg = err?.message ?? 'Failed to initialize spatial worker';
+      this.callbacks.onError?.(errMsg);
+    }
   }
 
   /**
@@ -89,7 +97,14 @@ class SpatialService {
     }
     this.setState('running');
     const request: SpatialWorkerRequest = { type: 'run' };
-    this.worker.postMessage(request);
+    try {
+      this.worker.postMessage(request);
+    } catch (err: any) {
+      console.error('[SpatialService] Failed to post run message:', err);
+      this.terminate();
+      this.setState('error');
+      this.callbacks.onError?.(err?.message ?? 'Failed to run spatial simulation');
+    }
   }
 
   /**
@@ -98,7 +113,11 @@ class SpatialService {
   cancel(): void {
     if (this.worker) {
       const request: SpatialWorkerRequest = { type: 'cancel' };
-      this.worker.postMessage(request);
+      try {
+        this.worker.postMessage(request);
+      } catch (err: any) {
+        console.warn('[SpatialService] Failed to post cancel message:', err);
+      }
     }
     this.setState('idle');
   }
@@ -109,8 +128,16 @@ class SpatialService {
   terminate(): void {
     if (this.worker) {
       const request: SpatialWorkerRequest = { type: 'destroy' };
-      this.worker.postMessage(request);
-      this.worker.terminate();
+      try {
+        this.worker.postMessage(request);
+      } catch (err: any) {
+        console.warn('[SpatialService] Failed to post destroy message:', err);
+      }
+      try {
+        this.worker.terminate();
+      } catch (err: any) {
+        console.warn('[SpatialService] Failed to terminate worker:', err);
+      }
       this.worker = null;
     }
     this.setState('idle');
