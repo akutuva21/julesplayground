@@ -1,0 +1,206 @@
+[
+  {
+    "model": "chain_5 (baseline, unimolecular)",
+    "parseMs": 8.490804000000026,
+    "genMs": 4.31332499999985,
+    "simMs": {
+      "ode": 5.2060109999999895,
+      "ssa": 2.0679300000001604
+    },
+    "species": 5,
+    "reactions": 4,
+    "heapDeltaMB": 0.43646240234375,
+    "breakdown": {
+      "canonicalize": {
+        "ms": 0.02904700000021876,
+        "calls": 10
+      },
+      "findAllMaps": {
+        "ms": 0.2737959999999475,
+        "calls": 20
+      },
+      "matchComponents": {
+        "ms": 0.006461999999828549,
+        "calls": 5
+      },
+      "applyTransformation": {
+        "ms": 0.3808089999999993,
+        "calls": 8
+      },
+      "isDuplicateReaction": {
+        "ms": 0,
+        "calls": 0
+      },
+      "degeneracy": {
+        "ms": 0,
+        "calls": 0
+      },
+      "speciesDedup": {
+        "ms": 0.050855999999839696,
+        "calls": 9
+      }
+    },
+    "odeVsSparse": {
+      "denseMs": 5.2060109999999895,
+      "sparseMs": 10.51204400000006,
+      "speedup": 0.49524250469270864,
+      "maxAbs": 1.7826502007878275e-7,
+      "maxRel": 0.0000012319340089915371,
+      "comparedCells": 101,
+      "status": "ok"
+    }
+  },
+  {
+    "model": "binding_AB (bimolecular)",
+    "parseMs": 4.5476460000002135,
+    "genMs": 1.8538710000000265,
+    "simMs": {
+      "ode": 2.531206000000111,
+      "ssa": 2.5267570000000887
+    },
+    "species": 3,
+    "reactions": 2,
+    "heapDeltaMB": 0.29927825927734375,
+    "breakdown": {
+      "canonicalize": {
+        "ms": 0.013323999999784064,
+        "calls": 6
+      },
+      "findAllMaps": {
+        "ms": 0.10730300000022908,
+        "calls": 11
+      },
+      "matchComponents": {
+        "ms": 0.002769000000171218,
+        "calls": 6
+      },
+      "applyTransformation": {
+        "ms": 0.13241800000014337,
+        "calls": 3
+      },
+      "isDuplicateReaction": {
+        "ms": 0,
+        "calls": 0
+      },
+      "degeneracy": {
+        "ms": 0,
+        "calls": 0
+      },
+      "speciesDedup": {
+        "ms": 0.030980000000226937,
+        "calls": 6
+      }
+    },
+    "odeVsSparse": {
+      "denseMs": 2.531206000000111,
+      "sparseMs": 3.6167679999998654,
+      "speedup": 0.6998530179431485,
+      "maxAbs": 3.08137458659985e-7,
+      "maxRel": 3.446997717262528e-9,
+      "comparedCells": 101,
+      "status": "ok"
+    }
+  },
+  {
+    "model": "multisite_5 (2^5 species, combinatorial)",
+    "parseMs": 15.347676999999976,
+    "genMs": 74.47218099999986,
+    "simMs": {
+      "ode": 11.051347999999962,
+      "ssa": 143.780886
+    },
+    "species": 32,
+    "reactions": 160,
+    "heapDeltaMB": 2.8037643432617188,
+    "breakdown": {
+      "canonicalize": {
+        "ms": 5.173312000000578,
+        "calls": 64
+      },
+      "findAllMaps": {
+        "ms": 16.083069999999452,
+        "calls": 320
+      },
+      "matchComponents": {
+        "ms": 5.6321960000004765,
+        "calls": 176
+      },
+      "applyTransformation": {
+        "ms": 34.27375499999903,
+        "calls": 320
+      },
+      "isDuplicateReaction": {
+        "ms": 0,
+        "calls": 0
+      },
+      "degeneracy": {
+        "ms": 0,
+        "calls": 0
+      },
+      "speciesDedup": {
+        "ms": 1.3396950000001198,
+        "calls": 161
+      }
+    },
+    "odeVsSparse": {
+      "denseMs": 11.051347999999962,
+      "sparseMs": 9.33019000000013,
+      "speedup": 1.1844719132193244,
+      "maxAbs": 0.0000016575586414546706,
+      "maxRel": 2.4863387286784655e-9,
+      "comparedCells": 101,
+      "status": "ok"
+    }
+  },
+  {
+    "model": "multisite_7 (2^7 species, combinatorial)",
+    "parseMs": 16.987170000000333,
+    "genMs": 151.54070100000035,
+    "simMs": {
+      "ode": 76.42793799999981,
+      "ssa": 197.63007000000016
+    },
+    "species": 128,
+    "reactions": 896,
+    "heapDeltaMB": 6.2802276611328125,
+    "breakdown": {
+      "canonicalize": {
+        "ms": 1.1740609999992557,
+        "calls": 256
+      },
+      "findAllMaps": {
+        "ms": 34.28412500000786,
+        "calls": 1792
+      },
+      "matchComponents": {
+        "ms": 8.461657999985164,
+        "calls": 960
+      },
+      "applyTransformation": {
+        "ms": 54.62144900000021,
+        "calls": 1792
+      },
+      "isDuplicateReaction": {
+        "ms": 0,
+        "calls": 0
+      },
+      "degeneracy": {
+        "ms": 0,
+        "calls": 0
+      },
+      "speciesDedup": {
+        "ms": 6.038039999996272,
+        "calls": 897
+      }
+    },
+    "odeVsSparse": {
+      "denseMs": 76.42793799999981,
+      "sparseMs": 36.361472000000504,
+      "speedup": 2.1018933996951157,
+      "maxAbs": 0.000001768485049069568,
+      "maxRel": 2.652774158805657e-9,
+      "comparedCells": 101,
+      "status": "ok"
+    }
+  }
+]
