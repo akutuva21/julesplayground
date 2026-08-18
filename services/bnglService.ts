@@ -196,14 +196,15 @@ class BnglService {
         return;
       }
 
-      if (type === 'parse_error' || type === 'simulate_error' || type === 'cache_model_error' || type === 'release_model_error' || type === 'generate_network_error' || type === 'atomize_error' || type === 'analyse_network_error') {
+      if (type === 'parse_error' || type === 'simulate_error' || type === 'cache_model_error' || type === 'release_model_error' || type === 'generate_network_error' || type === 'atomize_error' || type === 'analyse_network_error' || type === 'worker_internal_error') {
         const errType = type === 'parse_error' ? 'parse'
           : type === 'simulate_error' ? 'simulate'
           : type === 'atomize_error' ? 'atomize'
           : type === 'generate_network_error' ? 'generate_network'
           : type === 'analyse_network_error' ? 'analyse_network'
           : type === 'release_model_error' ? 'release_model'
-          : 'cache_model';
+          : type === 'cache_model_error' ? 'cache_model'
+          : 'worker_internal_error';
         const err = toError(errType, payload);
         pending.reject(err);
         return;

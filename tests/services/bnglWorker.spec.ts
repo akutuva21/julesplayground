@@ -381,6 +381,50 @@ describe('bnglWorker - getCacheSizes', () => {
   });
 });
 
+describe('bnglWorker - unrecognized message handling', () => {
+  let mockPostMessage: any;
+  let mockAddEventListener: any;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    mockPostMessage = vi.fn();
+    mockAddEventListener = vi.fn();
+    (global as any).self = {
+      postMessage: mockPostMessage,
+      addEventListener: mockAddEventListener,
+      location: { origin: '' }
+    };
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    delete (global as any).self;
+  });
+
+  it('should post an error response when an unrecognized message type with a numeric id is received', async () => {
+    await import('../../services/bnglWorker');
+
+    const messageListener = mockAddEventListener.mock.calls.find((c: any) => c[0] === 'message')[1];
+
+    await messageListener({
+      origin: '',
+      data: {
+        id: 999,
+        type: 'unrecognized_action_type',
+        payload: {}
+      }
+    });
+
+    expect(mockPostMessage).toHaveBeenCalledWith(expect.objectContaining({
+      id: 999,
+      type: 'worker_internal_error',
+      payload: expect.objectContaining({
+        message: expect.stringContaining('Unknown worker message type: unrecognized_action_type')
+      })
+    }));
+  });
+});
+
 describe('bnglWorker simulation queue', () => {
   let mockPostMessage: ReturnType<typeof vi.fn>;
   let mockAddEventListener: ReturnType<typeof vi.fn>;

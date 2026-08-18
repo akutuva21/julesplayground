@@ -1020,6 +1020,14 @@ if (typeof ctx.addEventListener === 'function') {
     }
 
     console.warn('[Worker] Unknown message type received:', type);
+    if (typeof id === 'number') {
+      const response: WorkerResponse = {
+        id,
+        type: 'worker_internal_error',
+        payload: serializeError(new Error(`Unknown worker message type: ${type}`)),
+      };
+      safePostMessage(response);
+    }
   });
 }
 
