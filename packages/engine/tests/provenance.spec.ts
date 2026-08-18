@@ -4,10 +4,10 @@
 
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
-import { ProvenanceRecorder } from './ProvenanceRecorder';
-import { buildROCrate } from './ROCrate';
-import { sha256Normalized, sha256OfParams } from './HashComputer';
-import type { ProvActivity } from './types';
+import { ProvenanceRecorder } from '../src/services/provenance/ProvenanceRecorder';
+import { buildROCrate } from '../src/services/provenance/ROCrate';
+import { sha256Normalized, sha256OfParams } from '../src/services/provenance/HashComputer';
+import type { ProvActivity } from '../src/services/provenance/types';
 
 const SAMPLE_BNGL = `
 begin model
@@ -122,12 +122,24 @@ describe('buildROCrate', () => {
       bnglSource: SAMPLE_BNGL,
       results: fakeResults(),
       modelName: 'test_model',
+      includeJsonResults: true,
+      extraFiles: [
+        { name: 'extra.json', content: '{"a": 1}' },
+        { name: 'schema.jsonld', content: '{"@context": "http://schema.org"}' },
+        { name: 'model.bngl', content: 'begin model' },
+        { name: 'data.gdat', content: '# time' },
+        { name: 'data.csv', content: 'time,A' },
+        { name: 'plot.png', content: new Uint8Array([0, 1, 2]) },
+        { name: 'diagram.svg', content: '<svg></svg>' },
+        { name: 'config.xml', content: '<xml></xml>' },
+        { name: 'binary.bin', content: new Uint8Array([0, 1, 2]) },
+      ],
     });
 
     const zip = await JSZip.loadAsync(await blob.arrayBuffer());
     const files = Object.keys(zip.files);
     expect(files).toEqual(
-      expect.arrayContaining(['ro-crate-metadata.json', 'prov.jsonld', 'model.bngl', 'results.gdat']),
+      expect.arrayContaining(['ro-crate-metadata.json', 'prov.jsonld', 'model.bngl', 'results.gdat', 'results.json', 'extra.json']),
     );
 
     const manifest = JSON.parse(
@@ -142,6 +154,12 @@ describe('buildROCrate', () => {
 
 function fakeResults() {
   return {
+    headers: ['time', 'Cplx'],
+    data: [
+      [0, 0],
+      [1, 50],
+      [2, 90],
+    ],
     time: [0, 1, 2],
     observables: { Cplx: [0, 50, 90] },
     meta: { method: 'ode' },
