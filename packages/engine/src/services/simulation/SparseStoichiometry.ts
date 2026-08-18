@@ -65,22 +65,28 @@ export function buildCSRStoichiometry(
 ): CSRStoichiometryMatrix {
   const numReactions = reactions.length;
 
-  // Phase 1: Build dense-per-row intermediate using a Map for each species row.
-  // Map<reactionIndex, netStoichiometry>
-  const rowMaps: Map<number, number>[] = new Array(numSpecies);
+  // Phase 1: Build dense-per-row intermediate using nested arrays
+  // ⚡ Bolt: Replace Map<number, number>[] with nested arrays and inline accumulator to avoid object allocation and hashing overhead
+  const entries: [number, number][][] = new Array(numSpecies);
   for (let i = 0; i < numSpecies; i++) {
-    rowMaps[i] = new Map();
+    entries[i] = [];
   }
+
+  const tmpCounts = new Int32Array(numSpecies);
+  const seen = new Int32Array(numSpecies);
 
   for (let j = 0; j < numReactions; j++) {
     const rxn = reactions[j];
+    let seenCount = 0;
 
     // Reactants: each occurrence subtracts 1
     for (let k = 0; k < rxn.reactants.length; k++) {
       const specIdx = rxn.reactants[k];
       if (constantMask && constantMask[specIdx]) continue;
-      const current = rowMaps[specIdx].get(j) ?? 0;
-      rowMaps[specIdx].set(j, current - 1);
+      if (tmpCounts[specIdx] === 0) {
+        seen[seenCount++] = specIdx;
+      }
+      tmpCounts[specIdx]--;
     }
 
     // Products: each occurrence adds stoichiometry (default 1)
@@ -88,17 +94,26 @@ export function buildCSRStoichiometry(
       const specIdx = rxn.products[k];
       if (constantMask && constantMask[specIdx]) continue;
       const stoich = rxn.productStoichiometries ? rxn.productStoichiometries[k] : 1;
-      const current = rowMaps[specIdx].get(j) ?? 0;
-      rowMaps[specIdx].set(j, current + stoich);
+      if (tmpCounts[specIdx] === 0) {
+        seen[seenCount++] = specIdx;
+      }
+      tmpCounts[specIdx] += stoich;
+    }
+
+    // Record non-zero net stoichiometry for this reaction
+    for (let k = 0; k < seenCount; k++) {
+      const specIdx = seen[k];
+      if (tmpCounts[specIdx] !== 0) {
+        entries[specIdx].push([j, tmpCounts[specIdx]]);
+        tmpCounts[specIdx] = 0; // Reset for next reaction
+      }
     }
   }
 
   // Phase 2: Count non-zeros (exclude entries that cancel to zero)
   let nnz = 0;
   for (let i = 0; i < numSpecies; i++) {
-    for (const val of rowMaps[i].values()) {
-      if (val !== 0) nnz++;
-    }
+    nnz += entries[i].length;
   }
 
   // Phase 3: Allocate and fill CSR arrays
@@ -109,15 +124,9 @@ export function buildCSRStoichiometry(
   let pos = 0;
   for (let i = 0; i < numSpecies; i++) {
     rowPtr[i] = pos;
-    // Collect and sort column indices for deterministic ordering
-    const entries: [number, number][] = [];
-    for (const [col, val] of rowMaps[i].entries()) {
-      if (val !== 0) {
-        entries.push([col, val]);
-      }
-    }
-    entries.sort((a, b) => a[0] - b[0]);
-    for (const [col, val] of entries) {
+    // ⚡ Bolt: No need to sort entries since we iterated sequentially through reactions (j)
+    for (let k = 0; k < entries[i].length; k++) {
+      const [col, val] = entries[i][k];
       if (pos >= nnz) {
         throw new Error('[SparseStoichiometry] CSR position overflow while building matrix');
       }
