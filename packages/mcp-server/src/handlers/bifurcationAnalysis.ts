@@ -1,6 +1,7 @@
 import { ToolArgs, ToolResult } from '../types/index.js';
 import { createToolResult, parseModelOrThrow, expandModel } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+import { JITCompiler, continuationWithConservation } from '@bngplayground/engine';
 
 type BifurcationAnalysisArgs = {
   code?: string;
@@ -30,56 +31,10 @@ type EngineBifurcation = {
   frequency?: number;
   criticalEigenvalues?: EngineEigenvalue[];
 };
-type EngineContinuationResult = {
-  bifurcations: EngineBifurcation[];
-  path: EngineContinuationPoint[];
-};
-type CompiledRhs = {
-  updateParameters?: (params: Record<string, number>) => void;
-  evaluate: (t: number, y: Float64Array, dydt: Float64Array) => void;
-};
-type ContinuationWithConservationFn = (args: {
-  nSpecies: number;
-  reactions: Array<{ reactants: number[]; products: number[] }>;
-  rhsFn: (y: Float64Array, p: number, dydt: Float64Array) => void;
-  updateParams?: (p: number) => void;
-  initialGuess: Float64Array;
-  parameterStart: number;
-  parameterEnd: number;
-  stepSize: number;
-  maxSteps: number;
-  skipReduction?: boolean;
-}) => EngineContinuationResult | Promise<EngineContinuationResult>;
-
-type EngineModule = {
-  JITCompiler: new (model: unknown) => {
-    compileFromRxns: (
-      reactions: unknown[],
-      nSpecies: number,
-      speciesIndexMap: Map<string, number>,
-      params: Record<string, number>,
-      metadata: Record<string, string>
-    ) => CompiledRhs;
-  };
-  continuationWithConservation: ContinuationWithConservationFn;
-};
-
-function assertEngineModule(module: unknown): asserts module is EngineModule {
-  if (!module || typeof module !== 'object') {
-    throw new Error('Failed to load engine module.');
-  }
-  const maybeModule = module as Partial<EngineModule>;
-  if (typeof maybeModule.JITCompiler !== 'function' || typeof maybeModule.continuationWithConservation !== 'function') {
-    throw new Error('Engine module is missing required bifurcation analysis exports (JITCompiler, continuationWithConservation).');
-  }
-}
 
 export async function handleBifurcationAnalysis(args: ToolArgs): Promise<ToolResult<any>> {
   const parsedArgs: BifurcationAnalysisArgs = (args ?? {}) as BifurcationAnalysisArgs;
   try {
-    const rawEngine = await import('@bngplayground/engine');
-    assertEngineModule(rawEngine);
-    const engine = rawEngine;
     const model = parseModelOrThrow(parsedArgs.code ?? '');
     const expandedModel = await expandModel(model);
 
@@ -105,8 +60,8 @@ export async function handleBifurcationAnalysis(args: ToolArgs): Promise<ToolRes
     let rhsFn: (y: Float64Array, p: number, dydt: Float64Array) => void;
     let compiled: any;
     try {
-      const jit = new engine.JITCompiler(expandedModel);
-      const reactionRules = expandedModel.reactions ?? [];
+      const jit = new JITCompiler();
+      const reactionRules = (expandedModel.reactions ?? []) as any[];
       compiled = jit.compileFromRxns(reactionRules, nSpecies, speciesIndexMap, params, {
         modelName: model.name ?? 'unnamed-model',
         analysis: 'bifurcation-mcp',
@@ -148,7 +103,7 @@ export async function handleBifurcationAnalysis(args: ToolArgs): Promise<ToolRes
     }));
 
     // Run continuation with conserved-moiety reduction
-    const result = await engine.continuationWithConservation({
+    const result = await continuationWithConservation({
       nSpecies,
       reactions: reactionEntries,
       rhsFn,
@@ -182,7 +137,7 @@ export async function handleBifurcationAnalysis(args: ToolArgs): Promise<ToolRes
         : `No bifurcations detected in the parameter range. The system maintains qualitative stability.`,
       strategic: 'Bifurcation analysis reveals parameter thresholds where the system changes qualitative behavior (oscillation onset, bistability, etc.).',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return createToolResult(structureError(error instanceof Error ? error : new Error(String(error), { cause: error })));
   }
 }

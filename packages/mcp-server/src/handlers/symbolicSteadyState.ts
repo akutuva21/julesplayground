@@ -2,13 +2,19 @@ import { ToolArgs, ToolResult, MCPErrorResult, SymbolicSteadyStateResult } from 
 import { createToolResult, parseArgs, parseModelOrThrow, expandModel } from '../services/engine.js';
 import { symbolicSteadyStateArgsSchema } from '../schemas/index.js';
 import { structureError } from '../services/errors.js';
+import {
+  buildSymbolicODESystem,
+  solveSymbolicSteadyState,
+  symbolicSensitivity,
+  exprToString,
+  exprToLatex,
+} from '@bngplayground/engine';
 
 export async function handleSymbolicSteadyState(
   args: ToolArgs
 ): Promise<ToolResult<SymbolicSteadyStateResult | MCPErrorResult>> {
   try {
     const parsedArgs = parseArgs('symbolic_steady_state', symbolicSteadyStateArgsSchema, args);
-    const engine = await import('@bngplayground/engine');
     const model = parseModelOrThrow(parsedArgs.code);
     const expandedModel = await expandModel(model);
 
@@ -33,7 +39,7 @@ export async function handleSymbolicSteadyState(
     const initialConcentrations = speciesNames.map((_, i) => expandedModel.species?.[i]?.initialConcentration ?? 0);
 
     // Build symbolic system
-    const system = engine.buildSymbolicODESystem(
+    const system = buildSymbolicODESystem(
       speciesNames,
       reactions,
       parameterNames,
@@ -41,18 +47,18 @@ export async function handleSymbolicSteadyState(
     );
 
     // Solve
-    const steadyState = engine.solveSymbolicSteadyState(system);
+    const steadyState = solveSymbolicSteadyState(system);
 
     // Compute sensitivities
-    const sensitivities = engine.symbolicSensitivity(system, steadyState, parameterNames);
+    const sensitivities = symbolicSensitivity(system, steadyState, parameterNames);
 
     // Format output
     const solutions: Record<string, string> = {};
     const latex: Record<string, string> = {};
     if (steadyState.values) {
       for (const [species, expr] of steadyState.values.entries()) {
-        solutions[species] = engine.exprToString(expr);
-        latex[species] = engine.exprToLatex(expr);
+        solutions[species] = exprToString(expr);
+        latex[species] = exprToLatex(expr);
       }
     }
 
@@ -63,7 +69,7 @@ export async function handleSymbolicSteadyState(
           if (!sensitivityOutput[species]) {
             sensitivityOutput[species] = {};
           }
-          sensitivityOutput[species][param] = engine.exprToString(expr);
+          sensitivityOutput[species][param] = exprToString(expr);
         }
       }
     }

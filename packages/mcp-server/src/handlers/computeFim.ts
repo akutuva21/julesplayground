@@ -1,3 +1,6 @@
+/**
+ * @unwired This tool handler is currently experimental/unwired and is not part of the active production toolset.
+ */
 import { computeFIM, computeCollinearity, simulate, loadEvaluator } from '@bngplayground/engine';
 import type { ToolArgs, ToolResult } from '../types/index.js';
 import { computeFimArgsSchema } from '../schemas/index.js';

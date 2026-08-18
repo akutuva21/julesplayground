@@ -1,17 +1,16 @@
 import { ToolArgs, ToolResult } from '../types/index.js';
 import { createToolResult, parseModelOrThrow, expandModel } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
-import { simulate, loadEvaluator } from '@bngplayground/engine';
+import { simulate, loadEvaluator, enumerateRules, structureSearch } from '@bngplayground/engine';
 
 export async function handleSearchStructure(args: ToolArgs): Promise<ToolResult<any>> {
-  const parsedArgs = (args ?? {}) as any;
+  const parsedArgs = (args ?? {}) as Record<string, any>;
   try {
-    const engine = await import('@bngplayground/engine') as any;
     const model = parseModelOrThrow(parsedArgs.code);
     await loadEvaluator();
 
     // Enumerate candidate rules
-    const candidates = engine.enumerateRules(model.moleculeTypes || []);
+    const candidates = enumerateRules(model.moleculeTypes || []);
 
     // Set up simulator function for structure search
     const simulatorFn = async (code: string, options: any) => {
@@ -23,7 +22,7 @@ export async function handleSearchStructure(args: ToolArgs): Promise<ToolResult<
     };
 
     // Run structure search
-    const result = await engine.structureSearch(
+    const result = await structureSearch(
       {
         candidates,
         moleculeTypes: model.moleculeTypes || [],
@@ -60,7 +59,7 @@ export async function handleSearchStructure(args: ToolArgs): Promise<ToolResult<
       biological: `Top model hypothesis includes: ${result.bestStructure.rules.slice(0, 3).map((r: any) => r.humanDescription).join('; ')}.`,
       strategic: 'Structure search identifies which rules best explain the experimental data — answering "which mechanisms are active?" rather than just "what are the rates?"',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return createToolResult(structureError(error instanceof Error ? error : new Error(String(error), { cause: error })));
   }
 }

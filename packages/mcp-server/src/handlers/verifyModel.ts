@@ -1,25 +1,26 @@
 import { ToolArgs, ToolResult } from '../types/index.js';
-import { createToolResult, parseModelOrThrow } from '../services/engine.js';
+import { createToolResult, parseModelOrThrow, buildContactMap } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+import {
+  parseQuery,
+  checkAbstractReachability,
+  boundedReachabilityCheck,
+  checkRuleFires,
+  checkDeadlock,
+} from '@bngplayground/engine';
 
 export async function handleVerifyModel(args: ToolArgs): Promise<ToolResult<any>> {
-  const parsedArgs = (args ?? {}) as any;
+  const parsedArgs = (args ?? {}) as Record<string, any>;
   try {
-    const engine = await import('@bngplayground/engine') as any;
-    const { parseQuery, checkAbstractReachability, boundedReachabilityCheck } = engine;
-    const model = parseModelOrThrow(parsedArgs.code);
     const query = parseQuery(parsedArgs.query);
+    const model = parseModelOrThrow(parsedArgs.code);
 
     let result: any = { query: parsedArgs.query, answer: 'unknown', confidence: 'unknown', layerUsed: 0 };
 
-    // Build contact map from model rules for Layer 1 (if available)
+    // Build contact map from model rules for Layer 1
     let contactMap = { nodes: [] as any[], edges: [] as any[] };
     try {
-      // Use the MCP engine service's buildContactMap if available
-      const { buildContactMap } = await import('../services/engine.js');
-      if (typeof buildContactMap === 'function') {
-        contactMap = buildContactMap(model.reactionRules ?? [], model.moleculeTypes ?? []);
-      }
+      contactMap = buildContactMap(model.reactionRules ?? [], model.moleculeTypes ?? []);
     } catch { /* Contact map builder unavailable, Layer 1 will use empty map */ }
 
     if (query.kind === 'reachable' || query.kind === 'never') {
@@ -65,22 +66,20 @@ export async function handleVerifyModel(args: ToolArgs): Promise<ToolResult<any>
       }
     } else if (query.kind === 'fires') {
       try {
-        const { checkRuleFires } = await import('@bngplayground/engine');
         const fireResult = checkRuleFires(model, query.ruleName, { maxSpecies: parsedArgs.maxSpecies || 1000 });
         result = { query: parsedArgs.query, answer: fireResult.fires, confidence: 'bounded', layerUsed: 2,
           explanation: fireResult.fires
             ? `Rule "${query.ruleName}" fires (matching species found: ${(fireResult.matchingSpecies ?? []).join(', ')}).`
             : `Rule "${query.ruleName}" does not fire within bounded exploration.` };
-      } catch (e: any) { result.explanation = e.message; }
+      } catch (e: unknown) { result.explanation = e instanceof Error ? e.message : String(e); }
     } else if (query.kind === 'deadlock') {
       try {
-        const { checkDeadlock } = await import('@bngplayground/engine');
         const deadlockResult = checkDeadlock(model, { maxSpecies: parsedArgs.maxSpecies || 1000 });
         result = { query: parsedArgs.query, answer: deadlockResult.hasDeadlock, confidence: 'bounded', layerUsed: 2,
           explanation: deadlockResult.hasDeadlock
             ? `Deadlock detected: ${deadlockResult.deadlockState ?? 'unknown state'}`
             : 'No deadlock states found.' };
-      } catch (e: any) { result.explanation = e.message; }
+      } catch (e: unknown) { result.explanation = e instanceof Error ? e.message : String(e); }
     }
 
     return createToolResult({
@@ -89,7 +88,7 @@ export async function handleVerifyModel(args: ToolArgs): Promise<ToolResult<any>
       biological: result.explanation,
       strategic: 'Use verification queries to check reachability of complexes, rule firing, and deadlock conditions without simulation.',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return createToolResult(structureError(error instanceof Error ? error : new Error(String(error), { cause: error })));
   }
 }

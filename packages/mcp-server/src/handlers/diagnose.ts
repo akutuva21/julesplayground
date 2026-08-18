@@ -1,3 +1,6 @@
+/**
+ * @unwired This tool handler is currently experimental/unwired and is not part of the active production toolset.
+ */
 import { analyzeModelStiffness, getOptimalCVODEConfig } from '@bngplayground/engine';
 import { ToolArgs, ToolResult } from '../types/index.js';
 import { diagnoseArgsSchema } from '../schemas/index.js';

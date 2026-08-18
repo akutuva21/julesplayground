@@ -1,16 +1,15 @@
 import { ToolArgs, ToolResult } from '../types/index.js';
 import { createToolResult } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
+import { parseMultiscaleModel, multiscaleSimulation } from '@bngplayground/engine';
 
 export async function handleMultiscaleSimulation(args: ToolArgs): Promise<ToolResult<any>> {
-  const parsedArgs = (args ?? {}) as any;
+  const parsedArgs = (args ?? {}) as Record<string, unknown>;
   try {
-    const engine = await import('@bngplayground/engine') as any;
+    const config = parseMultiscaleModel(parsedArgs.definition as any);
+    if (parsedArgs.max_cells) config.maxCells = Number(parsedArgs.max_cells);
 
-    const config = engine.parseMultiscaleModel(parsedArgs.definition);
-    if (parsedArgs.max_cells) config.maxCells = parsedArgs.max_cells;
-
-    const result = await engine.multiscaleSimulation(config, (_fraction: number) => {
+    const result = await multiscaleSimulation(config, (_fraction: number) => {
       // Progress tracking
     });
 
@@ -28,7 +27,7 @@ export async function handleMultiscaleSimulation(args: ToolArgs): Promise<ToolRe
       biological: `Population dynamics: ${Object.entries(finalCounts).map(([type, count]) => `${type}: ${count}`).join(', ')}.`,
       strategic: 'Multi-scale models bridge intracellular BNGL models with cell-population dynamics — essential for tumor growth, immune response, and tissue-level phenomena.',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return createToolResult(structureError(error instanceof Error ? error : new Error(String(error), { cause: error })));
   }
 }
