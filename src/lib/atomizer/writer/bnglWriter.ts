@@ -505,6 +505,7 @@ function convertMathFunctions(expr: string): string {
       const x = result.slice(comma + 1, close).trim();
       result = result.slice(0, m.index) + `(ln(${x})/ln(${base}))` + result.slice(close + 1);
     }
+    // eslint-disable-next-line no-control-regex
     result = result.replace(/\u0001LN/g, 'log');
   }
 
@@ -1956,7 +1957,9 @@ export function writeReactionRulesFlat(
           try {
             const parsed = readFromString(sp.name);
             if (parsed.molecules.length > 0) reactantSpeciesMap.set(spId, parsed);
-          } catch { }
+          } catch {
+            /* ignore */
+          }
         }
       }
 
@@ -2701,7 +2704,7 @@ export function generateBNGL(
     }
     for (const [id, sp] of model.species) {
       const entry = sct.entries.get(id);
-      let bnglPattern = '';
+      let bnglPattern: string;
 
       const compId = speciesToCompartment.get(id);
 
@@ -3661,7 +3664,7 @@ function hasDenominatorIssue(
   if (afterDiv.includes('+')) {
     // Check if any of the "1"s in the denominator correspond to neutralized species
     // Simple heuristic: if denominator has pattern like "(something + 1)" or "(1 + something)"
-    if (/[\(+]\s*1\s*[+\)]/.test(afterDiv) || /[\(+]\s*1\s*$/.test(afterDiv)) {
+    if (/[(+]\s*1\s*[+)]/.test(afterDiv) || /[(+]\s*1\s*$/.test(afterDiv)) {
       return true;
     }
   }
