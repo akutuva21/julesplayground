@@ -15,6 +15,7 @@ import type { Rxn } from '../graph/core/Rxn';
 import { ExpressionTranslator } from '../graph/core/ExpressionTranslator';
 import { OpCode } from '../simulation/ExpressionCompiler';
 import { SafeExpressionEvaluator } from '../../utils/safeExpressionEvaluator';
+import { createCompiledFunction } from '../../utils/safeFunctionCompiler';
 import { getFeatureFlags } from '../../featureFlags';
 import jsep from 'jsep';
 import { isJITSafe } from '../simulation/ExpressionEvaluator.ts';
@@ -892,7 +893,7 @@ export class JITCompiler {
             }
 
             source += "return aTotal;\n";
-            return this.createFn(["state", "propensities"], source) as (state: Float64Array, propensities: Float64Array) => number;
+            return createCompiledFunction(["state", "propensities"], source) as (state: Float64Array, propensities: Float64Array) => number;
         } catch (e) {
             console.warn('[JITCompiler] Failed to compile SSA propensities:', e);
             return null;
@@ -1003,7 +1004,7 @@ export class JITCompiler {
             }
 
             source += "return aTotal;\n";
-            return this.createFn(["state", "propensities"], source) as (state: Float64Array, propensities: Float64Array) => number;
+            return createCompiledFunction(["state", "propensities"], source) as (state: Float64Array, propensities: Float64Array) => number;
         } catch (e) {
             console.warn('[JITCompiler] Failed to compile SSA propensities with functional rates:', e);
             return null;
@@ -1111,7 +1112,7 @@ export class JITCompiler {
 
             source += '}\nreturn totalDelta;\n';
 
-            return this.createFn(['firedRxnIdx', 'state', 'propensities', 'fenwickAdd'], source) as
+            return createCompiledFunction(['firedRxnIdx', 'state', 'propensities', 'fenwickAdd'], source) as
                 (firedRxnIdx: number, state: Float64Array, propensities: Float64Array,
                     fenwickAdd: (idx: number, delta: number) => void) => number;
         } catch (e) {
@@ -1261,7 +1262,7 @@ export class JITCompiler {
 
             source += '}\nreturn totalDelta;\n';
 
-            const fn = this.createFn(['firedRxnIdx', 'state', 'propensities', 'fenwickAdd'], source) as
+            const fn = createCompiledFunction(['firedRxnIdx', 'state', 'propensities', 'fenwickAdd'], source) as
                 (firedRxnIdx: number, state: Float64Array, propensities: Float64Array,
                     fenwickAdd: (idx: number, delta: number) => void) => number;
 
