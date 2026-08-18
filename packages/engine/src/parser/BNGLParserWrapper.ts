@@ -4,7 +4,8 @@
  * Parses BNGL files using the ANTLR4 grammar and converts to ParsedBNGL type.
  * Provides BNG2.pl-compatible parsing for maximum parity.
  */
-import { CharStreams, CommonTokenStream } from 'antlr4ts';
+import { CharStreams, CommonTokenStream, BailErrorStrategy, DefaultErrorStrategy } from 'antlr4ts';
+import { PredictionMode } from 'antlr4ts/atn/PredictionMode';
 import { BNGLexer } from './generated/BNGLexer';
 import { BNGParser } from './generated/BNGParser';
 import { BNGLVisitor } from './BNGLVisitor';
@@ -135,21 +136,25 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
     // the preferred 'begin molecule types' / 'end molecule types' form.
     // We do this as a pre-parse normalization to preserve repository files
     // but remain compatible with BNG2.pl. We skip lines that are comments.
+const MOLECULES_CHECK_RE = /molecules/i;
+const BEGIN_MOLECULES_TEST_RE = /^[^\S\r\n]*(?!#)begin\s+molecules\b/im;
+const END_MOLECULES_TEST_RE = /^[^\S\r\n]*(?!#)end\s+molecules\b/im;
+const BEGIN_MOLECULES_REPLACE_RE = /(^[^\S\r\n]*(?!#)begin\s+)molecules\b/gim;
+const END_MOLECULES_REPLACE_RE = /(^[^\S\r\n]*(?!#)end\s+)molecules\b/gim;
+
     function normalizeLegacyBlocks(src: string): { normalized: string; warned: boolean } {
-      if (!/molecules/i.test(src)) {
+  if (!MOLECULES_CHECK_RE.test(src)) {
         return { normalized: src, warned: false };
       }
       let warned = false;
       let next = src;
-      const beginRe = /^[^\S\r\n]*(?!#)begin\s+molecules\b/im;
-      const endRe = /^[^\S\r\n]*(?!#)end\s+molecules\b/im;
-      if (beginRe.test(next)) {
+  if (BEGIN_MOLECULES_TEST_RE.test(next)) {
         warned = true;
-        next = next.replace(/(^[^\S\r\n]*(?!#)begin\s+)molecules\b/gim, '$1molecule types');
+    next = next.replace(BEGIN_MOLECULES_REPLACE_RE, '$1molecule types');
       }
-      if (endRe.test(next)) {
+  if (END_MOLECULES_TEST_RE.test(next)) {
         warned = true;
-        next = next.replace(/(^[^\S\r\n]*(?!#)end\s+)molecules\b/gim, '$1molecule types');
+    next = next.replace(END_MOLECULES_REPLACE_RE, '$1molecule types');
       }
       return { normalized: next, warned };
     }
@@ -523,9 +528,22 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
       }
     });
 
-    // Parse the input
-    // Parse the input
-    const tree = parser.prog();
+    // Fast-path two-stage parsing: try SLL prediction mode with BailErrorStrategy first.
+    // If syntax errors or ambiguities trigger a parse failure, fall back to LL mode with DefaultErrorStrategy.
+    parser.interpreter.setPredictionMode(PredictionMode.SLL);
+    parser.errorHandler = new BailErrorStrategy();
+
+    let tree: ReturnType<typeof parser.prog>;
+    try {
+      tree = parser.prog();
+    } catch {
+      // Reset token stream and retry with full LL parsing strategy
+      tokenStream.seek(0);
+      parser.reset();
+      parser.interpreter.setPredictionMode(PredictionMode.LL);
+      parser.errorHandler = new DefaultErrorStrategy();
+      tree = parser.prog();
+    }
 
     // Visit the parse tree and build BNGLModel even if there are errors (best effort)
     let model: BNGLModel | undefined;
