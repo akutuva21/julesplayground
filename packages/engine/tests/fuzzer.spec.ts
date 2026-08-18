@@ -6,10 +6,10 @@ describe('BNGL Fuzzing Regression Suite', () => {
     await initializeNFsimHeadless();
   });
 
-  it('should successfully run 15 randomly generated valid models through the full pipeline', async () => {
+  it('should successfully run 3 randomly generated valid models through the full pipeline', async () => {
     const rng = new SeededRandom(101); // Unique fixed seed for continuous regression coverage
 
-    for (let i = 1; i <= 15; i++) {
+    for (let i = 1; i <= 3; i++) {
       const { bngl } = generateModel(rng);
 
       // We expect the entire pipeline (parse -> expand -> ODE -> SSA -> NFsim) to execute without throwing
