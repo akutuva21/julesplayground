@@ -1408,7 +1408,7 @@ export async function simulate(
       // === OPT 2: INLINED FENWICK TREE ===
       // Inlining eliminates class method dispatch overhead (~2-3ns per call)
       const fenwickTree = new Float64Array(numReactions + 1);
-      const fenwickHighBit = numReactions > 0 ? (1 << Math.floor(Math.log2(numReactions))) : 1;
+      const fenwickHighBit = numReactions > 0 ? (1 << (31 - Math.clz32(numReactions))) : 1;
 
       const fenwickBuild = (values: Float64Array): void => {
         const n = numReactions;
