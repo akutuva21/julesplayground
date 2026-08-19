@@ -222,22 +222,24 @@ export function generateModel(rng: SeededRandom): { bngl: string; hasCompartment
   bnglParts.push('begin functions');
   bnglParts.push('  f_rate() k1 * (1 + abs(sin(A_tot / 100)))');
   bnglParts.push('  f_bind() k_bind * sqrt(1 + B_tot)');
+  bnglParts.push('  f_nl() min(10.0, max(0.1, exp(-k2 * A_bound)))');
   bnglParts.push('end functions');
 
   // 7. Reaction Rules Block
   bnglParts.push('begin reaction rules');
-  // State transitions
-  bnglParts.push('  A(s~0) -> A(s~1) k1');
-  bnglParts.push('  A(s~1) -> A(s~2) f_rate()');
+  // State transitions with rule labels
+  bnglParts.push('  R_state1: A(s~0) -> A(s~1) k1');
+  bnglParts.push('  R_state2: A(s~1) -> A(s~2) f_rate()');
   // Reversible binding with expression rate
-  bnglParts.push('  A(b) + B(a) <-> A(b!1).B(a!1) k_bind, k_unbind');
-  // Phosphorylation state change
-  bnglParts.push('  A(p~0) -> A(p~1) k2');
+  bnglParts.push('  R_bind: A(b) + B(a) <-> A(b!1).B(a!1) k_bind, k_unbind');
+  // Phosphorylation state change with non-linear functional rate
+  bnglParts.push('  R_phos: A(p~0) -> A(p~1) f_nl()');
   // Synthesis / degradation
-  bnglParts.push('  C(d) -> 0 kdeg');
-  bnglParts.push('  0 -> C(d) ksynth');
-  // Rule modifier (unbracketed modifier following rate law)
-  bnglParts.push('  D() -> 0 kdeg DeleteMolecules');
+  bnglParts.push('  R_deg_C: C(d) -> 0 kdeg');
+  bnglParts.push('  R_syn_C: 0 -> C(d) ksynth');
+  // Rule modifier (unbracketed modifier following rate law & MatchOnce)
+  bnglParts.push('  R_deg_D: D() -> 0 kdeg DeleteMolecules');
+  bnglParts.push('  R_once: A(p~1) -> A(p~0) k2 MatchOnce');
   bnglParts.push('end reaction rules');
 
   return { bngl: bnglParts.join('\n'), hasCompartments };
@@ -336,7 +338,7 @@ async function main() {
   console.log('--- Starting BNGL Monorepo Fuzzing Runner ---');
   await initializeNFsimHeadless();
 
-  const baseSeed = 42;
+  const baseSeed = 2026;
   const rng = new SeededRandom(baseSeed);
 
   let successCount = 0;
