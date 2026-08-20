@@ -41,6 +41,27 @@ let firstMapCacheStrictSB = new WeakMap<SpeciesGraph, WeakMap<SpeciesGraph, Matc
 let firstMapCacheRelaxedNoSB = new WeakMap<SpeciesGraph, WeakMap<SpeciesGraph, MatchMap | null>>();
 let firstMapCacheRelaxedSB = new WeakMap<SpeciesGraph, WeakMap<SpeciesGraph, MatchMap | null>>();
 
+const molTypeCountsEntriesCache = new WeakMap<SpeciesGraph, Array<[string, number]>>();
+const typeBondsEntriesCache = new WeakMap<SpeciesGraph, Array<[string, number]>>();
+
+function getMolTypeCountsEntries(graph: SpeciesGraph): Array<[string, number]> {
+  let cached = molTypeCountsEntriesCache.get(graph);
+  if (cached === undefined) {
+    cached = Array.from(graph.molTypeCounts.entries());
+    molTypeCountsEntriesCache.set(graph, cached);
+  }
+  return cached;
+}
+
+function getTypeBondsEntries(graph: SpeciesGraph): Array<[string, number]> {
+  let cached = typeBondsEntriesCache.get(graph);
+  if (cached === undefined) {
+    cached = Array.from(graph.typeBonds.entries());
+    typeBondsEntriesCache.set(graph, cached);
+  }
+  return cached;
+}
+
 function getSelectedCache(allowExtra: boolean, sb: boolean) {
   if (allowExtra) {
     return sb ? matchCacheRelaxedSB : matchCacheRelaxedNoSB;
@@ -294,19 +315,38 @@ export class GraphMatcher {
     }
 
     const matches: MatchMap[] = [];
-    const ordering = pattern.molecules.length === 1
-      ? SINGLE_NODE_ORDERING
-      : this.computeNodeOrdering(pattern, target);
-    const state = new VF2State(
-      pattern,
-      target,
-      ordering,
-      options.symmetryBreaking ?? false,
-      options.allowExtraTargetBonds ?? false
-    );
 
-    const iterationCount = { value: 0 };
-    this.vf2Backtrack(state, matches, iterationCount);
+    if (pattern.molecules.length === 1) {
+      const state = new VF2State(
+        pattern,
+        target,
+        SINGLE_NODE_ORDERING,
+        options.symmetryBreaking ?? false,
+        options.allowExtraTargetBonds ?? false
+      );
+      const tLen = target.molecules.length;
+      for (let tNode = 0; tNode < tLen; tNode++) {
+        if (state.isFeasible(0, tNode)) {
+          state.addPair(0, tNode);
+          const match = state.tryGetMatch();
+          state.removePair(0, tNode);
+          if (match) {
+            matches.push(match);
+          }
+        }
+      }
+    } else {
+      const ordering = this.computeNodeOrdering(pattern, target);
+      const state = new VF2State(
+        pattern,
+        target,
+        ordering,
+        options.symmetryBreaking ?? false,
+        options.allowExtraTargetBonds ?? false
+      );
+      const iterationCount = { value: 0 };
+      this.vf2Backtrack(state, matches, iterationCount);
+    }
     if (shouldLogGraphMatcher && pattern.toString().includes('C3(s~b)')) {
       console.log(`[GM_DEBUG] findAllMaps result for ${pattern.toString()} in ${target.toString()}: ${matches.length} matches`);
     }
@@ -363,14 +403,15 @@ export class GraphMatcher {
     }
 
     // 4. Name-based molecule count checks (cheap map queries before full fingerprint check)
-    const patternCounts = pattern.molTypeCounts;
+    const patternEntries = getMolTypeCountsEntries(pattern);
     const targetCounts = target.molTypeCounts;
 
-    for (const [molType, count] of patternCounts) {
-      if (molType === '*') {
+    for (let i = 0; i < patternEntries.length; i++) {
+      const entry = patternEntries[i];
+      if (entry[0] === '*') {
         continue;
       }
-      if ((targetCounts.get(molType) || 0) < count) {
+      if ((targetCounts.get(entry[0]) || 0) < entry[1]) {
         return false;
       }
     }
@@ -387,14 +428,15 @@ export class GraphMatcher {
     }
 
     // 3.5 Type-connectivity check (run only if the rest matches)
-    const patternBondsMap = pattern.typeBonds;
+    const patternBondEntries = getTypeBondsEntries(pattern);
     const targetBondsMap = target.typeBonds;
-    for (const [pairKey, patCount] of patternBondsMap.entries()) {
-      if (pairKey.includes('*')) {
+    for (let i = 0; i < patternBondEntries.length; i++) {
+      const entry = patternBondEntries[i];
+      if (entry[0].includes('*')) {
         continue;
       }
-      const tarCount = targetBondsMap.get(pairKey) ?? 0;
-      if (tarCount < patCount) {
+      const tarCount = targetBondsMap.get(entry[0]) ?? 0;
+      if (tarCount < entry[1]) {
         return false;
       }
     }
@@ -457,18 +499,39 @@ export class GraphMatcher {
       return null;
     }
 
-    const ordering = pattern.molecules.length === 1
-      ? SINGLE_NODE_ORDERING
-      : this.computeNodeOrdering(pattern, target);
-    const state = new VF2State(
-      pattern,
-      target,
-      ordering,
-      options.symmetryBreaking ?? false,
-      options.allowExtraTargetBonds ?? false
-    );
-    const iterationCount = { value: 0 };
-    const result = this.vf2BacktrackFirst(state, iterationCount);
+    let result: MatchMap | null = null;
+    if (pattern.molecules.length === 1) {
+      const state = new VF2State(
+        pattern,
+        target,
+        SINGLE_NODE_ORDERING,
+        options.symmetryBreaking ?? false,
+        options.allowExtraTargetBonds ?? false
+      );
+      const tLen = target.molecules.length;
+      for (let tNode = 0; tNode < tLen; tNode++) {
+        if (state.isFeasible(0, tNode)) {
+          state.addPair(0, tNode);
+          const match = state.tryGetMatch();
+          state.removePair(0, tNode);
+          if (match) {
+            result = match;
+            break;
+          }
+        }
+      }
+    } else {
+      const ordering = this.computeNodeOrdering(pattern, target);
+      const state = new VF2State(
+        pattern,
+        target,
+        ordering,
+        options.symmetryBreaking ?? false,
+        options.allowExtraTargetBonds ?? false
+      );
+      const iterationCount = { value: 0 };
+      result = this.vf2BacktrackFirst(state, iterationCount);
+    }
 
     // Cache the result in firstMapCache
     if (targetFirstMap === undefined) {
