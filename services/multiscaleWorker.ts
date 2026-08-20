@@ -24,6 +24,7 @@ export type MultiscaleWorkerRequest =
 
 /** Messages from worker -> main thread */
 export type MultiscaleWorkerResponse =
+  | { type: 'initialized' }
   | { type: 'progress'; fraction: number }
   | { type: 'complete'; result: MultiscaleResult }
   | { type: 'error'; message: string };
@@ -70,12 +71,14 @@ self.onmessage = (event: MessageEvent<MultiscaleWorkerRequest>) => {
     switch (msg.type) {
       case 'run': {
         cancelled = false;
+        self.postMessage({ type: 'initialized' } as MultiscaleWorkerResponse);
         void runSimulation(msg.config);
         break;
       }
 
       case 'run_from_definition': {
         cancelled = false;
+        self.postMessage({ type: 'initialized' } as MultiscaleWorkerResponse);
         const config = parseMultiscaleModel(msg.definition);
         void runSimulation(config);
         break;
@@ -83,6 +86,16 @@ self.onmessage = (event: MessageEvent<MultiscaleWorkerRequest>) => {
 
       case 'cancel': {
         cancelled = true;
+        break;
+      }
+
+      default: {
+        const unknownType = (msg as { type?: unknown }).type;
+        const response: MultiscaleWorkerResponse = {
+          type: 'error',
+          message: `MultiscaleWorker received unknown message type: ${String(unknownType)}`,
+        };
+        self.postMessage(response);
         break;
       }
     }
