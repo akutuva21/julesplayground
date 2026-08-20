@@ -128,6 +128,34 @@ function computeSSR(
 
 // ── Main API ─────────────────────────────────────────────────────────
 
+/**
+ * Computes 1D profile likelihood curves for parameter identifiability analysis.
+ *
+ * For each specified parameter, this function constructs a log-spaced grid spanning `rangeFactor`
+ * around its baseline value. At each grid point, the parameter is fixed and the sum of squared
+ * residuals (SSR) against experimental data is evaluated. If `reoptimize` is true, remaining
+ * parameters are re-optimized at each grid point using Nelder-Mead optimization.
+ *
+ * Key analytical steps:
+ * 1. **Baseline Evaluation**: Computes initial SSR at baseline parameter values and calculates
+ *    the confidence threshold cutoff (`baselineSSR + chi2Quantile(alpha, 1)`).
+ * 2. **Grid Profile Traversal**: For each target parameter, generates log-spaced grid points and evaluates
+ *    SSR across the profile, optionally re-optimizing other parameters.
+ * 3. **Identifiability Classification**:
+ *    - `structurally_unidentifiable`: Profile SSR variation is flat (relative change < 1%).
+ *    - `practically_unidentifiable`: Non-flat profile whose confidence interval extends to the grid boundary.
+ *    - `identifiable`: Well-defined minimum where confidence interval bounds remain strictly within grid limits.
+ *
+ * **Non-obvious Invariants**:
+ * - Engine invariant: Pure mathematical engine function operating without DOM or browser APIs,
+ *   compatible with Node.js, Web Workers, and main browser contexts.
+ * - Supports cancellation via `AbortSignal` (`config.signal`).
+ *
+ * @param config - Profile likelihood configuration options including simulation callback, parameters,
+ *                 experimental data, grid resolution, and optimization settings.
+ * @returns A promise resolving to `ProfileLikelihoodResult` with profile grids, SSR values,
+ *          confidence intervals, threshold cutoffs, and identifiability classifications.
+ */
 export async function profileLikelihood(
   config: ProfileLikelihoodConfig,
 ): Promise<ProfileLikelihoodResult> {
