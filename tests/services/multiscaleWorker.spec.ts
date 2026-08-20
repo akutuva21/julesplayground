@@ -3,7 +3,7 @@ import type { MultiscaleWorkerResponse } from '../../services/multiscaleWorker';
 
 describe('multiscaleWorker message handling resilience', () => {
   it('should send an explicit error response when receiving an unknown message type', async () => {
-    let postMessageCallback: ((msg: MultiscaleWorkerResponse) => void) | null = null;
+    const postMessageCallback: ((msg: MultiscaleWorkerResponse) => void) | null = null;
 
     const mockSelf = {
       location: { origin: 'http://localhost' },
