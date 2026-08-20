@@ -226,18 +226,33 @@ export function generateModel(rng: SeededRandom): { bngl: string; hasCompartment
 
   // 7. Reaction Rules Block
   bnglParts.push('begin reaction rules');
-  // State transitions
-  bnglParts.push('  A(s~0) -> A(s~1) k1');
-  bnglParts.push('  A(s~1) -> A(s~2) f_rate()');
+  // State transitions with labels
+  bnglParts.push('  r1_state: A(s~0) -> A(s~1) k1');
+  bnglParts.push('  r2_state: A(s~1) -> A(s~2) f_rate()');
+
   // Reversible binding with expression rate
-  bnglParts.push('  A(b) + B(a) <-> A(b!1).B(a!1) k_bind, k_unbind');
+  bnglParts.push('  r3_bind: A(b) + B(a) <-> A(b!1).B(a!1) k_bind, k_unbind');
+
   // Phosphorylation state change
-  bnglParts.push('  A(p~0) -> A(p~1) k2');
+  bnglParts.push('  r4_phos: A(p~0) -> A(p~1) k2');
+
   // Synthesis / degradation
-  bnglParts.push('  C(d) -> 0 kdeg');
-  bnglParts.push('  0 -> C(d) ksynth');
-  // Rule modifier (unbracketed modifier following rate law)
-  bnglParts.push('  D() -> 0 kdeg DeleteMolecules');
+  bnglParts.push('  r5_deg: C(d) -> 0 kdeg');
+  bnglParts.push('  r6_synth: 0 -> C(d) ksynth');
+
+  // Rule modifiers (DeleteMolecules, MatchOnce, MoveConnected, TotalRate)
+  bnglParts.push('  r7_del: D() -> 0 kdeg DeleteMolecules');
+  bnglParts.push('  r8_match: A(s~0) -> A(s~1) k1 MatchOnce');
+  bnglParts.push('  r9_tot: A(s~1) -> A(s~2) k2 TotalRate');
+
+  // Compartment transport rules if compartments exist
+  if (compartmentMode === 2) {
+    bnglParts.push('  r10_trans: A(b)@CP -> A(b)@EC k1 MoveConnected');
+  }
+
+  // Wildcard rules (bond wildcards !+, !?, unbound .)
+  bnglParts.push('  r11_wildcard: A(b!+) -> A(b) k_unbind');
+
   bnglParts.push('end reaction rules');
 
   return { bngl: bnglParts.join('\n'), hasCompartments };
