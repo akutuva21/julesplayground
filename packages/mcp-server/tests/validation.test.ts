@@ -2,9 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('../src/services/pathwayCommons/pathwayCommonsService.js', () => ({
     queryPathwayCommons: vi.fn(async () => ({
-        summary: '',
-        confirmedInteractions: [],
+        interactions: [],
         missingInteractions: [],
+        confirmedInteractions: [],
+        pathways: [],
+        unknownMolecules: [],
+        summary: 'Queried 0 molecules against Pathway Commons. No additional known interactions found.',
     })),
 }));
 
