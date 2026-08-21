@@ -27,12 +27,13 @@ export interface NFsimSimulationOptions {
 /**
  * Validates whether a BNGL model is compatible with NFsim (network-free simulation).
  *
- * Checks for unsupported features such as compartments, dynamic observables, or non-mass-action
- * rate functions that NFsim cannot process.
+ * Checks for model completeness (at least one species, molecule type, reaction rule, and observable)
+ * and flags unsupported features, such as rate expressions that depend on observables directly or
+ * transitively through user-defined functions. Note that `TotalRate` modifiers are natively supported by NFsim.
  *
  * @param model - The parsed BNGL model object to validate.
  * @returns A {@link ValidationResult} object indicating whether the model is valid for NFsim
- *          and listing any validation errors found.
+ *          and listing any validation errors or recommendations.
  */
 export const validateModelForNFsim = (model: BNGLModel): ValidationResult =>
   NFsimValidator.validateForNFsim(model);
@@ -69,21 +70,25 @@ const ensureExpandedNetwork = async (model: BNGLModel): Promise<BNGLModel> => {
 };
 
 /**
- * Executes a network-free simulation (NFsim) on a BNGL model.
+ * Executes a network-free stochastic simulation (NFsim) on a BNGL model.
  *
- * Converts the BNGL model to BioNetGen XML format, invokes the WASM/JS NFsim runtime via
- * {@link runNFsim}, reports progress if running in a worker context, and adapts the GDAT
- * output into {@link SimulationResults}.
+ * Validates model requirements before converting the BNGL model to BioNetGen XML format using
+ * {@link BNGXMLWriter}. Invokes the WebAssembly NFsim runtime via {@link runNFsim}, forwards
+ * progress updates if running in a Web Worker context, and adapts the resulting GDAT output
+ * into {@link SimulationResults} via {@link NFsimResultAdapter}.
  *
- * If NFsim validation fails (e.g., unsupported compartments or observables), an error is thrown.
- * If the NFsim WASM runtime is unavailable and `options.requireRuntime` is false, this function
- * logs a warning and gracefully falls back to stochastic network expansion simulation (SSA) via {@link simulate}.
+ * Supported NFsim capabilities include rule-based network-free execution, `TotalRate` rule modifiers,
+ * custom random seeds, equilibration, and UTL/GML complexity parameters.
+ *
+ * If model validation fails (e.g., due to observable-dependent rule rates or missing required sections),
+ * an error is thrown. If the NFsim WASM runtime is unavailable and `options.requireRuntime` is false,
+ * this function logs a warning and gracefully falls back to stochastic network simulation (SSA) via {@link simulate}.
  *
  * **Invariant**: Must remain browser-API-free (Node.js and Web Worker compatible).
  *
- * @param inputModel - The parsed BNGL model to simulate.
- * @param options - Configuration options controlling end time, step count, random seed, UTL/GML bounds,
- *                  and data inclusion flags.
+ * @param inputModel - The parsed BNGL model object to simulate.
+ * @param options - Configuration options for simulation bounds (`t_end`, `n_steps`), seeds, UTL/GML parameters,
+ *                  progress reporting, and data inclusion flags.
  * @param jobId - Optional numeric ID for tracking the simulation job and tagging worker progress messages.
  * @returns A promise resolving to the adapted {@link SimulationResults}.
  * @throws {Error} If model validation fails or if NFsim execution fails and `options.requireRuntime` is true.
