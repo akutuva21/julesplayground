@@ -1078,9 +1078,9 @@ end reaction rules`;
     });
 
     it('should not crash on valid larger model', async () => {
-      const result = await handleSymbolicSteadyState({ code: MINIMAL_MODEL });
+      const result = await handleSymbolicSteadyState({ code: WORKING_MODEL });
       assertStructuredResponse(result);
-    });
+    }, 120000);
 
     it('should not crash on empty code', async () => {
       const result = await handleSymbolicSteadyState({ code: '' });
