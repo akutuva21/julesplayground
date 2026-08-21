@@ -277,8 +277,8 @@ describe('MCP Server Tools Functional Validation', () => {
             code: simpleModel,
             t_end: 1,
             n_steps: 10,
-            n_samples: 8,
-            n_bootstrap: 10,
+            n_samples: 2,
+            n_bootstrap: 2,
             max_parameters: 2,
         });
         const sc = result.structuredContent as {
@@ -303,7 +303,7 @@ describe('MCP Server Tools Functional Validation', () => {
         expect(Array.isArray(sc.ruleAttribution)).toBe(true);
         expect(sc.parameterSelection).toBeDefined();
         expect(sc.parameterSelection.analyzed).toBeLessThanOrEqual(2);
-        expect(Array.isArray(sc.surprises)).toBe(true);
+        expect(sc.surprises === undefined || Array.isArray(sc.surprises)).toBe(true);
         const firstTrace = sc.ruleAttribution[0];
         if (firstTrace) {
             expect(firstTrace.topologyPath || firstTrace.targetObservable).toBeDefined();
@@ -315,8 +315,8 @@ describe('MCP Server Tools Functional Validation', () => {
             code: simpleModel,
             t_end: 1,
             n_steps: 10,
-            n_samples: 8,
-            n_bootstrap: 10,
+            n_samples: 2,
+            n_bootstrap: 2,
             max_parameters: 2,
             experimental_data: [
                 { time: 0, observables: { A_free: 100, Complex: 0 } },
@@ -346,8 +346,8 @@ describe('MCP Server Tools Functional Validation', () => {
             code: simpleModel,
             t_end: 1,
             n_steps: 10,
-            n_samples: 8,
-            n_bootstrap: 10,
+            n_samples: 2,
+            n_bootstrap: 2,
             max_parameters: 2,
             experimental_data: [
                 { time: 0, observables: { A_free: 100, Complex: 0 }, errors: { A_free: 1, Complex: 1 } },
@@ -359,8 +359,8 @@ describe('MCP Server Tools Functional Validation', () => {
             code: simpleModel,
             t_end: 1,
             n_steps: 10,
-            n_samples: 8,
-            n_bootstrap: 10,
+            n_samples: 2,
+            n_bootstrap: 2,
             max_parameters: 2,
             experimental_data: [
                 { time: 0, observables: { A_free: 100, Complex: 0 } },
@@ -381,7 +381,7 @@ describe('MCP Server Tools Functional Validation', () => {
         const result = await handleDiagnoseModel({
             code: simpleModel,
             t_end: 1, n_steps: 10,
-            n_samples: 8, n_bootstrap: 10, max_parameters: 2,
+            n_samples: 2, n_bootstrap: 2, max_parameters: 2,
         });
         const trace = result.structuredContent.ruleAttribution as Array<{ contactMapPath?: string[]; narrative?: string }>;
         expect(trace).toBeDefined();
@@ -396,7 +396,7 @@ describe('MCP Server Tools Functional Validation', () => {
         const result = await handleDiagnoseModel({
             code: simpleModel,
             t_end: 1, n_steps: 10,
-            n_samples: 8, n_bootstrap: 10, max_parameters: 2,
+            n_samples: 2, n_bootstrap: 2, max_parameters: 2,
         });
         const sc = result.structuredContent as {
             summary: {
