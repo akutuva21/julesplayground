@@ -1,4 +1,15 @@
-import { expect, afterAll, afterEach, beforeEach } from 'vitest';
+import { expect, afterAll, afterEach, beforeEach, vi } from 'vitest';
+
+vi.mock('../packages/mcp-server/src/services/pathwayCommons/pathwayCommonsService', () => ({
+  queryPathwayCommons: vi.fn(async () => ({
+    interactions: [],
+    missingInteractions: [],
+    confirmedInteractions: [],
+    pathways: [],
+    unknownMolecules: [],
+    summary: 'Mocked Pathway Commons result',
+  })),
+}));
 import { cleanup } from '@testing-library/react';
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { isAbsolute, relative } from 'node:path';
