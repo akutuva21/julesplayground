@@ -113,6 +113,14 @@ function extractBonds(graphs: ParsedSpeciesGraph[]): Map<string, { mol1: string;
   return bonds;
 }
 
+/**
+ * Creates a collision-free compound key for a molecule and component pair.
+ * Uses NUL separator '\0' which cannot appear in valid BNGL identifiers.
+ */
+function makeComponentKey(moleculeName: string, componentName: string): string {
+  return `${moleculeName}\0${componentName}`;
+}
+
 export function buildContactMap(rules: ReactionRule[], moleculeTypes: BNGLMoleculeType[] = []): VisualContactMap {
   const moleculeMap = new Map<string, Set<string>>();
   const componentStateMap = new Map<string, Set<string>>();
@@ -129,7 +137,7 @@ export function buildContactMap(rules: ReactionRule[], moleculeTypes: BNGLMolecu
       const componentName = parts[0];
       moleculeMap.get(moleculeType.name)?.add(componentName);
       if (parts.length > 1) {
-        const stateKey = `${moleculeType.name}_${componentName}`;
+        const stateKey = makeComponentKey(moleculeType.name, componentName);
         if (!componentStateMap.has(stateKey)) {
           componentStateMap.set(stateKey, new Set());
         }
@@ -163,7 +171,7 @@ export function buildContactMap(rules: ReactionRule[], moleculeTypes: BNGLMolecu
             moleculeMap.get(moleculeName)?.add(component.name);
           }
           if (component.state && component.state !== '?') {
-            const stateKey = `${moleculeName}_${component.name}`;
+            const stateKey = makeComponentKey(moleculeName, component.name);
             if (!componentStateMap.has(stateKey)) {
               componentStateMap.set(stateKey, new Set());
             }
@@ -178,8 +186,8 @@ export function buildContactMap(rules: ReactionRule[], moleculeTypes: BNGLMolecu
     extractBonds(productGraphs).forEach((value, key) => bonds.set(key, value));
 
     bonds.forEach((bond) => {
-      const source = `${bond.mol1}_${bond.comp1}`;
-      const target = `${bond.mol2}_${bond.comp2}`;
+      const source = makeComponentKey(bond.mol1, bond.comp1);
+      const target = makeComponentKey(bond.mol2, bond.comp2);
       const edgeKey = `${source}->${target}`;
       if (!edgeMap.has(edgeKey)) {
         edgeMap.set(edgeKey, {
@@ -215,8 +223,8 @@ export function buildContactMap(rules: ReactionRule[], moleculeTypes: BNGLMolecu
     });
     components.forEach((componentName, componentIndex) => {
       const componentId = `${moleculeIndex}.${componentIndex}`;
-      idMap.set(`${moleculeName}_${componentName}`, componentId);
-      const stateKey = `${moleculeName}_${componentName}`;
+      idMap.set(makeComponentKey(moleculeName, componentName), componentId);
+      const stateKey = makeComponentKey(moleculeName, componentName);
       const states = Array.from(componentStateMap.get(stateKey) ?? []).sort();
       nodes.push({
         id: componentId,
