@@ -338,42 +338,45 @@ async function main() {
   console.log('--- Starting BNGL Monorepo Fuzzing Runner ---');
   await initializeNFsimHeadless();
 
-  const baseSeed = 2026;
-  const rng = new SeededRandom(baseSeed);
-
+  const seeds = [42, 2026];
   let successCount = 0;
   let failureCount = 0;
 
-  for (let i = 1; i <= 50; i++) {
-    const { bngl } = generateModel(rng);
-    try {
-      // 60 seconds (60000ms) hang detection as required by the objective
-      await withTimeout(testPipeline(bngl), 60000);
-      successCount++;
-    } catch (err: unknown) {
-      failureCount++;
-      const errorMessage = err instanceof Error ? err.stack || err.message : String(err);
-      console.error(`\n[Fuzzer Failure] Model #${i} failed:`);
-      console.error('--- BNGL Input ---');
-      console.error(bngl);
-      console.error('------------------');
-      console.error(errorMessage);
+  for (const baseSeed of seeds) {
+    console.log(`\n--- Running Fuzzing Sweep with Base Seed ${baseSeed} ---`);
+    const rng = new SeededRandom(baseSeed);
 
-      // Trigger automatic model minimization
-      console.log('\n[Fuzzer Minimizer] Minimizing model...');
-      const expectedMsg = err instanceof Error ? err.message : '';
+    for (let i = 1; i <= 25; i++) {
+      const { bngl } = generateModel(rng);
       try {
-        const minimized = await minimizeBNGL(bngl, expectedMsg);
-        console.log('--- Minimized Reproducing Model ---');
-        console.log(minimized);
-        console.log('-----------------------------------');
-      } catch (minimizeErr) {
-        console.error('[Fuzzer Minimizer] Minimizer failed:', minimizeErr);
+        // 60 seconds (60000ms) hang detection as required by the objective
+        await withTimeout(testPipeline(bngl), 60000);
+        successCount++;
+      } catch (err: unknown) {
+        failureCount++;
+        const errorMessage = err instanceof Error ? err.stack || err.message : String(err);
+        console.error(`\n[Fuzzer Failure] Seed ${baseSeed} Model #${i} failed:`);
+        console.error('--- BNGL Input ---');
+        console.error(bngl);
+        console.error('------------------');
+        console.error(errorMessage);
+
+        // Trigger automatic model minimization
+        console.log('\n[Fuzzer Minimizer] Minimizing model...');
+        const expectedMsg = err instanceof Error ? err.message : '';
+        try {
+          const minimized = await minimizeBNGL(bngl, expectedMsg);
+          console.log('--- Minimized Reproducing Model ---');
+          console.log(minimized);
+          console.log('-----------------------------------');
+        } catch (minimizeErr) {
+          console.error('[Fuzzer Minimizer] Minimizer failed:', minimizeErr);
+        }
       }
     }
   }
 
-  console.log(`\nFuzzing completed: ${successCount} passed, ${failureCount} failed.`);
+  console.log(`\nFuzzing completed: ${successCount} passed, ${failureCount} failed across ${seeds.length} seeds.`);
   if (failureCount > 0) {
     process.exit(1);
   }
