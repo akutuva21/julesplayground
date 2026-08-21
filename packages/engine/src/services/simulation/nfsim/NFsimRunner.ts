@@ -62,29 +62,30 @@ const ensureExpandedNetwork = async (model: BNGLModel): Promise<BNGLModel> => {
  * Executes a network-free simulation using the NFsim simulation engine.
  *
  * This function handles the full lifecycle of an NFsim execution:
- * 1. Validates the input `BNGLModel` to ensure compatibility with NFsim (unsupported features such as
- *    compartments, custom user functions, or `DeleteMolecules` modifiers will reject early).
- * 2. Serializes the model into the BioNetGen XML format using `BNGXMLWriter`.
- * 3. Configures runtime options and sets up a progress callback to intercept stdout lines,
- *    parsing the current simulation time/progress and reporting them via worker message ports.
+ * 1. Validates the input `BNGLModel` using `validateModelForNFsim` (`NFsimValidator.ts`):
+ *    - Model must define species, molecule types, reaction rules, and observables.
+ *    - Rejects observable-dependent rate laws (rate expressions referencing observable names), as NFsim propensities require constant/parameter-based rates.
+ *    - `TotalRate` rule modifiers, custom user functions, and standard math expressions are supported natively (cf. `NFinput.cpp` lines 2230-2243, 2707).
+ * 2. Serializes the model into BioNetGen XML via `BNGXMLWriter`.
+ * 3. Configures runtime options (`cb` complex bookkeeping, `utl`, `gml`, `equilibrate`, `includeSpeciesData`, `includeExpandedNetwork`)
+ *    and attaches a stdout progress listener that parses simulation timestamps (`Sim time`) to report progress.
  * 4. Invokes the underlying NFsim WASM runtime (`runNFsim`).
- * 5. Adapts the resulting raw `.gdat` output into structured `SimulationResults` using the `NFsimResultAdapter`.
+ * 5. Adapts raw `.gdat` output into structured `SimulationResults` using `NFsimResultAdapter`.
  *
  * Fallback Behavior:
- * - If the WASM runtime fails or is unavailable, and `requireRuntime` is not explicitly set in the options,
- *   the function will transparently fall back to an SSA (Stochastic Simulation Algorithm) run.
- *   Before running SSA, it automatically generates/expands the model's reaction network if needed.
+ * - If the WASM runtime fails or is unavailable, and `requireRuntime` is not set (`requireRuntime: false`),
+ *   it automatically expands the network via `generateExpandedNetwork` if necessary and falls back to SSA (`simulate({ method: 'ssa' })`).
  *
- * Environment Invariant:
- * - This function must remain safe for both browser-based Web Worker environments and Node.js/MCP server environments.
- *   As such, any worker communication via `self.postMessage` or `globalThis.postMessage` must be strictly guarded
- *   against `undefined` and type-checked before invocation (i.e. browser-API-free / guarded).
+ * Environment Invariants & Testing:
+ * - Must remain safe for browser Web Worker, Node.js, and headless/MCP server environments.
+ *   Worker message posts via `self.postMessage` or `globalThis.postMessage` are strictly guarded against `undefined`
+ *   to avoid unhandled crashes when running programmatically (validated in `packages/engine/tests/nfsimRunner.spec.ts`).
  *
  * @param inputModel - The BioNetGen Language (BNGL) model to simulate.
- * @param options - Configuration parameters for the NFsim runner (e.g. end time, steps, seed, timeout).
- * @param jobId - Optional unique identifier for the current simulation task, used for tracking worker progress.
- * @returns A promise resolving to the structured `SimulationResults` including species, observables, and/or metadata.
- * @throws {Error} If model validation fails, or if NFsim fails when `options.requireRuntime` is enabled.
+ * @param options - Simulation options (e.g. `t_end`, `n_steps`, `seed`, `includeSpeciesData`, `includeExpandedNetwork`, `requireRuntime`).
+ * @param jobId - Optional unique task ID for progress reporting.
+ * @returns A promise resolving to `SimulationResults` with requested trajectories and metadata.
+ * @throws {Error} If `validateModelForNFsim` checks fail, or if NFsim fails when `options.requireRuntime` is enabled.
  */
 export async function runNFsimSimulation(
   inputModel: BNGLModel,
