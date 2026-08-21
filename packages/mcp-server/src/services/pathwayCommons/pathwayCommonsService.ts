@@ -8,7 +8,7 @@
 import { parseBNGLWithANTLR } from '@bngplayground/engine';
 
 const PC_API_BASE = 'https://www.pathwaycommons.org/pc2';
-const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = 2_000;
 
 export interface PCInteraction {
   source: string;
@@ -178,22 +178,33 @@ export async function queryPathwayCommons(bnglCode: string): Promise<PCQueryResu
   const pathways: PCPathway[] = [];
   const pathwayMap = new Map<string, PCPathway>();
 
-  for (const mol of moleculeNames.slice(0, 5)) {
+  const pathwayPromises = moleculeNames.slice(0, 5).map(async (mol) => {
     try {
       const molPathways = await searchPathways(mol);
-      for (const pw of molPathways) {
-        const existing = pathwayMap.get(pw.name);
-        if (existing) {
-          if (!existing.matchedMolecules.includes(mol)) {
-            existing.matchedMolecules.push(mol);
-          }
-        } else {
-          pathwayMap.set(pw.name, pw);
-        }
-      }
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      return { mol, molPathways };
     } catch {
-      unknownMolecules.push(mol);
+      return { mol, molPathways: null };
+    }
+  });
+
+  const pathwayResults = await Promise.allSettled(pathwayPromises);
+  for (const result of pathwayResults) {
+    if (result.status === 'fulfilled') {
+      const { mol, molPathways } = result.value;
+      if (molPathways) {
+        for (const pw of molPathways) {
+          const existing = pathwayMap.get(pw.name);
+          if (existing) {
+            if (!existing.matchedMolecules.includes(mol)) {
+              existing.matchedMolecules.push(mol);
+            }
+          } else {
+            pathwayMap.set(pw.name, pw);
+          }
+        }
+      } else {
+        unknownMolecules.push(mol);
+      }
     }
   }
 
