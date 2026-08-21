@@ -8,7 +8,7 @@
 import { parseBNGLWithANTLR } from '@bngplayground/engine';
 
 const PC_API_BASE = 'https://www.pathwaycommons.org/pc2';
-const DEFAULT_TIMEOUT_MS = process.env.VITEST ? 200 : 15_000;
+const DEFAULT_TIMEOUT_MS = 15_000;
 
 export interface PCInteraction {
   source: string;
@@ -114,17 +114,6 @@ async function searchPathways(molecule: string): Promise<PCPathway[]> {
 }
 
 export async function queryPathwayCommons(bnglCode: string): Promise<PCQueryResult> {
-  if (process.env.VITEST) {
-    return {
-      interactions: [],
-      missingInteractions: [],
-      confirmedInteractions: [],
-      pathways: [],
-      unknownMolecules: [],
-      summary: 'Mocked Pathway Commons query in test environment.',
-    };
-  }
-
   const parseResult = parseBNGLWithANTLR(bnglCode);
   if (!parseResult.success || !parseResult.model) {
     throw new Error(`Failed to parse BNGL: ${parseResult.errors.map((e) => e.message).join(', ')}`);
