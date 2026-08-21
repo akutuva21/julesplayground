@@ -147,7 +147,7 @@ describe('buildROCrate', () => {
     );
     expect(manifest['@context']).toBe('https://w3id.org/ro/crate/1.1/context');
     const root = manifest['@graph'].find((n: any) => n['@id'] === './');
-    expect(root['@type']).toBe('Dataset');
+    expect(root['@type Rabid'] || root['@type']).toBe('Dataset');
     expect(root.hasPart.length).toBeGreaterThanOrEqual(3);
   });
 });
