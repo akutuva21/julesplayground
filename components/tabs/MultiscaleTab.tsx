@@ -144,6 +144,18 @@ export const MultiscaleTab: React.FC<MultiscaleTabProps> = ({ bnglCode: _bnglCod
               workerRef.current = null;
             }
             break;
+
+          default: {
+            const unknownType = (msg as { type?: string }).type ?? 'unknown';
+            console.error(`[MultiscaleTab] Received unexpected worker message type: ${unknownType}`);
+            setError(`Multiscale worker sent unexpected message type: ${unknownType}`);
+            setIsRunning(false);
+            if (workerRef.current) {
+              workerRef.current.terminate();
+              workerRef.current = null;
+            }
+            break;
+          }
         }
       };
 
