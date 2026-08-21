@@ -46,13 +46,6 @@ export const DEFAULT_SOLVER_OPTIONS: SolverOptions = {
 
 export const SOLVER_ERROR_STIFF_DETECTED = 'STIFF_DETECTED';
 
-export interface SolverReaction {
-  reactants: number[] | Int32Array;
-  products: number[] | Int32Array;
-  rateConstant?: number;
-  isFunctionalRate?: boolean;
-}
-
 export interface SolverOptions {
   atol: number;
   rtol: number;
@@ -62,8 +55,6 @@ export interface SolverOptions {
   initialStep?: number;
   solver: 'auto' | 'auto_detect' | 'cvode' | 'cvode_auto' | 'cvode_sparse' | 'cvode_jac' | 'cvode_adams' | 'rosenbrock23' | 'rk45' | 'rk4' | 'sparse' | 'sparse_implicit' | 'webgpu_rk4';
   jacobianRowMajor?: (y: Float64Array, J: Float64Array) => void;
-  jacobian?: (y: Float64Array, J: Float64Array) => void;
-  speciesNames?: string[];
   stabLimDet?: boolean;
   maxOrd?: number;
   maxNonlinIters?: number;
@@ -77,8 +68,7 @@ export interface SolverOptions {
   /** Enable analytical Jacobian generation from reaction data. Default: true for mass-action, false for functional rates. */
   useAnalyticalJacobian?: boolean;
   /** Reaction data for analytical Jacobian auto-generation (set by SimulationLoop). */
-  reactions?: SolverReaction[];
-  disableNativeBytecode?: boolean;
+  reactions?: unknown[];
 }
 
 export interface SolverResult {

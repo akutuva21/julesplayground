@@ -153,8 +153,6 @@ export async function fitParameters(cfg: FitConfig): Promise<FitResult> {
         atol: 1e-8,
         rtol: 1e-6,
         ...simOptions,
-        includeSpeciesData: false,
-        includeExpandedNetwork: false,
       });
 
       let sse = 0;
@@ -308,8 +306,6 @@ export async function fitParameters(cfg: FitConfig): Promise<FitResult> {
               atol: 1e-8,
               rtol: 1e-6,
               ...simOptions,
-              includeSpeciesData: false,
-              includeExpandedNetwork: false,
             });
 
             let sse = 0;
@@ -425,8 +421,6 @@ export async function fitParameters(cfg: FitConfig): Promise<FitResult> {
       atol: 1e-8,
       rtol: 1e-6,
       ...simOptions,
-      includeSpeciesData: false,
-      includeExpandedNetwork: false,
     });
 
     const finalInterpRows = timePoints.map(t => interpolateRow(finalSim.data, t));

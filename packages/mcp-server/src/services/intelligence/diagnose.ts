@@ -14,7 +14,6 @@ import {
     updateMassActionRates,
     expandModel,
     buildSimulationOptions,
-    withDataOnlySimulationOutput,
     findUnreachableRules,
 } from '../../services/engine.js';
 import { handleSimulate } from '../../handlers/simulate.js';
@@ -213,11 +212,11 @@ export async function diagnoseModelDeep(args: {
 
         plausibilityChecks = checkPlausibility(model.parameters, model.species.map(s => s.name));
 
-        const simOptions = withDataOnlySimulationOutput(buildSimulationOptions({
+        const simOptions = buildSimulationOptions({
             method: args.method,
             t_end: args.t_end,
             n_steps: args.n_steps,
-        }));
+        });
 
         await loadEvaluator();
         const simulateWithOverrides = async (overrides: Record<string, number>) => {

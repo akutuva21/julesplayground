@@ -46,12 +46,6 @@ export async function handleReactionInformationFlow(args: ToolArgs): Promise<Too
         const parsedArgs = parseArgs('reaction_information_flow', reactionInformationFlowArgsSchema, args);
         await loadEvaluator();
 
-        if (!parsedArgs.code || parsedArgs.code.trim() === '') {
-            return createToolResult(structureError(
-                new Error('Model code must be a non-empty, non-blank string.'),
-            ));
-        }
-
         const model = parseModelOrThrow(parsedArgs.code);
         const expanded = await expandModel(model);
 
@@ -137,6 +131,6 @@ export async function handleReactionInformationFlow(args: ToolArgs): Promise<Too
             } : {}),
         });
     } catch (error) {
-        return createToolResult(structureError(error instanceof Error ? error : new Error(String(error), { cause: error })));
+        return createToolResult(structureError(error instanceof Error ? error : new Error(String(error))));
     }
 }

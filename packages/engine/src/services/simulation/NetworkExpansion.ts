@@ -208,37 +208,17 @@ export async function generateExpandedNetwork(
     };
     const resolvedSeedConcentrations = inputModel.species.map((s) => resolveSeedConcentration(s));
 
-    type SeedEntry = {
-        graph: ReturnType<typeof BNGLParser.parseSpeciesGraph>;
-        canonical: string;
-        concentration: number;
-        isConstant: boolean;
-    };
-    const seedEntries: SeedEntry[] = inputModel.species.map((species, index) => ({
-        graph: __seedSpecies[index],
-        canonical: GraphCanonicalizer.canonicalize(__seedSpecies[index]),
-        concentration: resolvedSeedConcentrations[index] ?? 0,
-        isConstant: !!species.isConstant,
-    }));
-
     // CRITICAL FIX (Parity Issue 2): Map Canonical Names -> Initial Concentrations
     // BNG2 evaluates species concentrations *after* parameters.
     // In our Visitor, we pre-evaluate them. Here, we build a lookup map.
     // When generating species, we check this map to assign the correct initial value (e.g. "A0" -> 100).
     // Reference: BNG2.pl parameter evaluation order.
     const seedConcentrationMap = new Map<string, number>();
-    const seedEntryMap = new Map<string, SeedEntry>();
-    const normalizedSeedEntryMap = new Map<string, SeedEntry>();
-    const structuralSeedBuckets = new Map<string, SeedEntry[]>();
-    for (const entry of seedEntries) {
-        seedConcentrationMap.set(entry.canonical, entry.concentration);
-        seedEntryMap.set(entry.canonical, entry);
-        normalizedSeedEntryMap.set(normalizeCompartmentSyntax(entry.canonical), entry);
-        const structuralHash = entry.graph.getStructuralHash();
-        const bucket = structuralSeedBuckets.get(structuralHash);
-        if (bucket) bucket.push(entry);
-        else structuralSeedBuckets.set(structuralHash, [entry]);
-    }
+    inputModel.species.forEach((s, index) => {
+        const g = BNGLParser.parseSpeciesGraph(s.name);
+        const canonicalName = GraphCanonicalizer.canonicalize(g);
+        seedConcentrationMap.set(canonicalName, resolvedSeedConcentrations[index] ?? 0);
+    });
 
     // -------------------------------------------------------------------------
     // 2. Rule Preparation
@@ -608,9 +588,22 @@ export async function generateExpandedNetwork(
 
     checkCancelled();
 
-    if (VERBOSE_NETEXP_DEBUG) {
-        for (const entry of seedEntries) {
-            console.log('[NetworkExpansion] Seed canonical:', entry.canonical, 'Constant:', entry.isConstant);
+    // Map of canonical seed names to their species objects for efficient lookup
+    const seedMap = new Map<string, { isConstant: boolean }>();
+    type SeedEntry = { graph: ReturnType<typeof BNGLParser.parseSpeciesGraph>; concentration: number; isConstant: boolean };
+    const seedEntries = inputModel.species.map((sp, i) => ({
+        graph: __seedSpecies[i],
+        concentration: resolvedSeedConcentrations[i] ?? 0,
+        isConstant: !!sp.isConstant,
+    })) as SeedEntry[];
+    for (const sp of inputModel.species) {
+        try {
+            const seedG = BNGLParser.parseSpeciesGraph(sp.name);
+            const canon = GraphCanonicalizer.canonicalize(seedG);
+            seedMap.set(canon, { isConstant: !!sp.isConstant });
+            if (VERBOSE_NETEXP_DEBUG) console.log('[NetworkExpansion] Seed:', sp.name, '-> Canonical:', canon, 'Constant:', !!sp.isConstant);
+        } catch (e) {
+            console.warn('[NetworkExpansion] Could not parse seed species:', sp.name, e);
         }
     }
 
@@ -620,12 +613,10 @@ export async function generateExpandedNetwork(
 
     // BNG2 Logic: Identify Species and assign Initial Concentrations.
     // Unlike implicit simulation, we must map back to the input "seed" concentrations.
-    const canonicalSpeciesNames = new Array<string>(result.species.length);
-    const generatedSpecies = result.species.map((s: Species, speciesIndex: number) => {
+    const generatedSpecies = result.species.map((s: Species) => {
         // Canonicalize the graph representation for consistent string keys.
         const canonicalName = GraphCanonicalizer.canonicalize(s.graph);
-        canonicalSpeciesNames[speciesIndex] = canonicalName;
-        let matchedSeedEntry = seedEntryMap.get(canonicalName);
+        let matchedSeedEntry: SeedEntry | undefined;
 
         // Lookup exact match in the pre-calculated seed map.
         let concentration = seedConcentrationMap.get(canonicalName);
@@ -635,11 +626,11 @@ export async function generateExpandedNetwork(
         // If exact canonical match fails, we normalize whitespace and 'in' syntax, then try again.
         if (concentration === undefined) {
             const normalizedTarget = normalizeCompartmentSyntax(canonicalName);
-            matchedSeedEntry = normalizedSeedEntryMap.get(normalizedTarget);
-            concentration = matchedSeedEntry?.concentration;
-            if (concentration !== undefined) {
-                if (VERBOSE_NETEXP_DEBUG) {
-                    console.log(`[NetworkExpansion] Found concentration via loose match for '${canonicalName}': ${concentration}`);
+            for (const [seedCanon, seedConc] of seedConcentrationMap.entries()) {
+                if (normalizeCompartmentSyntax(seedCanon) === normalizedTarget) {
+                    concentration = seedConc;
+                    if (VERBOSE_NETEXP_DEBUG) console.log(`[NetworkExpansion] Found concentration via loose match for '${canonicalName}': ${concentration}`);
+                    break;
                 }
             }
         }
@@ -647,8 +638,7 @@ export async function generateExpandedNetwork(
         // Structural fallback for canonicalization-order discrepancies.
         // This ensures seed concentrations transfer even if canonical string formatting differs.
         if (concentration === undefined) {
-            const candidates = structuralSeedBuckets.get(s.graph.getStructuralHash()) ?? [];
-            for (const entry of candidates) {
+            for (const entry of seedEntries) {
                 const forward = GraphMatcher.matchesPattern(entry.graph, s.graph);
                 if (!forward) continue;
                 const backward = GraphMatcher.matchesPattern(s.graph, entry.graph);
@@ -669,7 +659,8 @@ export async function generateExpandedNetwork(
 
         // Check if this species was marked as "Constant" (Fixed concentration) in inputs.
         // Reference: BNG2 "Species" block attributes.
-        const isConstant = matchedSeedEntry?.isConstant ?? false;
+        const seedInfo = seedMap.get(canonicalName);
+        const isConstant = seedInfo?.isConstant ?? matchedSeedEntry?.isConstant ?? false;
 
         if (VERBOSE_NETEXP_DEBUG) {
             console.log(`[NetworkExpansion] Expanded Species: '${canonicalName}', Conc: ${concentration}, Constant: ${isConstant}`);
@@ -719,8 +710,8 @@ export async function generateExpandedNetwork(
             const preservedRate = foldedRateExpression || extRxn.originalRate || String(extRxn.rate);
 
             const reaction = {
-                reactants: extRxn.reactants.map((ridx: number) => canonicalSpeciesNames[ridx]),
-                products: extRxn.products.map((pidx: number) => canonicalSpeciesNames[pidx]),
+                reactants: extRxn.reactants.map((ridx: number) => GraphCanonicalizer.canonicalize(result.species[ridx].graph)),
+                products: extRxn.products.map((pidx: number) => GraphCanonicalizer.canonicalize(result.species[pidx].graph)),
                 rate: preservedRate,
                 rateConstant: typeof extRxn.rate === 'number' ? extRxn.rate : 0,
                 isFunctionalRate,
@@ -757,17 +748,51 @@ export async function generateExpandedNetwork(
     // Optimized Approach: Filter candidate species by molecule content first.
     // Reduces complexity to O(O * Candidates), massive speedup for large networks.
     const molToSpecies = new Map<string, Set<number>>();
-    result.species.forEach((species, idx) => {
-        // The generator already retains parsed species graphs. Index their
-        // molecule names directly instead of reparsing every canonical species
-        // string after expansion.
-        for (const molecule of species.graph.molecules) {
-            let indices = molToSpecies.get(molecule.name);
-            if (!indices) {
-                indices = new Set<number>();
-                molToSpecies.set(molecule.name, indices);
+    generatedSpecies.forEach((s, idx) => {
+        // Extract base molecule names from the string representation
+        // ⚡ Bolt Optimization: Use fast index-based parsing instead of chained array
+        // methods (.split.map) and regular expressions to avoid allocation overhead in hot loops.
+        const mols: string[] = [];
+        const name = s.name;
+        let start = 0;
+        while (start < name.length) {
+            let dotIdx = name.indexOf('.', start);
+            if (dotIdx === -1) dotIdx = name.length;
+
+            let mStart = start;
+            if (name.charCodeAt(mStart) === 64) { // '@'
+                const colonIdx = name.indexOf(':', mStart);
+                if (colonIdx > 0 && colonIdx < dotIdx) {
+                    if (name.charCodeAt(colonIdx + 1) === 58) { // ':'
+                        mStart = colonIdx + 2;
+                    } else {
+                        mStart = colonIdx + 1;
+                    }
+                }
             }
-            indices.add(idx);
+
+            const parenIdx = name.indexOf('(', mStart);
+            let mEnd = parenIdx !== -1 && parenIdx < dotIdx ? parenIdx : dotIdx;
+
+            let lastAtIdx = -1;
+            for (let i = mEnd - 1; i >= mStart; i--) {
+                if (name.charCodeAt(i) === 64) { // '@'
+                    lastAtIdx = i;
+                    break;
+                }
+            }
+            if (lastAtIdx !== -1) {
+                mEnd = lastAtIdx;
+            }
+
+            mols.push(name.substring(mStart, mEnd));
+            start = dotIdx + 1;
+        }
+
+        for (let i = 0; i < mols.length; i++) {
+            const m = mols[i];
+            if (!molToSpecies.has(m)) molToSpecies.set(m, new Set());
+            molToSpecies.get(m)!.add(idx);
         }
     });
 

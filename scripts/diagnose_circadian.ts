@@ -32,10 +32,7 @@ async function main() {
   console.log("================================================================");
 
   // 1. Load and parse model
-  const rulehubRoot = process.env.RULEHUB_ROOT || '';
-  const modelPath = rulehubRoot
-    ? `${rulehubRoot}/Published/vilar2002/vilar_2002.bngl`
-    : '';
+  const modelPath = 'C:\\Users\\Achyudhan\\OneDrive - University of Pittsburgh\\Desktop\\Achyudhan\\School\\PhD\\Research\\BioNetGen\\RuleHub\\Published\\vilar2002\\vilar_2002.bngl';
   console.log(`\n[1/5] Loading model from: ${modelPath}`);
   
   if (!fs.existsSync(modelPath)) {

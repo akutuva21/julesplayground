@@ -19,7 +19,6 @@ export default defineConfig({
       'tests/**/*debug*.{test,spec}.ts',
       'tests/**/*Debug*.{test,spec}.ts',
       'tests/**/*benchmark*.{test,spec}.ts',
-      'tests/profile-everything.spec.ts',
       'tests/*isolated*.{test,spec}.ts',
       'tests/*repro*.{test,spec}.ts',
       'tests/*spawnsync*.{test,spec}.ts',

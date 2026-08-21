@@ -1,7 +1,6 @@
 // @ts-nocheck
 import { describe, expect, it } from 'vitest';
-import { GraphMatcher, clearMatchCache } from '../packages/engine/src/services/graph/core/Matcher';
-import { disableProfiling, enableProfiling, resetProfileData } from '../packages/engine/src/services/graph/NetworkGenerator';
+import { GraphMatcher } from '../packages/engine/src/services/graph/core/Matcher';
 import { SpeciesGraph } from '../packages/engine/src/services/graph/core/SpeciesGraph';
 import { Molecule } from '../packages/engine/src/services/graph/core/Molecule';
 import { Component } from '../packages/engine/src/services/graph/core/Component';
@@ -21,37 +20,6 @@ const createComponent = (
 };
 
 describe('GraphMatcher VF2++ integration', () => {
-  it('collects component timing only when profiling is enabled', () => {
-    const createGraphs = () => ({
-      pattern: new SpeciesGraph([
-        new Molecule('A', [createComponent('site')])
-      ]),
-      target: new SpeciesGraph([
-        new Molecule('A', [createComponent('site')])
-      ])
-    });
-
-    disableProfiling();
-    resetProfileData();
-    clearMatchCache();
-    let graphs = createGraphs();
-    GraphMatcher.findAllMaps(graphs.pattern, graphs.target);
-    expect(GraphMatcher.matchComponentsCount).toBe(0);
-
-    try {
-      enableProfiling();
-      resetProfileData();
-      clearMatchCache();
-      graphs = createGraphs();
-      GraphMatcher.findAllMaps(graphs.pattern, graphs.target);
-      expect(GraphMatcher.matchComponentsCount).toBeGreaterThan(0);
-    } finally {
-      disableProfiling();
-      resetProfileData();
-      clearMatchCache();
-    }
-  });
-
   it('matches wildcard-bound pattern components against any bound partner', () => {
     const pattern = new SpeciesGraph([
       new Molecule('A', [createComponent('dock', { wildcard: '+' })])

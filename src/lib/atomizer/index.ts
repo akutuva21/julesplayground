@@ -21,7 +21,6 @@ import {
 import { SBMLParser } from './parser/sbmlParser';
 import {
   buildSpeciesCompositionTable,
-  disambiguateCollidingSpecies,
   getMoleculeTypes,
   getSeedSpecies,
   analyzeReactions,
@@ -145,12 +144,6 @@ export class Atomizer {
         memoizedResolver: this.options.memoizedResolver,
         atomize: this.options.atomize,
       });
-
-      // Disambiguate colliding species (isoform collapse)
-      const nDisambig = disambiguateCollidingSpecies(this.sct, this.model);
-      if (nDisambig > 0) {
-        logger.info('ATM008', `Disambiguated ${nDisambig} colliding species (isoform collapse)`);
-      }
 
       // Get molecule types
       const moleculeTypes = getMoleculeTypes(this.sct);
@@ -503,7 +496,6 @@ export { Species, Molecule, Component, Databases } from './core/structures';
 export { SBMLParser } from './parser/sbmlParser';
 export {
   buildSpeciesCompositionTable,
-  disambiguateCollidingSpecies,
   getMoleculeTypes,
   getSeedSpecies,
   analyzeReactions,

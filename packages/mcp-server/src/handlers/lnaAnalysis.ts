@@ -36,18 +36,10 @@ export async function handleLnaAnalysis(args: ToolArgs): Promise<ToolResult<any>
         const parsedArgs = parseArgs('lna_analysis', lnaAnalysisArgsSchema, args);
         await loadEvaluator();
 
-        if (!parsedArgs.code || parsedArgs.code.trim() === '') {
-            return createToolResult(structureError(
-                new Error('Model code must be a non-empty and non-blank string.'),
-            ));
-        }
-
         const model = parseModelOrThrow(parsedArgs.code);
         const expanded = await expandModel(model);
 
-        const mode = parsedArgs.mode ?? 'steady_state';
-
-        if (mode === 'time_course' && parsedArgs.t_end === undefined) {
+        if (parsedArgs.mode === 'time_course' && parsedArgs.t_end === undefined) {
             return createToolResult(structureError(
                 new Error('mode="time_course" requires t_end'),
             ));
@@ -62,7 +54,7 @@ export async function handleLnaAnalysis(args: ToolArgs): Promise<ToolResult<any>
 
         const volume = parsedArgs.volume ?? 1;
 
-        if (mode === 'steady_state') {
+        if (parsedArgs.mode === 'steady_state') {
             const result = computeLNASteadyState({
                 model,
                 reactions,
@@ -123,6 +115,6 @@ export async function handleLnaAnalysis(args: ToolArgs): Promise<ToolResult<any>
                 : {}),
         });
     } catch (error) {
-        return createToolResult(structureError(error instanceof Error ? error : new Error(String(error), { cause: error })));
+        return createToolResult(structureError(error instanceof Error ? error : new Error(String(error))));
     }
 }

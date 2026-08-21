@@ -4,60 +4,44 @@ import subprocess
 import numpy as np
 import scipy.linalg as la
 
-BNG2_PATH = os.environ.get("BNG2_PATH", "")
-RULEHUB_ROOT = os.environ.get("RULEHUB_ROOT", "")
-MODEL_PATH = os.path.join(RULEHUB_ROOT, "Published", "vilar2002", "vilar_2002.bngl")
+BNG2_PATH = r"C:\Users\Achyudhan\anaconda3\envs\Research\Lib\site-packages\bionetgen\bng-win\BNG2.pl"
+MODEL_PATH = r"C:\Users\Achyudhan\OneDrive - University of Pittsburgh\Desktop\Achyudhan\School\PhD\Research\BioNetGen\RuleHub\Published\vilar2002\vilar_2002.bngl"
 
 # Nominal parameters
-PARAM_NAMES = ["k1", "k2", "k3", "k4", "k5", "k6", "k7", "k8", "k9", "k10"]
+PARAM_NAMES = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8', 'k9', 'k10']
 NOMINAL_VALUES = {
-    "k1": 0.01,
-    "k2": 0.2,
-    "k3": 0.5,
-    "k4": 1.0,
-    "k5": 2.0,
-    "k6": 10.0,
-    "k7": 50.0,
-    "k8": 100.0,
-    "k9": 500.0,
-    "k10": 5.0,
+    'k1': 0.01, 'k2': 0.2, 'k3': 0.5, 'k4': 1.0, 'k5': 2.0,
+    'k6': 10.0, 'k7': 50.0, 'k8': 100.0, 'k9': 500.0, 'k10': 5.0
 }
 
-
 def load_and_normalize_bngl(path):
-    with open(path, "r") as f:
+    with open(path, 'r') as f:
         code = f.read()
     # Normalize molecular types -> molecule types
-    code = re.sub(r"molecular\s+types", "molecule types", code, flags=re.IGNORECASE)
+    code = re.sub(r'molecular\s+types', 'molecule types', code, flags=re.IGNORECASE)
     return code
-
 
 def write_and_run_bng(code, outdir, filename="model.bngl"):
     os.makedirs(outdir, exist_ok=True)
     bngl_file = os.path.join(outdir, filename)
-    with open(bngl_file, "w") as f:
+    with open(bngl_file, 'w') as f:
         f.write(code)
 
     # Run BNG2.pl
     cmd = ["perl", BNG2_PATH, "--outdir", outdir, bngl_file]
-    result = subprocess.run(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0:
-        raise RuntimeError(
-            f"BioNetGen failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-        )
+        raise RuntimeError(f"BioNetGen failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
     return bngl_file
 
-
 def parse_gdat(gdat_path):
-    with open(gdat_path, "r") as f:
+    with open(gdat_path, 'r') as f:
         lines = f.readlines()
     header = lines[0].strip().split()
     # Remove leading '#' if present
-    if header[0] == "#":
+    if header[0] == '#':
         header = header[1:]
-    elif header[0].startswith("#"):
+    elif header[0].startswith('#'):
         header[0] = header[0][1:]
 
     data = []
@@ -65,7 +49,6 @@ def parse_gdat(gdat_path):
         if line.strip():
             data.append([float(x) for x in line.strip().split()])
     return header, np.array(data)
-
 
 def simulate_ode_with_params(param_overrides):
     # Prepare model text with overrides
@@ -78,16 +61,11 @@ def simulate_ode_with_params(param_overrides):
         param_block += f"    {name} {val}\n"
     param_block += "end parameters"
 
-    model_code = re.sub(
-        r"begin\s+parameters.*?end\s+parameters",
-        param_block,
-        model_code,
-        flags=re.DOTALL | re.IGNORECASE,
-    )
+    model_code = re.sub(r'begin\s+parameters.*?end\s+parameters', param_block, model_code, flags=re.DOTALL | re.IGNORECASE)
 
     # Set simulate_ode parameters
     sim_cmd = 'simulate_ode({suffix=>"ode",t_start=>0,t_end=>200,n_steps=>100});'
-    model_code = re.sub(r"simulate_ode\(.*?\);", sim_cmd, model_code)
+    model_code = re.sub(r'simulate_ode\(.*?\);', sim_cmd, model_code)
 
     # Run
     outdir = "temp_bng_fim"
@@ -98,7 +76,6 @@ def simulate_ode_with_params(param_overrides):
     headers, data = parse_gdat(gdat_file)
     return headers, data
 
-
 def compute_fim_python():
     print("Computing Fisher Information Matrix using BNG2.pl as ODE solver...")
     epsilon = 1e-4
@@ -107,12 +84,12 @@ def compute_fim_python():
     headers, base_data = simulate_ode_with_params(NOMINAL_VALUES)
     time_pts = base_data[:, 0]
     # We want observables A and R
-    idx_A = headers.index("A")
-    idx_R = headers.index("R")
+    idx_A = headers.index('A')
+    idx_R = headers.index('R')
 
     n_params = len(PARAM_NAMES)
     n_timepoints = len(time_pts)
-    n_observables = 2  # A and R
+    n_observables = 2 # A and R
 
     # Sensitivities array
     # Shape: (n_timepoints * n_observables, n_params)
@@ -157,9 +134,8 @@ def compute_fim_python():
 
     return FIM, eigenvalues, cond_num, vifs
 
-
 def parse_net_file(net_path):
-    with open(net_path, "r") as f:
+    with open(net_path, 'r') as f:
         lines = f.readlines()
 
     species = []
@@ -169,56 +145,55 @@ def parse_net_file(net_path):
     mode = None
     for line in lines:
         line = line.strip()
-        if not line or line.startswith("#"):
+        if not line or line.startswith('#'):
             continue
-        if line.startswith("begin parameters"):
-            mode = "parameters"
+        if line.startswith('begin parameters'):
+            mode = 'parameters'
             continue
-        if line.startswith("end parameters"):
+        if line.startswith('end parameters'):
             mode = None
             continue
-        if line.startswith("begin species"):
-            mode = "species"
+        if line.startswith('begin species'):
+            mode = 'species'
             continue
-        if line.startswith("end species"):
+        if line.startswith('end species'):
             mode = None
             continue
-        if line.startswith("begin reactions"):
-            mode = "reactions"
+        if line.startswith('begin reactions'):
+            mode = 'reactions'
             continue
-        if line.startswith("end reactions"):
+        if line.startswith('end reactions'):
             mode = None
             continue
 
-        if mode == "parameters":
+        if mode == 'parameters':
             # format: index name value
             parts = line.split()
             parameters[parts[1]] = float(parts[2])
-        elif mode == "species":
+        elif mode == 'species':
             # format: index pattern initial_conc
             parts = line.split()
-            species.append(
-                {"id": int(parts[0]), "pattern": parts[1], "initial": float(parts[2])}
-            )
-        elif mode == "reactions":
+            species.append({
+                'id': int(parts[0]),
+                'pattern': parts[1],
+                'initial': float(parts[2])
+            })
+        elif mode == 'reactions':
             # format: index reactants products rate_expr [comment]
             parts = line.split()
-            reactants = [int(x) for x in parts[1].split(",") if x != "0"]
-            products = [int(x) for x in parts[2].split(",") if x != "0"]
+            reactants = [int(x) for x in parts[1].split(',') if x != '0']
+            products = [int(x) for x in parts[2].split(',') if x != '0']
             rate_expr = parts[3]
             comment = parts[4] if len(parts) > 4 else ""
-            reactions.append(
-                {
-                    "id": int(parts[0]),
-                    "reactants": reactants,
-                    "products": products,
-                    "rate_expr": rate_expr,
-                    "name": comment.replace("#", "").strip(),
-                }
-            )
+            reactions.append({
+                'id': int(parts[0]),
+                'reactants': reactants,
+                'products': products,
+                'rate_expr': rate_expr,
+                'name': comment.replace('#', '').strip()
+            })
 
     return parameters, species, reactions
-
 
 def run_python_ssa(parameters, species, reactions, t_end=400, seed=42):
     np.random.seed(seed)
@@ -226,20 +201,20 @@ def run_python_ssa(parameters, species, reactions, t_end=400, seed=42):
     n_reactions = len(reactions)
 
     # Initial concentrations
-    y = np.zeros(n_species + 1)  # 1-based indexing
+    y = np.zeros(n_species + 1) # 1-based indexing
     for sp in species:
-        y[sp["id"]] = sp["initial"]
+        y[sp['id']] = sp['initial']
 
     t = 0.0
     firing_events = []
 
     # Map parameter names to values
-    rates = [parameters[r["rate_expr"]] for r in reactions]
+    rates = [parameters[r['rate_expr']] for r in reactions]
 
     # Pre-map reactants and products stoichiometry
-    rxn_reactants = [r["reactants"] for r in reactions]
-    rxn_products = [r["products"] for r in reactions]
-    rxn_names = [r["name"] for r in reactions]
+    rxn_reactants = [r['reactants'] for r in reactions]
+    rxn_products = [r['products'] for r in reactions]
+    rxn_names = [r['name'] for r in reactions]
 
     while t < t_end:
         # Compute propensities
@@ -252,7 +227,7 @@ def run_python_ssa(parameters, species, reactions, t_end=400, seed=42):
             elif len(reac) == 1:
                 propensities[r_idx] = k * y[reac[0]]
             elif len(reac) == 2:
-                if reac[0] == reac[1]:  # homodimer
+                if reac[0] == reac[1]: # homodimer
                     propensities[r_idx] = k * y[reac[0]] * (y[reac[0]] - 1) / 2.0
                 else:
                     propensities[r_idx] = k * y[reac[0]] * y[reac[1]]
@@ -287,12 +262,13 @@ def run_python_ssa(parameters, species, reactions, t_end=400, seed=42):
         for sp_id in prod:
             y[sp_id] += 1
 
-        firing_events.append(
-            {"time": t, "reactionIndex": chosen_rxn, "ruleName": rxn_names[chosen_rxn]}
-        )
+        firing_events.append({
+            'time': t,
+            'reactionIndex': chosen_rxn,
+            'ruleName': rxn_names[chosen_rxn]
+        })
 
     return firing_events
-
 
 def binary_entropy(p1):
     if p1 <= 0 or p1 >= 1:
@@ -300,15 +276,14 @@ def binary_entropy(p1):
     p0 = 1.0 - p1
     return -p1 * np.log2(p1) - p0 * np.log2(p0)
 
-
 def analyze_entropy_python(firing_events, n_reactions, t_end=400, bin_width=1.0):
     n_bins = int(np.ceil(t_end / bin_width))
     series = np.zeros((n_reactions, n_bins), dtype=np.uint8)
 
     for event in firing_events:
-        bin_idx = int(np.floor(event["time"] / bin_width))
+        bin_idx = int(np.floor(event['time'] / bin_width))
         if 0 <= bin_idx < n_bins:
-            series[event["reactionIndex"], bin_idx] = 1
+            series[event['reactionIndex'], bin_idx] = 1
 
     entropies = []
     for r in range(n_reactions):
@@ -318,7 +293,6 @@ def analyze_entropy_python(firing_events, n_reactions, t_end=400, bin_width=1.0)
 
     return entropies
 
-
 def main():
     print("================================================================")
     # 1. Compute ODE FIM in Python
@@ -326,9 +300,7 @@ def main():
 
     print("\n[PYTHON] FIM Eigenvalues:")
     for i, val in enumerate(eigenvalues):
-        print(
-            f"  L{i + 1}: {val.toExponential(4) if hasattr(val, 'toExponential') else f'{val:.4e}'}"
-        )
+        print(f"  L{i + 1}: {val.toExponential(4) if hasattr(val, 'toExponential') else f'{val:.4e}'}")
     print(f"[PYTHON] FIM Condition Number: {cond_num:.4e}")
 
     print("\n[PYTHON] Variance Inflation Factors (VIF):")
@@ -338,9 +310,7 @@ def main():
     # 2. Run Python SSA and Entropy
     print("\nParsing net file for Gillespie SSA...")
     parameters, species, reactions = parse_net_file("temp_bng/vilar_2002.net")
-    print(
-        f"Loaded {len(species)} species and {len(reactions)} reactions from BioNetGen .net file."
-    )
+    print(f"Loaded {len(species)} species and {len(reactions)} reactions from BioNetGen .net file.")
 
     print("Running Gillespie SSA in Python...")
     firing_events = run_python_ssa(parameters, species, reactions, t_end=400)
@@ -352,10 +322,9 @@ def main():
     # Sort by entropy descending
     entropies_sorted = sorted(entropies, key=lambda x: x[1], reverse=True)
     for r, h in entropies_sorted[:10]:
-        print(f"  Reaction R{r + 1} ({reactions[r]['name']}): {h:.4f} bits")
+        print(f"  Reaction R{r+1} ({reactions[r]['name']}): {h:.4f} bits")
 
     print("================================================================")
-
 
 if __name__ == "__main__":
     main()

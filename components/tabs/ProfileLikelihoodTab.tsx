@@ -98,8 +98,6 @@ export const ProfileLikelihoodTab: React.FC<ProfileLikelihoodTabProps> = ({ mode
           method: 'ode',
           t_end: Math.max(...parsedData.map(d => d.time)),
           n_steps: 20,
-          includeSpeciesData: false,
-          includeExpandedNetwork: false,
         }, { signal: abortController.signal });
         return { data: results.data };
       };

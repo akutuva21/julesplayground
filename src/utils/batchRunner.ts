@@ -127,7 +127,6 @@ export async function runModels(modelNames?: string[]) {
 
     let successCount = 0;
     let failCount = 0;
-    let skippedCount = 0;
 
     const globalAny = (typeof window !== 'undefined' ? (window as any) : undefined);
     const batchSeed = typeof globalAny?.__batchSeed === 'number' ? globalAny.__batchSeed : undefined;
@@ -135,29 +134,25 @@ export async function runModels(modelNames?: string[]) {
         console.log(`[Batch] Using deterministic seed: ${batchSeed}`);
     }
 
-    const strictFunctionalRates = globalAny?.__batchStrictFunctionalRates === true;
-
     const options = {
         simulator: appSimulator,
         reporter: appReporter,
         verbose: VERBOSE_BATCH_RUNNER,
-        nfSimModels: NFSIM_MODELS,
-        ...(strictFunctionalRates ? { strictFunctionalRates: true } : {})
+        nfSimModels: NFSIM_MODELS
     };
 
     for (const modelDef of modelsToProcess) {
-        const status = await runSingleBatchItem(options, modelDef, batchSeed);
-        if (status === 'success') successCount++;
-        else if (status === 'skipped') skippedCount++;
+        const success = await runSingleBatchItem(options, modelDef, batchSeed);
+        if (success) successCount++;
         else failCount++;
 
         // Slight delay to allow browser to breathe/download
         await new Promise(r => setTimeout(r, 500));
     }
 
-    console.log(`Batch Run Complete. Success: ${successCount}, Failed: ${failCount}, Skipped: ${skippedCount}`);
+    console.log(`Batch Run Complete. Success: ${successCount}, Failed: ${failCount}`);
     console.groupEnd();
-    return { success: successCount, failed: failCount, skipped: skippedCount };
+    return { success: successCount, failed: failCount };
 }
 
 export function getModelEntries() {
@@ -197,8 +192,7 @@ if (typeof window !== 'undefined') {
             simulator: appSimulator,
             reporter: appReporter,
             verbose: VERBOSE_BATCH_RUNNER,
-            nfSimModels: NFSIM_MODELS,
-            ...(globalAny?.__batchStrictFunctionalRates === true ? { strictFunctionalRates: true } : {})
+            nfSimModels: NFSIM_MODELS
         };
 
         return runSingleBatchItem(options, { name, code, id: name }, batchSeed);

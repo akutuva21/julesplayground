@@ -48,13 +48,11 @@ export function parseObservablePattern(pattern: string): SpeciesGraph {
 
   try {
     return BNGLParser.parseSpeciesGraph(trimmed);
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
+  } catch (e: any) {
     throw new Error(
-      `Invalid BNGL pattern "${pattern}": ${message}. ` +
+      `Invalid BNGL pattern "${pattern}": ${e.message}. ` +
       'Check the pattern syntax - molecules are joined by ".", components are in parentheses, ' +
-      'and bonds use "!" (e.g., "A(b!1).B(a!1)").',
-      { cause: e }
+      'and bonds use "!" (e.g., "A(b!1).B(a!1)").'
     );
   }
 }
@@ -90,9 +88,8 @@ export function computeObservableValue(
       try {
         speciesGraph = BNGLParser.parseSpeciesGraph(speciesName);
         speciesGraphs.set(speciesName, speciesGraph);
-      } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
-        console.warn(`[computeObservableValue] Failed to parse species '${speciesName}': ${message}`);
+      } catch (e: any) {
+        console.warn(`[computeObservableValue] Failed to parse species '${speciesName}': ${e.message}`);
         continue;
       }
     }
@@ -179,7 +176,7 @@ export function computeDynamicObservable(
 
       uniqueTokenValues.set(token, values);
       hit.values = values;
-    } catch {
+    } catch (e) {
       // Not a valid pattern, let it pass through to evaluateExpression as a possible parameter
     }
   }
@@ -271,7 +268,7 @@ export function validateObservablePattern(pattern: string): string | null {
     }
 
     return null;
-  } catch (e: unknown) {
-    return e instanceof Error ? e.message : String(e);
+  } catch (e: any) {
+    return e.message;
   }
 }

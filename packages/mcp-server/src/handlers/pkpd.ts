@@ -1,12 +1,11 @@
 import { ToolArgs, ToolResult } from '../types/index.js';
-import { createToolResult, parseArgs, parseModelOrThrow, expandModel } from '../services/engine.js';
-import { pkpdArgsSchema } from '../schemas/index.js';
+import { createToolResult, parseModelOrThrow, expandModel } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
 import { simulate, loadEvaluator } from '@bngplayground/engine';
 
 export async function handlePKPD(args: ToolArgs): Promise<ToolResult<any>> {
+  const parsedArgs = (args ?? {}) as any;
   try {
-    const parsedArgs = parseArgs('pkpd', pkpdArgsSchema, args);
     const engine = await import('@bngplayground/engine') as any;
     await loadEvaluator();
 
@@ -104,6 +103,6 @@ export async function handlePKPD(args: ToolArgs): Promise<ToolResult<any>> {
         throw new Error(`Unknown action: ${parsedArgs.action}`);
     }
   } catch (error: any) {
-    return createToolResult(structureError(error instanceof Error ? error : new Error(String(error), { cause: error })));
+    return createToolResult(structureError(error instanceof Error ? error : new Error(String(error))));
   }
 }
