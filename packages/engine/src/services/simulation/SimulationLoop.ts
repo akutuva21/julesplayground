@@ -1552,6 +1552,16 @@ export async function simulate(
         return ssaObsRecord;
       };
 
+      // ⚡ Bolt Optimization: Pre-filter safe species headers once for SSA snapshots
+      const safeSpeciesHeaders: string[] = [];
+      const safeSpeciesIndices: number[] = [];
+      for (let i = 0; i < speciesHeaders.length; i++) {
+        if (isSafeObjectKey(speciesHeaders[i])) {
+          safeSpeciesHeaders.push(speciesHeaders[i]);
+          safeSpeciesIndices.push(i);
+        }
+      }
+
       // Extract meaningful reaction names from ruleName or reactants/products
       const ruleNames = concreteReactions.map((rxn) => {
         if (rxn.ruleName) return rxn.ruleName;
@@ -1878,7 +1888,9 @@ export async function simulate(
           pushDataRow(phase.suffix, outT0, state as Float64Array);
           if (includeSpeciesData) {
             const speciesPoint0: Record<string, number> = { time: outT0 };
-            for (let i = 0; i < numSpecies; i++) setSafeNumberField(speciesPoint0, speciesHeaders[i], state[i]);
+            for (let i = 0; i < safeSpeciesHeaders.length; i++) {
+              setSafeNumberField(speciesPoint0, safeSpeciesHeaders[i], state[safeSpeciesIndices[i]]);
+            }
             appendSpeciesSnapshot(phase.suffix, speciesPoint0);
           }
         }
@@ -1978,10 +1990,20 @@ export async function simulate(
             }
             reactionIndex = idx < numReactions ? idx : 0;
           } else {
-            reactionIndex = selectLinear(r2);
+            const p = propensities;
+            const n = numReactions;
+            let sum = 0;
+            let idx = n - 1;
+            for (let i = 0; i < n; i++) {
+              sum += p[i];
+              if (r2 <= sum) {
+                idx = i;
+                break;
+              }
+            }
+            reactionIndex = idx;
           }
 
-          const firedRxn = concreteReactions[reactionIndex];
           totalEvents++;
           nEventsThisPhase++;
 
@@ -1996,6 +2018,7 @@ export async function simulate(
           // === DIN INFLUENCE TRACKING: Capture old propensities BEFORE state change ===
           let numAffected = 0;
           if (includeInfluence && ruleFirings && windowRuleFirings && affectedReactionIndices && oldPropensityValues) {
+            const firedRxn = concreteReactions[reactionIndex];
             ruleFirings[reactionIndex]++;
             windowRuleFirings[reactionIndex]++;
 
@@ -2161,8 +2184,8 @@ export async function simulate(
                 pushDataRow(phase.suffix, outT, state as Float64Array);
                 if (includeSpeciesData) {
                   const sp: Record<string, number> = { time: outT };
-                  for (let k = 0; k < numSpecies; k++) {
-                    setSafeNumberField(sp, speciesHeaders[k], state[k]);
+                    for (let k = 0; k < safeSpeciesHeaders.length; k++) {
+                      setSafeNumberField(sp, safeSpeciesHeaders[k], state[safeSpeciesIndices[k]]);
                   }
                   appendSpeciesSnapshot(phase.suffix, sp);
                 }
@@ -2188,7 +2211,9 @@ export async function simulate(
             pushDataRow(phase.suffix, outT, state as Float64Array);
             if (includeSpeciesData) {
               const sp: Record<string, number> = { time: outT };
-              for (let k = 0; k < numSpecies; k++) setSafeNumberField(sp, speciesHeaders[k], state[k]);
+              for (let k = 0; k < safeSpeciesHeaders.length; k++) {
+                setSafeNumberField(sp, safeSpeciesHeaders[k], state[safeSpeciesIndices[k]]);
+              }
               appendSpeciesSnapshot(phase.suffix, sp);
             }
             nextOutIdx++;
