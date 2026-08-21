@@ -72,7 +72,7 @@ export const TrajectoryExplorerTab: React.FC<TrajectoryExplorerTabProps> = ({ mo
                 t_end: Number(defaults.tEnd) || 100,
                 n_steps: Number(defaults.nSteps) || 100,
                 includeInfluence: false, // Disable DIN for maximum speed in explorer
-                includeSpeciesData: true, // Enable species data for .cdat export
+                includeSpeciesData: false, // Keep false by default to prevent memory growth in ensembles
                 includeExpandedNetwork: false,
                 // Stochastic seed (SSA, PLA, PSA, NFsim)
                 ...(seed ? { seed: parseInt(seed) } : {}),
@@ -154,6 +154,10 @@ export const TrajectoryExplorerTab: React.FC<TrajectoryExplorerTabProps> = ({ mo
 
     const exportCdat = () => {
         if (!selectedResult || selectedRunIdx === null) return;
+        if (!selectedResult.speciesData || selectedResult.speciesData.length === 0) {
+            setError('Species data is not included in ensemble runs by default to save memory. Re-run or run a single simulation to export species concentrations.');
+            return;
+        }
         const cdatContent = cdatFromResults(selectedResult);
         const runId = runs[selectedRunIdx].id;
         downloadTextFile(cdatContent, `run_${runId}_species.cdat`, 'text/plain');

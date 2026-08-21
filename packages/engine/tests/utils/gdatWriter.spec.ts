@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { gdatFromResults } from '../../src/utils/gdatWriter';
+import { gdatFromResults, cdatFromResults } from '../../src/utils/gdatWriter';
 import type { SimulationResults } from '../../src/types';
 
 describe('gdatFromResults', () => {
@@ -77,5 +77,35 @@ describe('gdatFromResults', () => {
 1\tNaN\tNaN
 `;
     expect(gdatFromResults(results)).toBe(expected);
+  });
+});
+
+describe('cdatFromResults', () => {
+  it('should correctly format speciesData into a cdat string', () => {
+    const results: SimulationResults = {
+      headers: ['time', 'ObsA'],
+      data: [{ time: 0, ObsA: 10 }],
+      speciesHeaders: ['S1', 'S2'],
+      speciesData: [
+        { time: 0, S1: 100, S2: 50 },
+        { time: 1, S1: 90, S2: 60 }
+      ]
+    };
+
+    const expected = `# time\tS1\tS2
+0\t100\t50
+1\t90\t60
+`;
+
+    expect(cdatFromResults(results)).toBe(expected);
+  });
+
+  it('should return empty header (# time\\n) when speciesData is missing or empty, avoiding observable leak', () => {
+    const results: SimulationResults = {
+      headers: ['time', 'Obs1', 'Obs2'],
+      data: [{ time: 0, Obs1: 10, Obs2: 20 }]
+    };
+
+    expect(cdatFromResults(results)).toBe('# time\n');
   });
 });

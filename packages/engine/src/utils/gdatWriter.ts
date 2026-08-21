@@ -36,10 +36,13 @@ export function gdatFromResults(results: SimulationResults): string {
  * @returns A tab-delimited, newline-terminated .cdat formatted string with comments starting with `#`.
  */
 export function cdatFromResults(results: SimulationResults): string {
-  const rows = results.speciesData ?? results.data ?? [];
+  const rows = results.speciesData;
+  if (!rows || rows.length === 0) {
+    return '# time\n';
+  }
   const headers = results.speciesHeaders && results.speciesHeaders.length > 0
     ? ['time', ...results.speciesHeaders.filter(h => h !== 'time')]
-    : (results.headers.length > 0 ? results.headers : inferHeaders(rows));
+    : inferHeaders(rows);
   const lines = [`# ${headers.join('\t')}`];
 
   for (const row of rows) {
