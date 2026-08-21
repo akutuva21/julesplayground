@@ -2447,6 +2447,14 @@ export class NetworkGenerator {
         // (only changed-reactant embeddings count toward BNG2 stat factors).
         const isCarryThroughPattern = carryThroughPatternIndices.has(nextPatternIdx);
         for (const candidateIdx of candidates) {
+          // Early anchor pruning to avoid expensive matches and backtracking on branches
+          // that will be discarded anyway by the anchor check at the end of the recursion.
+          if (nextPatternIdx < i) {
+            if (candidateIdx >= currentSpecies.index) continue;
+          } else {
+            if (candidateIdx > currentSpecies.index) continue;
+          }
+
           // BNG2 Rule: For N-ary, partners can be ANY species in the network so far.
           const candidateSpecies = allSpecies[candidateIdx];
           // O(1) early structural pruning before calling any matches/isomorphisms

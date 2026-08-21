@@ -637,8 +637,8 @@ class VF2State {
   nodeOrdering: number[];
   symmetryBreaking: boolean;
   allowExtraTargetBonds: boolean;
-  private componentCandidateCache: Map<number, Map<number, Map<number, Map<number, number[]>>>>;
-  private componentCandidateCacheLarge: Map<number, Map<number, Map<number, Map<string, number[]>>>>;
+  private componentCandidateCache: Map<string, number[]>;
+  private componentCandidateCacheLarge: Map<string, number[]>;
   private frontierBits: Uint8Array;
   private frontierSize: number;
   private componentOrders: number[][];
@@ -1612,26 +1612,9 @@ class VF2State {
     usedTargets: Set<number>
   ): number[] {
     const usedKey = this.getUsedTargetsKey(usedTargets);
-    let level1 = this.componentCandidateCacheLarge.get(pMolIdx);
-    if (!level1) {
-      level1 = new Map();
-      this.componentCandidateCacheLarge.set(pMolIdx, level1);
-    }
-
-    let level2 = level1.get(tMolIdx);
-    if (!level2) {
-      level2 = new Map();
-      level1.set(tMolIdx, level2);
-    }
-
-    let level3 = level2.get(pCompIdx);
-    if (!level3) {
-      level3 = new Map();
-      level2.set(pCompIdx, level3);
-    }
-
-    const cached = level3.get(usedKey);
-    if (cached) {
+    const key = `${pMolIdx}|${tMolIdx}|${pCompIdx}|${usedKey}`;
+    const cached = this.componentCandidateCacheLarge.get(key);
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -1647,7 +1630,7 @@ class VF2State {
       candidates.push(idx);
     }
 
-    level3.set(usedKey, candidates);
+    this.componentCandidateCacheLarge.set(key, candidates);
     return candidates;
   }
 
@@ -1723,27 +1706,9 @@ class VF2State {
     pCompIdx: number,
     usedTargetsMask: number
   ): number[] {
-    const usedKey = usedTargetsMask;
-    let level1 = this.componentCandidateCache.get(pMolIdx);
-    if (!level1) {
-      level1 = new Map();
-      this.componentCandidateCache.set(pMolIdx, level1);
-    }
-
-    let level2 = level1.get(tMolIdx);
-    if (!level2) {
-      level2 = new Map();
-      level1.set(tMolIdx, level2);
-    }
-
-    let level3 = level2.get(pCompIdx);
-    if (!level3) {
-      level3 = new Map();
-      level2.set(pCompIdx, level3);
-    }
-
-    const cached = level3.get(usedKey);
-    if (cached) {
+    const key = `${pMolIdx}|${tMolIdx}|${pCompIdx}|${usedTargetsMask}`;
+    const cached = this.componentCandidateCache.get(key);
+    if (cached !== undefined) {
       return cached;
     }
 
@@ -1759,7 +1724,7 @@ class VF2State {
       candidates.push(idx);
     }
 
-    level3.set(usedKey, candidates);
+    this.componentCandidateCache.set(key, candidates);
     return candidates;
   }
 
