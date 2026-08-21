@@ -8,7 +8,7 @@
 import { parseBNGLWithANTLR } from '@bngplayground/engine';
 
 const PC_API_BASE = 'https://www.pathwaycommons.org/pc2';
-const DEFAULT_TIMEOUT_MS = 2_000;
+const DEFAULT_TIMEOUT_MS = 15_000;
 
 export interface PCInteraction {
   source: string;
@@ -178,16 +178,9 @@ export async function queryPathwayCommons(bnglCode: string): Promise<PCQueryResu
   const pathways: PCPathway[] = [];
   const pathwayMap = new Map<string, PCPathway>();
 
-  const pathwayResults = await Promise.allSettled(
-    moleculeNames.slice(0, 5).map(async (mol) => {
+  for (const mol of moleculeNames.slice(0, 5)) {
+    try {
       const molPathways = await searchPathways(mol);
-      return { mol, molPathways };
-    })
-  );
-
-  for (const res of pathwayResults) {
-    if (res.status === 'fulfilled') {
-      const { mol, molPathways } = res.value;
       for (const pw of molPathways) {
         const existing = pathwayMap.get(pw.name);
         if (existing) {
@@ -198,6 +191,9 @@ export async function queryPathwayCommons(bnglCode: string): Promise<PCQueryResu
           pathwayMap.set(pw.name, pw);
         }
       }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } catch {
+      unknownMolecules.push(mol);
     }
   }
 

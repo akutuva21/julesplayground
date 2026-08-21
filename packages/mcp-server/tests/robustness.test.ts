@@ -27,17 +27,6 @@ import { handleCompareModels } from '../src/handlers/compareModels';
 import { handleSearchStructure } from '../src/handlers/searchStructure';
 import { handlePKPD } from '../src/handlers/pkpd';
 import { handleMultiscaleSimulation } from '../src/handlers/multiscaleSimulation';
-import { vi } from 'vitest';
-import * as pcService from '../src/services/pathwayCommons/pathwayCommonsService';
-
-vi.spyOn(pcService, 'queryPathwayCommons').mockResolvedValue({
-  interactions: [],
-  missingInteractions: [],
-  confirmedInteractions: [],
-  pathways: [],
-  unknownMolecules: [],
-  summary: 'Mocked Pathway Commons response.',
-});
 
 // ---------------------------------------------------------------------------
 // Shared model fixtures

@@ -9,19 +9,8 @@ import { handleFitParameters } from '../src/handlers/fitParameters';
 import { handleDiagnose } from '../src/handlers/diagnose';
 import { handleComposeModel } from '../src/handlers/composeModel';
 import { handleEditModel } from '../src/handlers/editModel';
-import { vi } from 'vitest';
-import * as pcService from '../src/services/pathwayCommons/pathwayCommonsService';
 import { handleDiagnoseModel } from '../src/handlers/diagnoseModel';
 import { handleExplainModel } from '../src/handlers/explainModel';
-
-vi.spyOn(pcService, 'queryPathwayCommons').mockResolvedValue({
-  interactions: [],
-  missingInteractions: [],
-  confirmedInteractions: [],
-  pathways: [],
-  unknownMolecules: [],
-  summary: 'Mocked Pathway Commons response.',
-});
 import { handleSuggestFix } from '../src/handlers/suggestFix';
 import { ParameterScanResult, ValidateModelResult, ContactMap } from '../src/types/index';
 
