@@ -41,26 +41,6 @@ let firstMapCacheStrictSB = new WeakMap<SpeciesGraph, WeakMap<SpeciesGraph, Matc
 let firstMapCacheRelaxedNoSB = new WeakMap<SpeciesGraph, WeakMap<SpeciesGraph, MatchMap | null>>();
 let firstMapCacheRelaxedSB = new WeakMap<SpeciesGraph, WeakMap<SpeciesGraph, MatchMap | null>>();
 
-const molTypeCountsEntriesCache = new WeakMap<SpeciesGraph, Array<[string, number]>>();
-const typeBondsEntriesCache = new WeakMap<SpeciesGraph, Array<[string, number]>>();
-
-function getMolTypeCountsEntries(graph: SpeciesGraph): Array<[string, number]> {
-  let cached = molTypeCountsEntriesCache.get(graph);
-  if (cached === undefined) {
-    cached = Array.from(graph.molTypeCounts.entries());
-    molTypeCountsEntriesCache.set(graph, cached);
-  }
-  return cached;
-}
-
-function getTypeBondsEntries(graph: SpeciesGraph): Array<[string, number]> {
-  let cached = typeBondsEntriesCache.get(graph);
-  if (cached === undefined) {
-    cached = Array.from(graph.typeBonds.entries());
-    typeBondsEntriesCache.set(graph, cached);
-  }
-  return cached;
-}
 
 function getSelectedCache(allowExtra: boolean, sb: boolean) {
   if (allowExtra) {
@@ -403,15 +383,14 @@ export class GraphMatcher {
     }
 
     // 4. Name-based molecule count checks (cheap map queries before full fingerprint check)
-    const patternEntries = getMolTypeCountsEntries(pattern);
+    const patternCounts = pattern.molTypeCounts;
     const targetCounts = target.molTypeCounts;
 
-    for (let i = 0; i < patternEntries.length; i++) {
-      const entry = patternEntries[i];
-      if (entry[0] === '*') {
+    for (const [molType, count] of patternCounts) {
+      if (molType === '*') {
         continue;
       }
-      if ((targetCounts.get(entry[0]) || 0) < entry[1]) {
+      if ((targetCounts.get(molType) || 0) < count) {
         return false;
       }
     }
@@ -428,15 +407,14 @@ export class GraphMatcher {
     }
 
     // 3.5 Type-connectivity check (run only if the rest matches)
-    const patternBondEntries = getTypeBondsEntries(pattern);
+    const patternBondsMap = pattern.typeBonds;
     const targetBondsMap = target.typeBonds;
-    for (let i = 0; i < patternBondEntries.length; i++) {
-      const entry = patternBondEntries[i];
-      if (entry[0].includes('*')) {
+    for (const [pairKey, patCount] of patternBondsMap.entries()) {
+      if (pairKey.includes('*')) {
         continue;
       }
-      const tarCount = targetBondsMap.get(entry[0]) ?? 0;
-      if (tarCount < entry[1]) {
+      const tarCount = targetBondsMap.get(pairKey) ?? 0;
+      if (tarCount < patCount) {
         return false;
       }
     }

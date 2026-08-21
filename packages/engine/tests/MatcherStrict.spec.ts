@@ -1,6 +1,6 @@
 
 import { BNGLParser } from '../src/services/graph/core/BNGLParser';
-import { GraphMatcher as Matcher } from '../src/services/graph/core/Matcher';
+import { GraphMatcher as Matcher, clearMatchCache } from '../src/services/graph/core/Matcher';
 import { describe, it } from 'vitest';
 
 describe('Matcher Strict Unbound Checks', () => {
@@ -45,6 +45,31 @@ describe('Matcher Strict Unbound Checks', () => {
         const maps = Matcher.findAllMaps(pattern, target);
         if (maps.length === 0) {
             throw new Error('Identity matching failed: Expected A(b) to match A(b)');
+        }
+    });
+
+    it('should correctly handle graph mutation after caching', () => {
+        const pattern = BNGLParser.parseSpeciesGraph('A(b)');
+        const target = BNGLParser.parseSpeciesGraph('A(b)');
+
+        // First match populates any internal property caches on target (e.g. molTypeCounts, typeBonds)
+        const initialMaps = Matcher.findAllMaps(pattern, target);
+        if (initialMaps.length === 0) {
+            throw new Error('Initial match expected to succeed.');
+        }
+
+        // Mutate target graph by adding a bond A(b!1).B(a!1)
+        const molB = BNGLParser.parseSpeciesGraph('B(a)').molecules[0];
+        target.molecules.push(molB);
+        target.addBond(0, 0, 1, 0, 1);
+
+        // Clear matcher cache as done between network generation steps/rounds
+        clearMatchCache();
+
+        // Subsequent match should see mutated molecule counts/bonds and NOT match A(b) (since A.b is now bound)
+        const mutatedMaps = Matcher.findAllMaps(pattern, target);
+        if (mutatedMaps.length !== 0) {
+            throw new Error(`Expected 0 matches after mutating target graph, but got ${mutatedMaps.length}`);
         }
     });
 });
