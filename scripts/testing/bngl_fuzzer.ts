@@ -234,18 +234,14 @@ export function generateModel(rng: SeededRandom): { bngl: string; hasCompartment
   // 6. Functions Block (optional)
   if (hasFunctions) {
     bnglParts.push('begin functions');
-    bnglParts.push('  f_rate() = abs(A_tot * k1)');
+    bnglParts.push('  f_sum() = abs(A_tot + B_tot)');
     bnglParts.push('end functions');
   }
 
   // 7. Reaction Rules Block
   bnglParts.push('begin reaction rules');
   // State change rule
-  if (hasFunctions) {
-    bnglParts.push('  A(s~0) -> A(s~1) f_rate');
-  } else {
-    bnglParts.push('  A(s~0) -> A(s~1) k1');
-  }
+  bnglParts.push('  A(s~0) -> A(s~1) k1');
 
   if (hasComplexStates) {
     bnglParts.push('  A(p~U) -> A(p~P) k_dep1');
@@ -258,10 +254,9 @@ export function generateModel(rng: SeededRandom): { bngl: string; hasCompartment
   bnglParts.push('  C() -> 0 kdeg');
   bnglParts.push('  0 -> C() ksynth');
 
-  // Rule Modifiers (like MatchOnce or DeleteMolecules)
+  // Rule Modifiers (like MatchOnce)
   if (hasRuleModifiers) {
-    // DeleteMolecules rule modifier
-    bnglParts.push('  A(b) -> 0 kdeg DeleteMolecules');
+    bnglParts.push('  A(s~0) -> A(s~1) k1 MatchOnce');
   }
 
   bnglParts.push('end reaction rules');
