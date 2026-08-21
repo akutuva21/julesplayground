@@ -1,6 +1,3 @@
-/**
- * @unwired This tool handler is currently experimental/unwired and is not part of the active production toolset.
- */
 import { ToolArgs, ToolResult } from '../types/index.js';
 import { suggestFixArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs } from '../services/engine.js';

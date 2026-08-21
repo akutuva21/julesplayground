@@ -1,6 +1,3 @@
-/**
- * @unwired This tool handler is currently experimental/unwired and is not part of the active production toolset.
- */
 import { ToolArgs, ToolResult } from '../types/index.js';
 import { z } from 'zod';
 import { createToolResult, parseArgs, parseModelOrThrow, expandModel, updateMassActionRates } from '../services/engine.js';
