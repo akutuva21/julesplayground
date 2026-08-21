@@ -117,4 +117,35 @@ describe('WorkerPool batch method', () => {
 
         pool.terminate();
     });
+
+    it('advances queue and processes subsequent task when postMessage throws an error', async () => {
+        const pool = new WorkerPool('/dummy-worker.js', 1);
+        await pool.initialize();
+
+        const worker = mockWorkerInsts[0];
+        let postCount = 0;
+        worker.postMessage = vi.fn((req) => {
+            postCount++;
+            if (postCount === 1) {
+                throw new Error('DataCloneError: Task cannot be posted');
+            }
+            const { id, data } = req;
+            setTimeout(() => {
+                worker.trigger({
+                    id,
+                    type: 'RESULT',
+                    data: { processed: data }
+                });
+            }, 0);
+        });
+
+        const task1 = pool.submit('RUN_SIMULATION', { badData: true });
+        const task2 = pool.submit('RUN_SIMULATION', { goodData: 42 });
+
+        await expect(task1).rejects.toThrow('DataCloneError: Task cannot be posted');
+        const res2 = await task2;
+        expect(res2).toEqual({ processed: { goodData: 42 } });
+
+        pool.terminate();
+    });
 });

@@ -254,6 +254,7 @@ export class WorkerPool {
         pending.reject(postError instanceof Error ? postError : new Error(String(postError)));
         worker.busy = false;
         worker.currentTask = null;
+        this.processQueue();
       }
     }
   }
