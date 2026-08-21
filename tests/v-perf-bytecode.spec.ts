@@ -71,6 +71,6 @@ describe('Functional Rate Bytecode Performance', () => {
         
         // Allow 25% margin for CI runner variance — native should generally be
         // faster but noisy environments can flip the result by a few percent.
-        expect(nativeTime).toBeLessThan(jsTime * 1.35);
+        expect(nativeTime).toBeLessThan(jsTime * 1.25);
     });
 });
