@@ -1877,424 +1877,247 @@ export async function simulate(
 
         computeAllPropensities();
 
-        if (!firingActive && !includeInfluence) {
-          while (t < phaseTEnd) {
-            if (totalEvents >= maxEvents) {
-              console.warn(`[Worker] SSA Terminating early (maxEvents=${maxEvents} reached) at t=${(globalTime + t).toFixed(3)}. Population count may be exploding.`);
-              break;
-            }
-            if ((totalEvents & 0x3FF) === 0) callbacks.checkCancelled();
+        while (t < phaseTEnd) {
+          if (totalEvents >= maxEvents) {
+            console.warn(`[Worker] SSA Terminating early (maxEvents=${maxEvents} reached) at t=${(globalTime + t).toFixed(3)}. Population count may be exploding.`);
+            break;
+          }
+          if ((totalEvents & 0x3FF) === 0) callbacks.checkCancelled();
 
-            if (recalculatePropensitiesCount++ >= SSA_RECALC_INTERVAL) {
-              computeAllPropensities();
-              recalculatePropensitiesCount = 0;
-            }
+          if (recalculatePropensitiesCount++ >= SSA_RECALC_INTERVAL) {
+            computeAllPropensities();
+            recalculatePropensitiesCount = 0;
+          }
 
-            let aTot = aTotal + aTotalC;
-            if (aTot < 0) {
-              computeAllPropensities(); // floating point correction
-              aTot = aTotal + aTotalC;
-            }
+          let aTot = aTotal + aTotalC;
+          if (aTot < 0) {
+            computeAllPropensities(); // floating point correction
+            aTot = aTotal + aTotalC;
+          }
 
-            if (!(aTot > 0)) {
-              console.log(`[Worker] SSA Terminating early (total propensity = 0) at t=${globalTime + t}. Model reached stable state or reactants depleted.`);
-              break;
-            }
+          if (!(aTot > 0)) {
+            console.log(`[Worker] SSA Terminating early (total propensity = 0) at t=${globalTime + t}. Model reached stable state or reactants depleted.`);
+            break;
+          }
 
-            let t_r1 = (rngState += 0x6d2b79f5);
-            t_r1 = Math.imul(t_r1 ^ (t_r1 >>> 15), t_r1 | 1);
-            t_r1 ^= t_r1 + Math.imul(t_r1 ^ (t_r1 >>> 7), t_r1 | 61);
-            const r1 = ((t_r1 ^ (t_r1 >>> 14)) >>> 0) * 2.3283064365386963e-10;
+          let t_r1 = (rngState += 0x6d2b79f5);
+          t_r1 = Math.imul(t_r1 ^ (t_r1 >>> 15), t_r1 | 1);
+          t_r1 ^= t_r1 + Math.imul(t_r1 ^ (t_r1 >>> 7), t_r1 | 61);
+          const r1 = ((t_r1 ^ (t_r1 >>> 14)) >>> 0) * 2.3283064365386963e-10;
 
-            const tau = (1 / aTot) * Math.log(1 / r1);
-            if (t + tau > phaseTEnd) {
-              break;
-            }
-            t += tau;
+          const tau = (1 / aTot) * Math.log(1 / r1);
+          if (t + tau > phaseTEnd) {
+            break;
+          }
+          t += tau;
 
-            let t_r2 = (rngState += 0x6d2b79f5);
-            t_r2 = Math.imul(t_r2 ^ (t_r2 >>> 15), t_r2 | 1);
-            t_r2 ^= t_r2 + Math.imul(t_r2 ^ (t_r2 >>> 7), t_r2 | 61);
-            const r2 = (((t_r2 ^ (t_r2 >>> 14)) >>> 0) * 2.3283064365386963e-10) * aTot;
+          let t_r2 = (rngState += 0x6d2b79f5);
+          t_r2 = Math.imul(t_r2 ^ (t_r2 >>> 15), t_r2 | 1);
+          t_r2 ^= t_r2 + Math.imul(t_r2 ^ (t_r2 >>> 7), t_r2 | 61);
+          const r2 = (((t_r2 ^ (t_r2 >>> 14)) >>> 0) * 2.3283064365386963e-10) * aTot;
 
-            let reactionIndex: number;
-            if (useFenwick) {
-              const tree = fenwickTree;
-              const n = numReactions;
-              let idx = 0;
-              let bitMask = fenwickHighBit;
-              let targetVal = r2;
-              while (bitMask !== 0) {
-                const next = idx + bitMask;
-                if (next <= n && tree[next] <= targetVal) {
-                  targetVal -= tree[next];
-                  idx = next;
-                }
-                bitMask >>= 1;
+          let reactionIndex: number;
+          if (useFenwick) {
+            const tree = fenwickTree;
+            const n = numReactions;
+            let idx = 0;
+            let bitMask = fenwickHighBit;
+            let targetVal = r2;
+            while (bitMask !== 0) {
+              const next = idx + bitMask;
+              if (next <= n && tree[next] <= targetVal) {
+                targetVal -= tree[next];
+                idx = next;
               }
-              reactionIndex = idx < numReactions ? idx : 0;
-            } else {
-              const p = propensities;
-              const n = numReactions;
-              let sum = 0;
-              let idx = n - 1;
-              for (let i = 0; i < n; i++) {
-                sum += p[i];
-                if (r2 <= sum) {
-                  idx = i;
-                  break;
+              bitMask >>= 1;
+            }
+            reactionIndex = idx < numReactions ? idx : 0;
+          } else {
+            const p = propensities;
+            const n = numReactions;
+            let sum = 0;
+            let idx = n - 1;
+            for (let i = 0; i < n; i++) {
+              sum += p[i];
+              if (r2 <= sum) {
+                idx = i;
+                break;
+              }
+            }
+            reactionIndex = idx;
+          }
+
+          const firedRxn = concreteReactions[reactionIndex];
+          totalEvents++;
+          nEventsThisPhase++;
+
+          if (firingActive && logCount < maxFiringEvents) {
+            logTimes![logCount] = t;
+            logRxnIndices![logCount] = reactionIndex;
+            logPropensities![logCount] = propensities[reactionIndex];
+            logCount++;
+          }
+
+          let numAffected = 0;
+          if (includeInfluence && ruleFirings && windowRuleFirings && affectedReactionIndices && oldPropensityValues) {
+            ruleFirings[reactionIndex]++;
+            windowRuleFirings[reactionIndex]++;
+
+            const reactants = firedRxn.reactants;
+            const products = firedRxn.products;
+
+            const processSpecies = (speciesIdx: number) => {
+              const deps = speciesDependents[speciesIdx];
+              for (let k = 0; k < deps.length; k++) {
+                const depIdx = deps[k];
+                let found = false;
+                for (let m = 0; m < numAffected; m++) {
+                  if (affectedReactionIndices[m] === depIdx) {
+                    found = true;
+                    break;
+                  }
+                }
+                if (!found) {
+                  affectedReactionIndices[numAffected] = depIdx;
+                  oldPropensityValues[numAffected] = propensities[depIdx];
+                  numAffected++;
                 }
               }
-              reactionIndex = idx;
+            };
+
+            for (let j = 0; j < reactants.length; j++) processSpecies(reactants[j]);
+            for (let j = 0; j < products.length; j++) processSpecies(products[j]);
+          }
+
+          let eventDelta: number;
+          if (compiledSSAEventUpdater) {
+            eventDelta = compiledSSAEventUpdater(reactionIndex, state, propensities, fenwickAdd);
+          } else {
+            const cc = changeCount[reactionIndex];
+            if (cc >= 1) {
+              const sp0 = changeSpecies0[reactionIndex];
+              const d0 = changeDelta0[reactionIndex];
+              state[sp0] += d0;
+              if (maintainObs) {
+                const end = speciesObsOffsets[sp0 + 1];
+                for (let k = speciesObsOffsets[sp0]; k < end; k++) {
+                  ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d0;
+                }
+              }
             }
-
-            totalEvents++;
-            nEventsThisPhase++;
-
-            let eventDelta: number;
-            if (compiledSSAEventUpdater) {
-              eventDelta = compiledSSAEventUpdater(reactionIndex, state, propensities, fenwickAdd);
-            } else {
-              const cc = changeCount[reactionIndex];
-              if (cc >= 1) {
-                const sp0 = changeSpecies0[reactionIndex];
-                const d0 = changeDelta0[reactionIndex];
-                state[sp0] += d0;
+            if (cc >= 2) {
+              const sp1 = changeSpecies1[reactionIndex];
+              const d1 = changeDelta1[reactionIndex];
+              state[sp1] += d1;
+              if (maintainObs) {
+                const end = speciesObsOffsets[sp1 + 1];
+                for (let k = speciesObsOffsets[sp1]; k < end; k++) {
+                  ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d1;
+                }
+              }
+            }
+            if (cc >= 3) {
+              const sp2 = changeSpecies2[reactionIndex];
+              const d2 = changeDelta2[reactionIndex];
+              state[sp2] += d2;
+              if (maintainObs) {
+                const end = speciesObsOffsets[sp2 + 1];
+                for (let k = speciesObsOffsets[sp2]; k < end; k++) {
+                  ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d2;
+                }
+              }
+            }
+            if (cc >= 4) {
+              const sp3 = changeSpecies3[reactionIndex];
+              const d3 = changeDelta3[reactionIndex];
+              state[sp3] += d3;
+              if (maintainObs) {
+                const end = speciesObsOffsets[sp3 + 1];
+                for (let k = speciesObsOffsets[sp3]; k < end; k++) {
+                  ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d3;
+                }
+              }
+            }
+            if (cc > 4) {
+              const remSp = changeSpeciesRemaining[reactionIndex]!;
+              const remDl = changeDeltaRemaining[reactionIndex]!;
+              for (let j = 0; j < remSp.length; j++) {
+                const sp = remSp[j];
+                const d = remDl[j];
+                state[sp] += d;
                 if (maintainObs) {
-                  const end = speciesObsOffsets[sp0 + 1];
-                  for (let k = speciesObsOffsets[sp0]; k < end; k++) {
-                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d0;
+                  const end = speciesObsOffsets[sp + 1];
+                  for (let k = speciesObsOffsets[sp]; k < end; k++) {
+                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d;
                   }
                 }
-              }
-              if (cc >= 2) {
-                const sp1 = changeSpecies1[reactionIndex];
-                const d1 = changeDelta1[reactionIndex];
-                state[sp1] += d1;
-                if (maintainObs) {
-                  const end = speciesObsOffsets[sp1 + 1];
-                  for (let k = speciesObsOffsets[sp1]; k < end; k++) {
-                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d1;
-                  }
-                }
-              }
-              if (cc >= 3) {
-                const sp2 = changeSpecies2[reactionIndex];
-                const d2 = changeDelta2[reactionIndex];
-                state[sp2] += d2;
-                if (maintainObs) {
-                  const end = speciesObsOffsets[sp2 + 1];
-                  for (let k = speciesObsOffsets[sp2]; k < end; k++) {
-                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d2;
-                  }
-                }
-              }
-              if (cc >= 4) {
-                const sp3 = changeSpecies3[reactionIndex];
-                const d3 = changeDelta3[reactionIndex];
-                state[sp3] += d3;
-                if (maintainObs) {
-                  const end = speciesObsOffsets[sp3 + 1];
-                  for (let k = speciesObsOffsets[sp3]; k < end; k++) {
-                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d3;
-                  }
-                }
-              }
-              if (cc > 4) {
-                const remSp = changeSpeciesRemaining[reactionIndex]!;
-                const remDl = changeDeltaRemaining[reactionIndex]!;
-                for (let j = 0; j < remSp.length; j++) {
-                  const sp = remSp[j];
-                  const d = remDl[j];
-                  state[sp] += d;
-                  if (maintainObs) {
-                    const end = speciesObsOffsets[sp + 1];
-                    for (let k = speciesObsOffsets[sp]; k < end; k++) {
-                      ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d;
-                    }
-                  }
-                }
-              }
-
-              eventDelta = 0;
-              const deps = rxnUpdateRxn[reactionIndex];
-              for (let d = 0; d < deps.length; d++) {
-                const jrxn = deps[d];
-                const aNew = calcPropensity(jrxn);
-                const delta = aNew - propensities[jrxn];
-                eventDelta += delta;
-                if (useFenwick) fenwickAdd(jrxn, delta);
-                propensities[jrxn] = aNew;
               }
             }
 
-            {
-              const tSum = aTotal + eventDelta;
-              if (Math.abs(aTotal) >= Math.abs(eventDelta)) aTotalC += (aTotal - tSum) + eventDelta;
-              else aTotalC += (eventDelta - tSum) + aTotal;
-              aTotal = tSum;
-            }
-
-            while (t >= nextTOut && nextTOut <= phaseTEnd) {
-              callbacks.checkCancelled();
-              if (recordThisPhase) {
-                const outT = toBngGridTime(globalTime, phaseTEnd, phaseNSteps, nextOutIdx);
-                if (outT >= nextTOut || totalEvents >= maxEvents) {
-                  pushDataRow(phase.suffix, outT, state as Float64Array);
-                  const sp: Record<string, number> = { time: outT };
-                  for (let k = 0; k < numSpecies; k++) {
-                    setSafeNumberField(sp, speciesHeaders[k], state[k]);
-                  }
-                  appendSpeciesSnapshot(phase.suffix, sp);
-                }
-              }
-              nextOutIdx += 1;
-              nextTOut = (phaseTEnd * nextOutIdx) / phaseNSteps;
+            eventDelta = 0;
+            const deps = rxnUpdateRxn[reactionIndex];
+            for (let d = 0; d < deps.length; d++) {
+              const jrxn = deps[d];
+              const aNew = calcPropensity(jrxn);
+              const delta = aNew - propensities[jrxn];
+              eventDelta += delta;
+              if (useFenwick) fenwickAdd(jrxn, delta);
+              propensities[jrxn] = aNew;
             }
           }
-        } else {
-          while (t < phaseTEnd) {
-            if (totalEvents >= maxEvents) {
-              console.warn(`[Worker] SSA Terminating early (maxEvents=${maxEvents} reached) at t=${(globalTime + t).toFixed(3)}. Population count may be exploding.`);
-              break;
-            }
-            if ((totalEvents & 0x3FF) === 0) callbacks.checkCancelled();
 
-            if (recalculatePropensitiesCount++ >= SSA_RECALC_INTERVAL) {
-              computeAllPropensities();
-              recalculatePropensitiesCount = 0;
-            }
+          {
+            const tSum = aTotal + eventDelta;
+            if (Math.abs(aTotal) >= Math.abs(eventDelta)) aTotalC += (aTotal - tSum) + eventDelta;
+            else aTotalC += (eventDelta - tSum) + aTotal;
+            aTotal = tSum;
+          }
 
-            let aTot = aTotal + aTotalC;
-            if (aTot < 0) {
-              computeAllPropensities(); // floating point correction
-              aTot = aTotal + aTotalC;
-            }
-
-            if (!(aTot > 0)) {
-              console.log(`[Worker] SSA Terminating early (total propensity = 0) at t=${globalTime + t}. Model reached stable state or reactants depleted.`);
-              break;
-            }
-
-            let t_r1 = (rngState += 0x6d2b79f5);
-            t_r1 = Math.imul(t_r1 ^ (t_r1 >>> 15), t_r1 | 1);
-            t_r1 ^= t_r1 + Math.imul(t_r1 ^ (t_r1 >>> 7), t_r1 | 61);
-            const r1 = ((t_r1 ^ (t_r1 >>> 14)) >>> 0) * 2.3283064365386963e-10;
-
-            const tau = (1 / aTot) * Math.log(1 / r1);
-            if (t + tau > phaseTEnd) {
-              break;
-            }
-            t += tau;
-
-            let t_r2 = (rngState += 0x6d2b79f5);
-            t_r2 = Math.imul(t_r2 ^ (t_r2 >>> 15), t_r2 | 1);
-            t_r2 ^= t_r2 + Math.imul(t_r2 ^ (t_r2 >>> 7), t_r2 | 61);
-            const r2 = (((t_r2 ^ (t_r2 >>> 14)) >>> 0) * 2.3283064365386963e-10) * aTot;
-
-            let reactionIndex: number;
-            if (useFenwick) {
-              const tree = fenwickTree;
-              const n = numReactions;
-              let idx = 0;
-              let bitMask = fenwickHighBit;
-              let targetVal = r2;
-              while (bitMask !== 0) {
-                const next = idx + bitMask;
-                if (next <= n && tree[next] <= targetVal) {
-                  targetVal -= tree[next];
-                  idx = next;
+          if (includeInfluence && influenceMatrix && windowInfluenceMatrix && affectedReactionIndices && oldPropensityValues) {
+            for (let j = 0; j < numAffected; j++) {
+              const depRxn = affectedReactionIndices[j];
+              const oldProp = oldPropensityValues[j];
+              const newProp = propensities[depRxn];
+              if (Math.abs(newProp - oldProp) > 1e-18) {
+                const flux = newProp - oldProp;
+                const influenceOffset = reactionIndex * numReactions + depRxn;
+                if (influenceOffset < 0 || influenceOffset >= influenceMatrix.length || influenceOffset >= windowInfluenceMatrix.length) {
+                  throw new Error(`[SimulationLoop] Influence index out of bounds: ${influenceOffset}`);
                 }
-                bitMask >>= 1;
-              }
-              reactionIndex = idx < numReactions ? idx : 0;
-            } else {
-              const p = propensities;
-              const n = numReactions;
-              let sum = 0;
-              let idx = n - 1;
-              for (let i = 0; i < n; i++) {
-                sum += p[i];
-                if (r2 <= sum) {
-                  idx = i;
-                  break;
-                }
-              }
-              reactionIndex = idx;
-            }
-
-            const firedRxn = concreteReactions[reactionIndex];
-            totalEvents++;
-            nEventsThisPhase++;
-
-            if (firingActive && logCount < maxFiringEvents) {
-              logTimes![logCount] = t;
-              logRxnIndices![logCount] = reactionIndex;
-              logPropensities![logCount] = propensities[reactionIndex];
-              logCount++;
-            }
-
-            let numAffected = 0;
-            if (includeInfluence && ruleFirings && windowRuleFirings && affectedReactionIndices && oldPropensityValues) {
-              ruleFirings[reactionIndex]++;
-              windowRuleFirings[reactionIndex]++;
-
-              const reactants = firedRxn.reactants;
-              const products = firedRxn.products;
-
-              const processSpecies = (speciesIdx: number) => {
-                const deps = speciesDependents[speciesIdx];
-                for (let k = 0; k < deps.length; k++) {
-                  const depIdx = deps[k];
-                  let found = false;
-                  for (let m = 0; m < numAffected; m++) {
-                    if (affectedReactionIndices[m] === depIdx) {
-                      found = true;
-                      break;
-                    }
-                  }
-                  if (!found) {
-                    affectedReactionIndices[numAffected] = depIdx;
-                    oldPropensityValues[numAffected] = propensities[depIdx];
-                    numAffected++;
-                  }
-                }
-              };
-
-              for (let j = 0; j < reactants.length; j++) processSpecies(reactants[j]);
-              for (let j = 0; j < products.length; j++) processSpecies(products[j]);
-            }
-
-            let eventDelta: number;
-            if (compiledSSAEventUpdater) {
-              eventDelta = compiledSSAEventUpdater(reactionIndex, state, propensities, fenwickAdd);
-            } else {
-              const cc = changeCount[reactionIndex];
-              if (cc >= 1) {
-                const sp0 = changeSpecies0[reactionIndex];
-                const d0 = changeDelta0[reactionIndex];
-                state[sp0] += d0;
-                if (maintainObs) {
-                  const end = speciesObsOffsets[sp0 + 1];
-                  for (let k = speciesObsOffsets[sp0]; k < end; k++) {
-                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d0;
-                  }
-                }
-              }
-              if (cc >= 2) {
-                const sp1 = changeSpecies1[reactionIndex];
-                const d1 = changeDelta1[reactionIndex];
-                state[sp1] += d1;
-                if (maintainObs) {
-                  const end = speciesObsOffsets[sp1 + 1];
-                  for (let k = speciesObsOffsets[sp1]; k < end; k++) {
-                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d1;
-                  }
-                }
-              }
-              if (cc >= 3) {
-                const sp2 = changeSpecies2[reactionIndex];
-                const d2 = changeDelta2[reactionIndex];
-                state[sp2] += d2;
-                if (maintainObs) {
-                  const end = speciesObsOffsets[sp2 + 1];
-                  for (let k = speciesObsOffsets[sp2]; k < end; k++) {
-                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d2;
-                  }
-                }
-              }
-              if (cc >= 4) {
-                const sp3 = changeSpecies3[reactionIndex];
-                const d3 = changeDelta3[reactionIndex];
-                state[sp3] += d3;
-                if (maintainObs) {
-                  const end = speciesObsOffsets[sp3 + 1];
-                  for (let k = speciesObsOffsets[sp3]; k < end; k++) {
-                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d3;
-                  }
-                }
-              }
-              if (cc > 4) {
-                const remSp = changeSpeciesRemaining[reactionIndex]!;
-                const remDl = changeDeltaRemaining[reactionIndex]!;
-                for (let j = 0; j < remSp.length; j++) {
-                  const sp = remSp[j];
-                  const d = remDl[j];
-                  state[sp] += d;
-                  if (maintainObs) {
-                    const end = speciesObsOffsets[sp + 1];
-                    for (let k = speciesObsOffsets[sp]; k < end; k++) {
-                      ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d;
-                    }
-                  }
-                }
-              }
-
-              eventDelta = 0;
-              const deps = rxnUpdateRxn[reactionIndex];
-              for (let d = 0; d < deps.length; d++) {
-                const jrxn = deps[d];
-                const aNew = calcPropensity(jrxn);
-                const delta = aNew - propensities[jrxn];
-                eventDelta += delta;
-                if (useFenwick) fenwickAdd(jrxn, delta);
-                propensities[jrxn] = aNew;
+                influenceMatrix[influenceOffset] += flux;
+                windowInfluenceMatrix[influenceOffset] += flux;
               }
             }
+          }
 
-            {
-              const tSum = aTotal + eventDelta;
-              if (Math.abs(aTotal) >= Math.abs(eventDelta)) aTotalC += (aTotal - tSum) + eventDelta;
-              else aTotalC += (eventDelta - tSum) + aTotal;
-              aTotal = tSum;
-            }
+          if (includeInfluence && windowRuleFirings && windowInfluenceMatrix && globalTime + t - windowStartTime >= windowSize && influenceWindows.length < NUM_WINDOWS) {
+            influenceWindows.push({
+              ruleNames: [...ruleNames],
+              din_hits: Array.from(windowRuleFirings),
+              din_fluxs: unflattenMatrix(windowInfluenceMatrix, numReactions),
+              din_start: windowStartTime,
+              din_end: globalTime + t
+            });
+            windowStartTime = globalTime + t;
+            windowRuleFirings.fill(0);
+            windowInfluenceMatrix.fill(0);
+          }
 
-            if (includeInfluence && influenceMatrix && windowInfluenceMatrix && affectedReactionIndices && oldPropensityValues) {
-              for (let j = 0; j < numAffected; j++) {
-                const depRxn = affectedReactionIndices[j];
-                const oldProp = oldPropensityValues[j];
-                const newProp = propensities[depRxn];
-                if (Math.abs(newProp - oldProp) > 1e-18) {
-                  const flux = newProp - oldProp;
-                  const influenceOffset = reactionIndex * numReactions + depRxn;
-                  if (influenceOffset < 0 || influenceOffset >= influenceMatrix.length || influenceOffset >= windowInfluenceMatrix.length) {
-                    throw new Error(`[SimulationLoop] Influence index out of bounds: ${influenceOffset}`);
-                  }
-                  influenceMatrix[influenceOffset] += flux;
-                  windowInfluenceMatrix[influenceOffset] += flux;
+          while (t >= nextTOut && nextTOut <= phaseTEnd) {
+            callbacks.checkCancelled();
+            if (recordThisPhase) {
+              const outT = toBngGridTime(globalTime, phaseTEnd, phaseNSteps, nextOutIdx);
+              if (outT >= nextTOut || totalEvents >= maxEvents) {
+                pushDataRow(phase.suffix, outT, state as Float64Array);
+                const sp: Record<string, number> = { time: outT };
+                for (let k = 0; k < numSpecies; k++) {
+                  setSafeNumberField(sp, speciesHeaders[k], state[k]);
                 }
+                appendSpeciesSnapshot(phase.suffix, sp);
               }
             }
-
-            if (includeInfluence && windowRuleFirings && windowInfluenceMatrix && globalTime + t - windowStartTime >= windowSize && influenceWindows.length < NUM_WINDOWS) {
-              influenceWindows.push({
-                ruleNames: [...ruleNames],
-                din_hits: Array.from(windowRuleFirings),
-                din_fluxs: unflattenMatrix(windowInfluenceMatrix, numReactions),
-                din_start: windowStartTime,
-                din_end: globalTime + t
-              });
-              windowStartTime = globalTime + t;
-              windowRuleFirings.fill(0);
-              windowInfluenceMatrix.fill(0);
-            }
-
-            while (t >= nextTOut && nextTOut <= phaseTEnd) {
-              callbacks.checkCancelled();
-              if (recordThisPhase) {
-                const outT = toBngGridTime(globalTime, phaseTEnd, phaseNSteps, nextOutIdx);
-                if (outT >= nextTOut || totalEvents >= maxEvents) {
-                  pushDataRow(phase.suffix, outT, state as Float64Array);
-                  const sp: Record<string, number> = { time: outT };
-                  for (let k = 0; k < numSpecies; k++) {
-                    setSafeNumberField(sp, speciesHeaders[k], state[k]);
-                  }
-                  appendSpeciesSnapshot(phase.suffix, sp);
-                }
-              }
-              nextOutIdx += 1;
-              nextTOut = (phaseTEnd * nextOutIdx) / phaseNSteps;
-            }
+            nextOutIdx += 1;
+            nextTOut = (phaseTEnd * nextOutIdx) / phaseNSteps;
           }
         }
 
