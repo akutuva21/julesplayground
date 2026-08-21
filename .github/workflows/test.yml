@@ -46,6 +46,7 @@ jobs:
         env:
           NODE_ENV: test
           RULEHUB_ROOT: ${{ github.workspace }}/RuleHub
+          RUN_FULL_TESTS_HARD_TIMEOUT_MS: '600000'
       
       - name: Upload coverage (if generated)
         if: always()
