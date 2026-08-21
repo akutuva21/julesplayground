@@ -1,6 +1,5 @@
 // graph/core/SpeciesGraph.ts
 import { Molecule } from './Molecule.ts';
-import { Component } from './Component.ts';
 
 export class SpeciesGraph {
   molecules: Molecule[];
@@ -15,7 +14,6 @@ export class SpeciesGraph {
   private _componentOffsets?: number[];
   private _componentCount?: number;
   private _fingerprint?: Map<string, number>;
-  private _wildcardFreeFingerprint?: Array<[string, number]>;
   private _typeBonds?: Map<string, number>;
   private _molTypeCounts?: Map<string, number>;
   private _bondCount?: number;
@@ -23,9 +21,6 @@ export class SpeciesGraph {
   private _maxDegree?: number;
   private _neighborList?: number[][];
   private _bondList?: Int32Array;
-  private _bondPartnerLookup?: Map<string, { molIdx: number; compIdx: number }>;
-  private _componentOrders?: number[][];
-  private _maxComps?: number;
 
   constructor(molecules: Molecule[] = []) {
     this.molecules = molecules;
@@ -35,7 +30,6 @@ export class SpeciesGraph {
     this._componentOffsets = undefined;
     this._componentCount = undefined;
     this._fingerprint = undefined;
-    this._wildcardFreeFingerprint = undefined;
     this._typeBonds = undefined;
     this._molTypeCounts = undefined;
     this._bondCount = undefined;
@@ -43,81 +37,6 @@ export class SpeciesGraph {
     this._maxDegree = undefined;
     this._neighborList = undefined;
     this._bondList = undefined;
-    this._bondPartnerLookup = undefined;
-    this._componentOrders = undefined;
-    this._maxComps = undefined;
-  }
-
-  get bondPartnerLookup(): Map<string, { molIdx: number; compIdx: number }> {
-    if (this._bondPartnerLookup !== undefined) return this._bondPartnerLookup;
-    const lookup = new Map<string, { molIdx: number; compIdx: number }>();
-    const grouped = new Map<number, Array<{ molIdx: number; compIdx: number }>>();
-
-    for (let molIdx = 0; molIdx < this.molecules.length; molIdx++) {
-      const mol = this.molecules[molIdx];
-      if (!mol) continue;
-      for (let compIdx = 0; compIdx < mol.components.length; compIdx++) {
-        const comp = mol.components[compIdx];
-        for (const bondLabel of comp.edges.keys()) {
-          let list = grouped.get(bondLabel);
-          if (list === undefined) {
-            list = [];
-            grouped.set(bondLabel, list);
-          }
-          list.push({ molIdx, compIdx });
-        }
-      }
-    }
-
-    for (const [label, endpoints] of grouped.entries()) {
-      if (endpoints.length < 2) continue;
-      for (let i = 0; i < endpoints.length; i++) {
-        const endpoint = endpoints[i];
-        let partner: { molIdx: number; compIdx: number } | undefined;
-        for (let j = 0; j < endpoints.length; j++) {
-          const ep = endpoints[j];
-          if (ep.molIdx !== endpoint.molIdx || ep.compIdx !== endpoint.compIdx) {
-            partner = ep;
-            break;
-          }
-        }
-        if (!partner) continue;
-        lookup.set(`${endpoint.molIdx}.${endpoint.compIdx}.${label}`, partner);
-      }
-    }
-
-    this._bondPartnerLookup = lookup;
-    return lookup;
-  }
-
-  get componentOrders(): number[][] {
-    if (this._componentOrders !== undefined) return this._componentOrders;
-    this.ensureComponentOrdersAndMaxComps();
-    return this._componentOrders!;
-  }
-
-  get maxComps(): number {
-    if (this._maxComps !== undefined) return this._maxComps;
-    this.ensureComponentOrdersAndMaxComps();
-    return this._maxComps!;
-  }
-
-  private ensureComponentOrdersAndMaxComps(): void {
-    const orders = new Array<number[]>(this.molecules.length);
-    let maxComps = 0;
-    for (let m = 0; m < this.molecules.length; m++) {
-      const mol = this.molecules[m];
-      const compCount = mol.components.length;
-      const compOrder = new Array<number>(compCount);
-      for (let i = 0; i < compCount; i++) {
-        compOrder[i] = i;
-      }
-      compOrder.sort((a, b) => getComponentPriority(mol.components[b]) - getComponentPriority(mol.components[a]));
-      orders[m] = compOrder;
-      if (compCount > maxComps) maxComps = compCount;
-    }
-    this._componentOrders = orders;
-    this._maxComps = maxComps;
   }
 
   get neighborList(): number[][] {
@@ -190,20 +109,6 @@ export class SpeciesGraph {
     }
     this._fingerprint = fp;
     return this._fingerprint;
-  }
-
-  get wildcardFreeFingerprintList(): Array<[string, number]> {
-    if (this._wildcardFreeFingerprint !== undefined) return this._wildcardFreeFingerprint;
-    const list: Array<[string, number]> = [];
-    const fp = this.fingerprint;
-    for (const [key, count] of fp.entries()) {
-      if (key.startsWith('M:*') || key.startsWith('S:*:') || key.startsWith('B:*:')) {
-        continue;
-      }
-      list.push([key, count]);
-    }
-    this._wildcardFreeFingerprint = list;
-    return list;
   }
 
   get typeBonds(): Map<string, number> {
@@ -334,7 +239,6 @@ export class SpeciesGraph {
     this._componentOffsets = undefined;
     this._componentCount = undefined;
     this._fingerprint = undefined;
-    this._wildcardFreeFingerprint = undefined;
     this._typeBonds = undefined;
     this._molTypeCounts = undefined;
     this._bondCount = undefined;
@@ -455,7 +359,6 @@ export class SpeciesGraph {
     this._componentOffsets = undefined;
     this._componentCount = undefined;
     this._fingerprint = undefined;
-    this._wildcardFreeFingerprint = undefined;
     this._typeBonds = undefined;
     this._molTypeCounts = undefined;
     this._bondCount = undefined;
@@ -536,7 +439,6 @@ export class SpeciesGraph {
     this._componentOffsets = undefined;
     this._componentCount = undefined;
     this._fingerprint = undefined;
-    this._wildcardFreeFingerprint = undefined;
     this._typeBonds = undefined;
     this._molTypeCounts = undefined;
     this._bondCount = undefined;
@@ -556,11 +458,10 @@ export class SpeciesGraph {
     if (molIdx < 0 || molIdx >= this.molecules.length) return visited;
 
     const queue = [molIdx];
-    let head = 0;
     visited.add(molIdx);
 
-    while (head < queue.length) {
-      const curr = queue[head++];
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
       // Check neighbors via adjacency (support multi-site bonding)
       const mol = this.molecules[curr];
       for (let c = 0; c < mol.components.length; c++) {
@@ -593,11 +494,10 @@ export class SpeciesGraph {
 
       const componentMols: number[] = [];
       const queue = [i];
-      let head = 0;
       visited.add(i);
 
-      while (head < queue.length) {
-        const curr = queue[head++];
+      while (queue.length > 0) {
+        const curr = queue.shift()!;
         componentMols.push(curr);
 
         // Check neighbors via adjacency (support multi-site bonding)
@@ -936,15 +836,4 @@ export class SpeciesGraph {
     this._structuralHash = hash;
     return hash;
   }
-}
-
-function getComponentPriority(comp: Component): number {
-  let score = 0;
-  score += comp.edges.size * 10;
-  if (comp.wildcard === '+') score += 5;
-  if (comp.wildcard === '?') score += 1;
-  if (comp.wildcard === '-') score += 4;
-  if (!comp.wildcard && comp.edges.size === 0) score += 2;
-  if (comp.state && comp.state !== '?') score += 3;
-  return score;
 }

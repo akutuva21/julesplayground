@@ -65,7 +65,6 @@
     "wasm-nfsim/build_ems",
     "artifacts",
     "tests/**",
-    "tools/**",
-    "changes/**"
+    "tools/**"
   ]
 }

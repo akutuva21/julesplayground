@@ -44,12 +44,6 @@ export interface BatchRunnerOptions {
     reporter: BatchReporter;
     verbose?: boolean;
     nfSimModels?: Set<string>;
-    /**
-     * Enable strict functional-rate evaluation so unresolved variables or NaN
-     * results throw loudly instead of silently returning 0. Intended for
-     * reference-output / CI generation.
-     */
-    strictFunctionalRates?: boolean;
 }
 
 export function normalizeFilterNames(names?: string[]) {
@@ -140,36 +134,24 @@ function ensureBatchSimulationPhases(model: BNGLModel, method: 'ode' | 'ssa'): v
 export async function executeMultiPhaseSimulation(
     simulator: BatchSimulator,
     model: BNGLModel,
-    seed?: number,
-    strictFunctionalRates?: boolean
+    seed?: number
 ): Promise<SimulationResults> {
     const options = getSimulationOptionsFromParsedModel(model, 'default', {
         solver: 'cvode',
         includeSpeciesData: false,
-        includeExpandedNetwork: false,
-        ...(seed !== undefined ? { seed } : {}),
-        ...(strictFunctionalRates !== undefined ? { strictFunctionalRates } : {})
+        ...(seed !== undefined ? { seed } : {})
     });
     const phaseCount = model.simulationPhases?.length ?? 0;
     const label = phaseCount > 1 ? `Multi-Phase (${phaseCount})` : 'Single Phase';
     return await simulator.simulate(model, options, { description: label });
 }
 
-/**
- * Result of running a single batch item:
- * - `'success'`: parsed, simulated, and exported cleanly.
- * - `'skipped'`: intentionally not run (e.g. NFsim model, which the batch
- *   runner does not support). This is NOT a failure.
- * - `'failed'`: an actual error occurred while parsing/simulating/exporting.
- */
-export type BatchItemStatus = 'success' | 'skipped' | 'failed';
-
 export async function runSingleBatchItem(
     options: BatchRunnerOptions,
     modelDef: BatchModelDef,
     batchSeed?: number
-): Promise<BatchItemStatus> {
-    const { simulator, reporter, verbose, nfSimModels, strictFunctionalRates } = options;
+): Promise<boolean> {
+    const { simulator, reporter, verbose, nfSimModels } = options;
     reporter.group(`Processing: ${modelDef.name}`);
     try {
         // Resolve code
@@ -193,10 +175,7 @@ export async function runSingleBatchItem(
             const modelLabel = modelDef.id || modelDef.name;
             reporter.warn(`[Batch] Skipping ${modelLabel}: NFsim models are not supported by the batch runner (detected: ${detectedMethod}).`);
             reporter.groupEnd();
-            // Intentional skip — NOT a failure. If another unsupported method
-            // (e.g. spatial) is added here, return 'skipped' for it too rather
-            // than exempting the model in EXPECTED_MISMATCHES.
-            return 'skipped';
+            return false;
         }
 
         ensureBatchSimulationPhases(model, batchMethod);
@@ -235,7 +214,7 @@ export async function runSingleBatchItem(
         // 2. Simulate
         if (verbose) reporter.time('Simulate');
         model.simulationPhases = model.simulationPhases ?? [];
-        const results: SimulationResults = await executeMultiPhaseSimulation(simulator, model, batchSeed, strictFunctionalRates);
+        const results: SimulationResults = await executeMultiPhaseSimulation(simulator, model, batchSeed);
         if (verbose) reporter.timeEnd('Simulate');
 
         // 3. Export (via reporter callback)
@@ -243,7 +222,7 @@ export async function runSingleBatchItem(
 
         reporter.log('✅ Exported results');
         reporter.groupEnd();
-        return 'success';
+        return true;
     } catch (e: any) {
         reporter.error('❌ Failed:', e);
         if (simulator.restart && (e.message?.includes('terminated') || e.message?.includes('Worker'))) {
@@ -251,6 +230,6 @@ export async function runSingleBatchItem(
             simulator.restart();
         }
         reporter.groupEnd();
-        return 'failed';
+        return false;
     }
 }

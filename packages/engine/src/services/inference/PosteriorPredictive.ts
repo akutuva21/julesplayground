@@ -35,13 +35,7 @@ export interface PosteriorPredictiveConfig {
   /** Simulation function — caller provides this to avoid circular imports */
   simulate: (
     code: string,
-    options: {
-      method: string;
-      t_end: number;
-      n_steps: number;
-      includeSpeciesData?: boolean;
-      includeExpandedNetwork?: boolean;
-    },
+    options: { method: string; t_end: number; n_steps: number },
   ) => Promise<{ headers: string[]; data: Array<Record<string, number>> }>;
   /** Random seed for reproducibility */
   seed?: number;
@@ -184,8 +178,6 @@ export async function posteriorPredictive(
           method,
           t_end,
           n_steps,
-          includeSpeciesData: false,
-          includeExpandedNetwork: false,
         });
 
         const data = result.data;

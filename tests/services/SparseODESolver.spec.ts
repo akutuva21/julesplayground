@@ -78,7 +78,7 @@ describe('SparseODESolver Service', () => {
         );
         
         // Internal check: reduced size
-        // @ts-expect-error
+        // @ts-ignore
         expect(solver.n).toBe(1);
     });
 

@@ -36,7 +36,7 @@ export async function handleExportOmex(args: ToolArgs): Promise<ToolResult<any>>
                 ...(parsedArgs.metadata ? ['metadata.rdf'] : [])],
         });
     } catch (error) {
-        const structured = structureError(error instanceof Error ? error : new Error(String(error), { cause: error }));
+        const structured = structureError(error instanceof Error ? error : new Error(String(error)));
         return createToolResult(structured);
     }
 }

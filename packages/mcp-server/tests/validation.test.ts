@@ -12,7 +12,6 @@ import { handleEditModel } from '../src/handlers/editModel';
 import { handleDiagnoseModel } from '../src/handlers/diagnoseModel';
 import { handleExplainModel } from '../src/handlers/explainModel';
 import { handleSuggestFix } from '../src/handlers/suggestFix';
-import { ParameterScanResult, ValidateModelResult, ContactMap } from '../src/types/index';
 
 const simpleModel = `
 begin parameters
@@ -58,19 +57,17 @@ end reaction rules
 describe('MCP Server Tools Functional Validation', () => {
     it('should parse BNGL code (parse_bngl)', async () => {
         const result = await handleParseBngl({ code: simpleModel });
-        const sc = result.structuredContent as { success: boolean; model?: { species: unknown[] } };
-        expect(sc.success).toBe(true);
-        expect(sc.model).toBeDefined();
-        expect(sc.model?.species.length).toBe(2);
+        expect(result.structuredContent.success).toBe(true);
+        expect(result.structuredContent.model).toBeDefined();
+        expect(result.structuredContent.model?.species.length).toBe(2);
     });
 
     it('should generate reaction network (generate_network)', async () => {
         const result = await handleGenerateNetwork({ code: simpleModel });
-        const sc = result.structuredContent as { species: unknown[]; reactions: unknown[] };
-        expect(sc.species).toBeDefined();
-        expect(sc.reactions).toBeDefined();
+        expect(result.structuredContent.species).toBeDefined();
+        expect(result.structuredContent.reactions).toBeDefined();
         // A + B -> complex (3 species total: A, B, Complex)
-        expect(sc.species.length).toBe(3);
+        expect(result.structuredContent.species.length).toBe(3);
     });
 
     it('should simulate model (simulate ODE)', async () => {
@@ -80,10 +77,9 @@ describe('MCP Server Tools Functional Validation', () => {
             t_end: 1,
             n_steps: 10
         });
-        const sc = result.structuredContent as { data: Array<{ A_free: number }> };
-        expect(sc.data).toBeDefined();
-        expect(sc.data.length).toBe(11); // 0 to 10 steps
-        expect(sc.data[0].A_free).toBeCloseTo(100);
+        expect(result.structuredContent.data).toBeDefined();
+        expect(result.structuredContent.data.length).toBe(11); // 0 to 10 steps
+        expect(result.structuredContent.data[0].A_free).toBeCloseTo(100);
     });
 
     it('should simulate model (simulate SSA)', async () => {
@@ -93,11 +89,10 @@ describe('MCP Server Tools Functional Validation', () => {
             t_end: 1,
             n_steps: 5
         });
-        const sc = result.structuredContent as { data: Array<{ A_free: number }> };
-        expect(sc.data).toBeDefined();
-        expect(sc.data.length).toBe(6);
+        expect(result.structuredContent.data).toBeDefined();
+        expect(result.structuredContent.data.length).toBe(6);
         // SSA results should be integers
-        expect(Number.isInteger(sc.data[0].A_free)).toBe(true);
+        expect(Number.isInteger(result.structuredContent.data[0].A_free)).toBe(true);
     });
 
     it('should support observables_only output mode for token-efficient clients', async () => {
@@ -109,18 +104,11 @@ describe('MCP Server Tools Functional Validation', () => {
             output_mode: 'observables_only',
         });
 
-        const sc = result.structuredContent as {
-            data: unknown;
-            expandedReactions?: unknown;
-            expandedSpecies?: unknown;
-            speciesData?: unknown;
-            speciesDataBySuffix?: unknown;
-        };
-        expect(sc.data).toBeDefined();
-        expect(sc.expandedReactions).toBeUndefined();
-        expect(sc.expandedSpecies).toBeUndefined();
-        expect(sc.speciesData).toBeUndefined();
-        expect(sc.speciesDataBySuffix).toBeUndefined();
+        expect(result.structuredContent.data).toBeDefined();
+        expect(result.structuredContent.expandedReactions).toBeUndefined();
+        expect(result.structuredContent.expandedSpecies).toBeUndefined();
+        expect(result.structuredContent.speciesData).toBeUndefined();
+        expect(result.structuredContent.speciesDataBySuffix).toBeUndefined();
     });
 
     it('should run 1D parameter scan', async () => {
@@ -133,11 +121,10 @@ describe('MCP Server Tools Functional Validation', () => {
             t_end: 1,
             n_steps: 2
         });
-        const sc = result.structuredContent as ParameterScanResult;
-        expect(sc.mode).toBe('1d');
-        expect(sc.xValues.length).toBe(3);
-        expect(sc.observables.Complex).toBeDefined();
-        expect(sc.observables.Complex.length).toBe(3);
+        expect(result.structuredContent.mode).toBe('1d');
+        expect(result.structuredContent.xValues.length).toBe(3);
+        expect(result.structuredContent.observables.Complex).toBeDefined();
+        expect(result.structuredContent.observables.Complex.length).toBe(3);
     });
 
     it('should re-evaluate seed species expressions during parameter_scan', async () => {
@@ -151,11 +138,10 @@ describe('MCP Server Tools Functional Validation', () => {
             n_steps: 1,
         });
 
-        const sc = result.structuredContent as ParameterScanResult;
-        expect(sc.mode).toBe('1d');
-        expect((sc.observables.A_obs as number[]).length).toBe(3);
-        expect((sc.observables.A_obs as number[])[0]).toBeCloseTo(10, 6);
-        expect((sc.observables.A_obs as number[])[2]).toBeCloseTo(30, 6);
+        expect(result.structuredContent.mode).toBe('1d');
+        expect(result.structuredContent.observables.A_obs.length).toBe(3);
+        expect(result.structuredContent.observables.A_obs[0]).toBeCloseTo(10, 6);
+        expect(result.structuredContent.observables.A_obs[2]).toBeCloseTo(30, 6);
     });
 
     it('should run 2D parameter scan', async () => {
@@ -172,29 +158,26 @@ describe('MCP Server Tools Functional Validation', () => {
             t_end: 1,
             n_steps: 2
         });
-        const sc = result.structuredContent as ParameterScanResult;
-        expect(sc.mode).toBe('2d');
-        expect(sc.xValues.length).toBe(2);
-        expect(sc.yValues?.length).toBe(2);
-        expect(sc.observables.Complex).toBeDefined();
+        expect(result.structuredContent.mode).toBe('2d');
+        expect(result.structuredContent.xValues.length).toBe(2);
+        expect(result.structuredContent.yValues.length).toBe(2);
+        expect(result.structuredContent.observables.Complex).toBeDefined();
         // 2D result is number[][]
-        expect(Array.isArray(sc.observables.Complex[0])).toBe(true);
+        expect(Array.isArray(result.structuredContent.observables.Complex[0])).toBe(true);
     });
 
     it('should validate model (validate_model)', async () => {
         const result = await handleValidateModel({ code: simpleModel });
-        const sc = result.structuredContent as ValidateModelResult;
-        expect(sc.valid).toBe(true);
-        expect(sc.summary.errors).toBe(0);
+        expect(result.structuredContent.valid).toBe(true);
+        expect(result.structuredContent.summary.errors).toBe(0);
     });
 
     it('should get contact map (get_contact_map)', async () => {
         const result = await handleGetContactMap({ code: simpleModel });
-        const sc = result.structuredContent as ContactMap;
-        expect(sc.nodes.length).toBeGreaterThan(0);
-        expect(sc.edges.length).toBeGreaterThan(0);
+        expect(result.structuredContent.nodes.length).toBeGreaterThan(0);
+        expect(result.structuredContent.edges.length).toBeGreaterThan(0);
         // Nodes: A, B, A.b, B.a
-        const molNames = sc.nodes.filter((n) => n.type === 'molecule').map((n) => n.label);
+        const molNames = (result.structuredContent.nodes as Array<{ type?: string; label?: string }>).filter((n) => n.type === 'molecule').map((n) => n.label);
         expect(molNames).toContain('A');
         expect(molNames).toContain('B');
     });
@@ -211,47 +194,34 @@ describe('MCP Server Tools Functional Validation', () => {
             ],
             max_iterations: 5
         });
-        const sc = result.structuredContent as { params: Record<string, number>; paramNames: string[] };
-        expect(sc.params).toBeDefined();
-        expect(sc.paramNames).toContain('k1');
+        expect(result.structuredContent.params).toBeDefined();
+        expect(result.structuredContent.paramNames).toContain('k1');
     });
 
     it('should diagnose model (diagnose)', async () => {
         const result = await handleDiagnose({ code: simpleModel });
-        const sc = result.structuredContent as { stiffness: unknown; estimation: { rules: number } };
-        expect(sc.stiffness).toBeDefined();
-        expect(sc.estimation).toBeDefined();
-        expect(sc.estimation.rules).toBe(2);
+        expect(result.structuredContent.stiffness).toBeDefined();
+        expect(result.structuredContent.estimation).toBeDefined();
+        expect(result.structuredContent.estimation.rules).toBe(2);
     });
 
     it('should compose model from natural language statements (compose_model)', async () => {
         const result = await handleComposeModel({
             statements: ['A binds B with rate k_bind']
         });
-        const sc = result.structuredContent as {
-            code: string;
-            rules: unknown[];
-            analysis: { recognizedCount: number };
-            molecules: unknown[];
-            confirmation: string;
-        };
-        expect(sc.code).toContain('begin reaction rules');
-        expect(sc.rules.length).toBeGreaterThan(0);
-        expect(sc.analysis.recognizedCount).toBe(1);
-        expect(sc.molecules.length).toBeGreaterThan(0);
-        expect(sc.confirmation).toContain('Parsed 1/1 statements');
+        expect(result.structuredContent.code).toContain('begin reaction rules');
+        expect(result.structuredContent.rules.length).toBeGreaterThan(0);
+        expect(result.structuredContent.analysis.recognizedCount).toBe(1);
+        expect(result.structuredContent.molecules.length).toBeGreaterThan(0);
+        expect(result.structuredContent.confirmation).toContain('Parsed 1/1 statements');
     });
 
     it('should compose model using grammar synonyms (compose_model associates)', async () => {
         const result = await handleComposeModel({
             statements: ['EGF associates with EGFR with rate kon']
         });
-        const sc = result.structuredContent as {
-            analysis: { recognizedCount: number };
-            rules: unknown[];
-        };
-        expect(sc.analysis.recognizedCount).toBe(1);
-        expect(sc.rules.length).toBeGreaterThan(0);
+        expect(result.structuredContent.analysis.recognizedCount).toBe(1);
+        expect(result.structuredContent.rules.length).toBeGreaterThan(0);
     });
 
     it('should edit model with structured operations (edit_model)', async () => {
@@ -262,14 +232,9 @@ describe('MCP Server Tools Functional Validation', () => {
                 { action: 'add_observable', name: 'A_total', type: 'Molecules', pattern: 'A(b)' }
             ]
         });
-        const sc = result.structuredContent as {
-            code: string;
-            validation: { valid: boolean };
-            summary: unknown[];
-        };
-        expect(sc.code).toContain('k1 0.2');
-        expect(sc.validation.valid).toBe(true);
-        expect(sc.summary.length).toBe(2);
+        expect(result.structuredContent.code).toContain('k1 0.2');
+        expect(result.structuredContent.validation.valid).toBe(true);
+        expect(result.structuredContent.summary.length).toBe(2);
     });
 
     it('should run deep model diagnosis (diagnose_model)', async () => {
@@ -281,30 +246,19 @@ describe('MCP Server Tools Functional Validation', () => {
             n_bootstrap: 10,
             max_parameters: 2,
         });
-        const sc = result.structuredContent as {
-            structure: unknown;
-            stiffness: unknown;
-            dynamics: unknown;
-            sobol: unknown;
-            fim: unknown;
-            convergenceAssessment: { insightSaturated: boolean; recommendation: string };
-            ruleAttribution: Array<{ topologyPath?: string; targetObservable?: string }>;
-            parameterSelection: { analyzed: number };
-            surprises: unknown[];
-        };
-        expect(sc.structure).toBeDefined();
-        expect(sc.stiffness).toBeDefined();
-        expect(sc.dynamics).toBeDefined();
-        expect(sc.sobol).toBeDefined();
-        expect(sc.fim).toBeDefined();
-        expect(sc.convergenceAssessment).toBeDefined();
-        expect(typeof sc.convergenceAssessment.insightSaturated).toBe('boolean');
-        expect(['continue_analysis', 'collect_more_data', 'done']).toContain(sc.convergenceAssessment.recommendation);
-        expect(Array.isArray(sc.ruleAttribution)).toBe(true);
-        expect(sc.parameterSelection).toBeDefined();
-        expect(sc.parameterSelection.analyzed).toBeLessThanOrEqual(2);
-        expect(Array.isArray(sc.surprises)).toBe(true);
-        const firstTrace = sc.ruleAttribution[0];
+        expect(result.structuredContent.structure).toBeDefined();
+        expect(result.structuredContent.stiffness).toBeDefined();
+        expect(result.structuredContent.dynamics).toBeDefined();
+        expect(result.structuredContent.sobol).toBeDefined();
+        expect(result.structuredContent.fim).toBeDefined();
+        expect(result.structuredContent.convergenceAssessment).toBeDefined();
+        expect(typeof result.structuredContent.convergenceAssessment.insightSaturated).toBe('boolean');
+        expect(['continue_analysis', 'collect_more_data', 'done']).toContain(result.structuredContent.convergenceAssessment.recommendation);
+        expect(Array.isArray(result.structuredContent.ruleAttribution)).toBe(true);
+        expect(result.structuredContent.parameterSelection).toBeDefined();
+        expect(result.structuredContent.parameterSelection.analyzed).toBeLessThanOrEqual(2);
+        expect(Array.isArray(result.structuredContent.surprises)).toBe(true);
+        const firstTrace = result.structuredContent.ruleAttribution[0];
         if (firstTrace) {
             expect(firstTrace.topologyPath || firstTrace.targetObservable).toBeDefined();
         }
@@ -324,19 +278,13 @@ describe('MCP Server Tools Functional Validation', () => {
                 { time: 1, observables: { A_free: 70, Complex: 15 } },
             ],
         });
-        const sc = result.structuredContent as {
-            profileLikelihood: {
-                profiles: Record<string, { identifiability: string }>;
-                baselineSSR: number;
-            };
-        };
-        expect(sc.profileLikelihood).toBeDefined();
-        expect(sc.profileLikelihood.profiles).toBeDefined();
-        expect(sc.profileLikelihood.baselineSSR).toBeGreaterThanOrEqual(0);
-        const paramNames = Object.keys(sc.profileLikelihood.profiles);
+        expect(result.structuredContent.profileLikelihood).toBeDefined();
+        expect(result.structuredContent.profileLikelihood.profiles).toBeDefined();
+        expect(result.structuredContent.profileLikelihood.baselineSSR).toBeGreaterThanOrEqual(0);
+        const paramNames = Object.keys(result.structuredContent.profileLikelihood.profiles);
         expect(paramNames.length).toBeGreaterThan(0);
         for (const name of paramNames) {
-            const profile = sc.profileLikelihood.profiles[name];
+            const profile = result.structuredContent.profileLikelihood.profiles[name];
             expect(['identifiable', 'practically_unidentifiable', 'structurally_unidentifiable']).toContain(profile.identifiability);
         }
     });
@@ -369,12 +317,9 @@ describe('MCP Server Tools Functional Validation', () => {
             ],
         });
 
-        const wSc = weighted.structuredContent as { profileLikelihood: { baselineSSR: number } };
-        const uSc = unweighted.structuredContent as { profileLikelihood: { baselineSSR: number } };
-
-        expect(wSc.profileLikelihood).toBeDefined();
-        expect(uSc.profileLikelihood).toBeDefined();
-        expect(wSc.profileLikelihood.baselineSSR).not.toBe(uSc.profileLikelihood.baselineSSR);
+        expect(weighted.structuredContent.profileLikelihood).toBeDefined();
+        expect(unweighted.structuredContent.profileLikelihood).toBeDefined();
+        expect(weighted.structuredContent.profileLikelihood.baselineSSR).not.toBe(unweighted.structuredContent.profileLikelihood.baselineSSR);
     });
 
     it('should include contact map path in rule attribution', async () => {
@@ -383,12 +328,12 @@ describe('MCP Server Tools Functional Validation', () => {
             t_end: 1, n_steps: 10,
             n_samples: 8, n_bootstrap: 10, max_parameters: 2,
         });
-        const trace = result.structuredContent.ruleAttribution as Array<{ contactMapPath?: string[]; narrative?: string }>;
+        const trace = result.structuredContent.ruleAttribution;
         expect(trace).toBeDefined();
         expect(trace.length).toBeGreaterThan(0);
         // At least one trace entry should have contactMapPath or narrative
-        const hasContactPath = trace.some((t) => t.contactMapPath && t.contactMapPath.length > 0);
-        const hasNarrative = trace.some((t) => t.narrative && t.narrative.length > 0);
+        const hasContactPath = (trace as Array<{ contactMapPath?: string[] }>).some((t) => t.contactMapPath && t.contactMapPath.length > 0);
+        const hasNarrative = (trace as Array<{ narrative?: string }>).some((t) => t.narrative && t.narrative.length > 0);
         expect(hasContactPath || hasNarrative).toBe(true);
     });
 
@@ -398,26 +343,18 @@ describe('MCP Server Tools Functional Validation', () => {
             t_end: 1, n_steps: 10,
             n_samples: 8, n_bootstrap: 10, max_parameters: 2,
         });
-        const sc = result.structuredContent as {
-            summary: {
-                technical: string;
-                biological: string;
-                strategic: string;
-            };
-        };
-        expect(sc.summary).toBeDefined();
-        expect(typeof sc.summary.technical).toBe('string');
-        expect(typeof sc.summary.biological).toBe('string');
-        expect(typeof sc.summary.strategic).toBe('string');
-        expect(sc.summary.technical.length).toBeGreaterThan(0);
+        expect(result.structuredContent.summary).toBeDefined();
+        expect(typeof result.structuredContent.summary.technical).toBe('string');
+        expect(typeof result.structuredContent.summary.biological).toBe('string');
+        expect(typeof result.structuredContent.summary.strategic).toBe('string');
+        expect(result.structuredContent.summary.technical.length).toBeGreaterThan(0);
     });
 
     it('should explain model in narrative form (explain_model)', async () => {
         const result = await handleExplainModel({ code: simpleModel });
-        const sc = result.structuredContent as { summary: string; sections: unknown[] };
-        expect(sc.summary).toContain('Model contains');
-        expect(Array.isArray(sc.sections)).toBe(true);
-        expect(sc.sections.length).toBeGreaterThan(0);
+        expect(result.structuredContent.summary).toContain('Model contains');
+        expect(Array.isArray(result.structuredContent.sections)).toBe(true);
+        expect(result.structuredContent.sections.length).toBeGreaterThan(0);
     });
 
     it('should suggest fixes and optional autocorrected code (suggest_fix)', async () => {
@@ -426,9 +363,8 @@ describe('MCP Server Tools Functional Validation', () => {
             code: modelWithoutObservables,
             include_auto_corrected_code: true,
         });
-        const sc = result.structuredContent as { fixes: unknown[]; auto_corrected_code: string };
-        expect(sc.fixes.length).toBeGreaterThan(0);
-        expect(sc.auto_corrected_code).toContain('begin observables');
+        expect(result.structuredContent.fixes.length).toBeGreaterThan(0);
+        expect(result.structuredContent.auto_corrected_code).toContain('begin observables');
     });
 
     describe('unreachable rules analysis', () => {
@@ -470,14 +406,9 @@ end model
                 max_parameters: 1,
             });
 
-            const sc = result.structuredContent as {
-                unreachableAnalysis?: {
-                    unreachableRules: string[];
-                };
-            };
-            expect(sc.unreachableAnalysis).toBeDefined();
-            expect(sc.unreachableAnalysis!.unreachableRules.length).toBeGreaterThan(0);
-            expect(sc.unreachableAnalysis!.unreachableRules).toContain('Rule2');
+            expect(result.structuredContent.unreachableAnalysis).toBeDefined();
+            expect(result.structuredContent.unreachableAnalysis!.unreachableRules.length).toBeGreaterThan(0);
+            expect(result.structuredContent.unreachableAnalysis!.unreachableRules).toContain('Rule2');
         });
 
         it('should report all rules reachable for a well-formed model', async () => {
@@ -513,15 +444,9 @@ end model
                 max_parameters: 1,
             });
 
-            const sc = result.structuredContent as {
-                unreachableAnalysis?: {
-                    unreachableRules: string[];
-                    totalRules: number;
-                };
-            };
-            expect(sc.unreachableAnalysis).toBeDefined();
-            expect(sc.unreachableAnalysis!.unreachableRules).toEqual([]);
-            expect(sc.unreachableAnalysis!.totalRules).toBe(1);  // 1 reversible rule
+            expect(result.structuredContent.unreachableAnalysis).toBeDefined();
+            expect(result.structuredContent.unreachableAnalysis!.unreachableRules).toEqual([]);
+            expect(result.structuredContent.unreachableAnalysis!.totalRules).toBe(1);  // 1 reversible rule
         });
     });
 });

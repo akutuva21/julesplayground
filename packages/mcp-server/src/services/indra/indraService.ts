@@ -38,9 +38,9 @@ async function indraFetch<T>(url: string, options: RequestInit & { timeout?: num
         return ({ model: text } as unknown) as T;
     } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
-            throw new Error(`INDRA request timed out after ${timeout}ms`, { cause: error });
+            throw new Error(`INDRA request timed out after ${timeout}ms`);
         }
-        throw error instanceof Error ? error : new Error(String(error), { cause: error });
+        throw error instanceof Error ? error : new Error(String(error));
     } finally {
         clearTimeout(timer);
     }
@@ -84,7 +84,7 @@ export class INDRAService {
                 });
                 return normalizeStatements(payload);
             } catch (error) {
-                lastError = error instanceof Error ? error : new Error(String(error), { cause: error });
+                lastError = error instanceof Error ? error : new Error(String(error));
                 if (!(error instanceof Error) || !error.message.includes('(404)')) {
                     throw error;
                 }

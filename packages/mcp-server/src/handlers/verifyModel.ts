@@ -1,113 +1,42 @@
-import { ToolArgs, ToolResult, VerifyModelResult, ContactMap, MCPErrorResult } from '../types/index.js';
-import { createToolResult, parseModelOrThrow, parseArgs, buildContactMap } from '../services/engine.js';
+import { ToolArgs, ToolResult } from '../types/index.js';
+import { createToolResult, parseModelOrThrow } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
-import { verifyModelArgsSchema } from '../schemas/index.js';
-import {
-  parseQuery,
-  checkAbstractReachability,
-  boundedReachabilityCheck,
-  checkRuleFires,
-  checkDeadlock,
-} from '@bngplayground/engine';
 
-interface VerifierContactNode {
-  moleculeType: string;
-  component: string;
-  states?: string[];
-}
-
-interface VerifierContactEdge {
-  source: { moleculeType: string; component: string };
-  target: { moleculeType: string; component: string };
-  ruleNames: string[];
-}
-
-interface VerifierContactMap {
-  nodes: VerifierContactNode[];
-  edges: VerifierContactEdge[];
-}
-
-export async function handleVerifyModel(args: ToolArgs): Promise<ToolResult<VerifyModelResult | MCPErrorResult>> {
+export async function handleVerifyModel(args: ToolArgs): Promise<ToolResult<any>> {
+  const parsedArgs = (args ?? {}) as any;
   try {
-    const parsedArgs = parseArgs('verify_model', verifyModelArgsSchema, args);
+    const engine = await import('@bngplayground/engine') as any;
+    const { parseQuery, checkAbstractReachability, boundedReachabilityCheck } = engine;
     const model = parseModelOrThrow(parsedArgs.code);
     const query = parseQuery(parsedArgs.query);
 
-    let result: VerifyModelResult = {
-      query: parsedArgs.query,
-      answer: 'unknown',
-      confidence: 'unknown',
-      layerUsed: 0,
-      explanation: '',
-    };
+    let result: any = { query: parsedArgs.query, answer: 'unknown', confidence: 'unknown', layerUsed: 0 };
 
     // Build contact map from model rules for Layer 1 (if available)
-    let contactMap: ContactMap = { nodes: [], edges: [] };
+    let contactMap = { nodes: [] as any[], edges: [] as any[] };
     try {
-      contactMap = buildContactMap(model.reactionRules ?? [], model.moleculeTypes ?? []);
+      // Use the MCP engine service's buildContactMap if available
+      const { buildContactMap } = await import('../services/engine.js');
+      if (typeof buildContactMap === 'function') {
+        contactMap = buildContactMap(model.reactionRules ?? [], model.moleculeTypes ?? []);
+      }
     } catch { /* Contact map builder unavailable, Layer 1 will use empty map */ }
-
-    // Translate visualization contact map to the format expected by checkAbstractReachability
-    const nodeMap = new Map<string, { moleculeType: string; component: string }>();
-    const verifierNodes: VerifierContactNode[] = [];
-
-    for (const node of contactMap.nodes) {
-      if (node.type === 'component') {
-        const parentNode = contactMap.nodes.find(n => n.id === node.parent);
-        if (parentNode && parentNode.type === 'molecule') {
-          const info = {
-            moleculeType: parentNode.label,
-            component: node.label,
-          };
-          nodeMap.set(node.id, info);
-          verifierNodes.push(info);
-        }
-      }
-    }
-
-    const verifierEdges: VerifierContactEdge[] = [];
-    for (const edge of contactMap.edges) {
-      const sourceInfo = nodeMap.get(edge.from);
-      const targetInfo = nodeMap.get(edge.to);
-      if (sourceInfo && targetInfo) {
-        verifierEdges.push({
-          source: sourceInfo,
-          target: targetInfo,
-          ruleNames: edge.ruleLabels,
-        });
-      }
-    }
-
-    const verifierContactMap: VerifierContactMap = {
-      nodes: verifierNodes,
-      edges: verifierEdges,
-    };
 
     if (query.kind === 'reachable' || query.kind === 'never') {
       // Try Layer 1: Contact Map Abstract Reachability
       try {
         const contactMapResult = checkAbstractReachability(
-          verifierContactMap,
+          contactMap,
           query.pattern,
           model.moleculeTypes || [],
         );
         if (!contactMapResult.reachable && query.kind === 'reachable') {
-          result = {
-            query: parsedArgs.query,
-            answer: false,
-            confidence: 'exact',
-            layerUsed: 1,
-            explanation: 'Pattern is provably unreachable: no contact map edges satisfy the binding requirements.',
-          };
+          result = { query: parsedArgs.query, answer: false, confidence: 'exact', layerUsed: 1,
+            explanation: 'Pattern is provably unreachable: no contact map edges satisfy the binding requirements.' };
         } else if (contactMapResult.reachable && query.kind === 'never') {
           // Layer 1 says possibly reachable -- need Layer 2 to confirm
-          result = {
-            query: parsedArgs.query,
-            answer: 'unknown',
-            confidence: 'over_approximate',
-            layerUsed: 1,
-            explanation: 'Contact map allows this pattern. Running bounded verification...',
-          };
+          result = { query: parsedArgs.query, answer: 'unknown', confidence: 'over_approximate', layerUsed: 1,
+            explanation: 'Contact map allows this pattern. Running bounded verification...' };
         }
       } catch { /* Layer 1 unavailable, skip */ }
 
@@ -115,8 +44,7 @@ export async function handleVerifyModel(args: ToolArgs): Promise<ToolResult<Veri
       if (result.answer === 'unknown') {
         try {
           const bounded = await boundedReachabilityCheck(
-            model,
-            query.pattern,
+            model, query.pattern,
             { maxSpecies: parsedArgs.maxSpecies || 1000 },
           );
           result = {
@@ -137,34 +65,22 @@ export async function handleVerifyModel(args: ToolArgs): Promise<ToolResult<Veri
       }
     } else if (query.kind === 'fires') {
       try {
+        const { checkRuleFires } = await import('@bngplayground/engine');
         const fireResult = checkRuleFires(model, query.ruleName, { maxSpecies: parsedArgs.maxSpecies || 1000 });
-        result = {
-          query: parsedArgs.query,
-          answer: fireResult.fires,
-          confidence: 'bounded',
-          layerUsed: 2,
+        result = { query: parsedArgs.query, answer: fireResult.fires, confidence: 'bounded', layerUsed: 2,
           explanation: fireResult.fires
             ? `Rule "${query.ruleName}" fires (matching species found: ${(fireResult.matchingSpecies ?? []).join(', ')}).`
-            : `Rule "${query.ruleName}" does not fire within bounded exploration.`,
-        };
-      } catch (e) {
-        result.explanation = e instanceof Error ? e.message : String(e);
-      }
+            : `Rule "${query.ruleName}" does not fire within bounded exploration.` };
+      } catch (e: any) { result.explanation = e.message; }
     } else if (query.kind === 'deadlock') {
       try {
+        const { checkDeadlock } = await import('@bngplayground/engine');
         const deadlockResult = checkDeadlock(model, { maxSpecies: parsedArgs.maxSpecies || 1000 });
-        result = {
-          query: parsedArgs.query,
-          answer: deadlockResult.hasDeadlock,
-          confidence: 'bounded',
-          layerUsed: 2,
+        result = { query: parsedArgs.query, answer: deadlockResult.hasDeadlock, confidence: 'bounded', layerUsed: 2,
           explanation: deadlockResult.hasDeadlock
             ? `Deadlock detected: ${deadlockResult.deadlockState ?? 'unknown state'}`
-            : 'No deadlock states found.',
-        };
-      } catch (e) {
-        result.explanation = e instanceof Error ? e.message : String(e);
-      }
+            : 'No deadlock states found.' };
+      } catch (e: any) { result.explanation = e.message; }
     }
 
     return createToolResult({
@@ -173,8 +89,7 @@ export async function handleVerifyModel(args: ToolArgs): Promise<ToolResult<Veri
       biological: result.explanation,
       strategic: 'Use verification queries to check reachability of complexes, rule firing, and deadlock conditions without simulation.',
     });
-  } catch (error) {
-    const err = error instanceof Error ? error : new Error(String(error), { cause: error });
-    return createToolResult(structureError(err));
+  } catch (error: any) {
+    return createToolResult(structureError(error instanceof Error ? error : new Error(String(error))));
   }
 }

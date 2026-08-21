@@ -308,9 +308,7 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
           method: 'ode',
           t_end: 100,
           n_steps: 50,
-          solver: 'cvode',
-          includeSpeciesData: false,
-          includeExpandedNetwork: false,
+          solver: 'cvode'
         } as any, {});
 
         // Extract observable values at each time point
@@ -480,9 +478,7 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
           method: 'ode',
           t_end: 100,
           n_steps: 50,
-          solver: 'cvode',
-          includeSpeciesData: false,
-          includeExpandedNetwork: false,
+          solver: 'cvode'
         } as any, {});
 
         const trajectory = simResult.data.map(point =>
@@ -683,8 +679,6 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model }) => 
       method,
       t_end: tEndValue,
       n_steps: nStepsValue,
-      includeSpeciesData: false,
-      includeExpandedNetwork: false,
       ...(method === 'ode' ? { solver } : {}),
     } as const;
 

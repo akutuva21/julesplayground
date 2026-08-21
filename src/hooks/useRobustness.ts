@@ -53,11 +53,7 @@ export async function performRobustnessAnalysis(
             const runResult = await bnglService.simulateCached(
                 modelId,
                 overrides,
-                {
-                    ...simOptions,
-                    includeSpeciesData: false,
-                    includeExpandedNetwork: false,
-                },
+                simOptions,
                 { signal, description: `Robustness Run ${i + 1}/${iterations}` }
             );
 

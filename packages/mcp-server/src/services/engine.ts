@@ -9,7 +9,6 @@ import {
     MassBalance,
     extractMoleculeNames,
     updateMassActionRates,
-    findUnreachableRules,
 } from '@bngplayground/engine';
 import { z } from 'zod';
 import {
@@ -101,30 +100,6 @@ export function parseModelOrThrow(code: string): BNGLModel {
     return result.model;
 }
 
-/**
- * Constructs a standardized simulation options object from raw tool arguments.
- *
- * This utility parses and formats simulation parameter keys (such as `method`,
- * `t_end`, `n_steps`, `solver`, `atol`, `rtol`, `max_steps`, `seed`, and `sparse`)
- * to match internal engine configurations, providing sensible defaults where necessary.
- *
- * @param args - An object containing optional simulation settings:
- *   - `method` (string): 'ode', 'ssa', or 'nfsim' (defaults to 'ode')
- *   - `t_end` (number): The end time of the simulation (defaults to 10)
- *   - `n_steps` (number): Number of reporting intervals (defaults to 100)
- *   - `solver` (string): The mathematical solver name (e.g., 'auto', 'cvode')
- *   - `atol` (number): Absolute tolerance limit
- *   - `rtol` (number): Relative tolerance limit
- *   - `max_steps` (number): Maximum integration steps
- *   - `seed` (number): Random number generator seed
- *   - `sparse` (boolean): Flag to enable sparse solver optimizations
- * @returns A structured simulation options object configured for the execution loop.
- *
- * @remarks
- * For ODE simulations, if the solver parameter is not explicitly defined, it defaults
- * to 'auto'. This is a server service-layer mapping utility and does not execute or
- * run the actual simulation.
- */
 export function buildSimulationOptions(args: any) {
     const simulationOptions: any = {
         method: args.method ?? 'ode',
@@ -143,21 +118,6 @@ export function buildSimulationOptions(args: any) {
     }
 
     return simulationOptions;
-}
-
-/**
- * Marks an internal simulation as consuming observable headers/data only.
- * Public simulation defaults remain unchanged; this is for high-volume analysis loops.
- */
-export function withDataOnlySimulationOutput<const T extends Record<string, unknown>>(options: T): T & {
-    includeSpeciesData: false;
-    includeExpandedNetwork: false;
-} {
-    return {
-        ...options,
-        includeSpeciesData: false,
-        includeExpandedNetwork: false,
-    };
 }
 
 /**
@@ -214,36 +174,54 @@ export async function expandModel(model: BNGLModel): Promise<BNGLModel> {
     );
 }
 
-// Molecule-name extraction and unreachable rules analysis live in `@bngplayground/engine`;
-// re-exported here so existing importers of this module keep working.
-export { extractMoleculeNames, findUnreachableRules };
+// Molecule-name extraction lives in the engine's canonical pattern parser
+// (`@bngplayground/engine`); re-exported here so existing importers of this
+// module keep working.
+export { extractMoleculeNames };
 
-/**
- * Performs a comprehensive validation check on a parsed BioNetGen model.
- *
- * This function aggregates error, warning, and informational feedback from multiple
- * model verification engines:
- *  1. **Observables Check**: Ensures the model has at least one observable pattern.
- *  2. **Parameters Check**: Validates that all parameters are finite numbers and warns
- *     about unusual parameter magnitudes (extremely large or small nonzero values).
- *  3. **Reachable Rules**: Checks for reaction rules that may never fire due to reactant
- *     unreachability from seed species (delegated to the shared engine `findUnreachableRules`).
- *  4. **Observable Patterns**: Validates the syntax of all defined observables.
- *  5. **NFsim Compatibility**: If requested, validates grammar and features for NFsim
- *     compatibility (delegated to the engine's `validateModelForNFsim`).
- *  6. **Mass Balance**: Verifies atom/mass conservation across reaction rules (delegated
- *     to the engine's `MassBalance.checkMassBalance`).
- *
- * @param model - The parsed `BNGLModel` to validate.
- * @param includeNFsim - A flag to enable or disable extra NFsim-specific validation checks.
- * @returns A structured `ValidateModelResult` describing all issues (errors, warnings, info messages) found.
- *
- * @remarks
- * To maintain proper architectural separation and comply with repository-level invariants,
- * this validation helper strictly calls core engine capabilities (such as `findUnreachableRules`
- * and `MassBalance` from `@bngplayground/engine`) instead of reimplementing any BNGL parsing
- * or biological logic itself.
- */
+function buildInitialMoleculeSet(model: BNGLModel): Set<string> {
+    const molecules = new Set<string>();
+
+    model.species.forEach((species) => {
+        extractMoleculeNames(species.name).forEach((name) => molecules.add(name));
+    });
+
+    return molecules;
+}
+
+export function findUnreachableRules(model: BNGLModel): string[] {
+    const knownMolecules = buildInitialMoleculeSet(model);
+    const reachable = new Set<string>();
+    const reactionRules = model.reactionRules ?? [];
+
+    const ruleDescriptors = reactionRules.map((rule, index) => {
+        const reactants = rule.reactants.flatMap(extractMoleculeNames);
+        const products = rule.products.flatMap(extractMoleculeNames);
+        const label = rule.name ?? `Rule ${index + 1}`;
+        const id = rule.name ?? `rule_${index + 1}`;
+        return { id, label, reactants, products };
+    });
+
+    let progress = true;
+    while (progress) {
+        progress = false;
+        ruleDescriptors.forEach((descriptor) => {
+            if (reachable.has(descriptor.id)) {
+                return;
+            }
+            if (descriptor.reactants.length === 0 || descriptor.reactants.every((name) => knownMolecules.has(name))) {
+                descriptor.products.forEach((name) => knownMolecules.add(name));
+                reachable.add(descriptor.id);
+                progress = true;
+            }
+        });
+    }
+
+    return ruleDescriptors
+        .filter((descriptor) => !reachable.has(descriptor.id))
+        .map((descriptor) => descriptor.label);
+}
+
 export function validateModel(model: BNGLModel, includeNFsim: boolean): ValidateModelResult {
     const errors: ValidationMessage[] = [];
     const warnings: ValidationMessage[] = [];
@@ -389,7 +367,7 @@ function splitByTopLevelCommas(pattern: string): string[] {
 
 function parseSpeciesGraphs(patterns: string[]): ParsedSpeciesGraph[] {
     const graphs: ParsedSpeciesGraph[] = [];
-    for (const pattern of (patterns ?? [])) {
+    for (const pattern of patterns) {
         const pieces = splitByTopLevelCommas(String(pattern));
         for (const piece of pieces) {
             graphs.push(BNGLParser.parseSpeciesGraph(piece, true));
@@ -401,18 +379,15 @@ function parseSpeciesGraphs(patterns: string[]): ParsedSpeciesGraph[] {
 function extractBonds(graphs: ParsedSpeciesGraph[]): Map<string, { mol1: string; mol2: string; comp1: string; comp2: string }> {
     const bonds = new Map<string, { mol1: string; mol2: string; comp1: string; comp2: string }>();
     const sanitize = (name: string) => {
-        if (typeof name !== 'string') return '';
         const dotIdx = name.indexOf('.');
         return dotIdx === -1 ? name : name.slice(0, dotIdx);
     };
 
-    (graphs ?? []).forEach((graph) => {
-        graph?.molecules?.forEach((molecule, molIdx) => {
-            if (!molecule) return;
+    graphs.forEach((graph) => {
+        graph.molecules.forEach((molecule, molIdx) => {
             const molName = sanitize(molecule.name);
-            molecule.components?.forEach((component, compIdx) => {
-                if (!component) return;
-                const partnerKeys = graph.adjacency?.get(`${molIdx}.${compIdx}`);
+            molecule.components.forEach((component, compIdx) => {
+                const partnerKeys = graph.adjacency.get(`${molIdx}.${compIdx}`);
                 if (!partnerKeys || partnerKeys.length === 0) {
                     return;
                 }
@@ -426,8 +401,8 @@ function extractBonds(graphs: ParsedSpeciesGraph[]): Map<string, { mol1: string;
                     if (partnerMolIdx < molIdx || (partnerMolIdx === molIdx && partnerCompIdx < compIdx)) {
                         continue;
                     }
-                    const partnerMolecule = graph.molecules?.[partnerMolIdx];
-                    const partnerComponent = partnerMolecule?.components?.[partnerCompIdx];
+                    const partnerMolecule = graph.molecules[partnerMolIdx];
+                    const partnerComponent = partnerMolecule?.components[partnerCompIdx];
                     if (!partnerMolecule || !partnerComponent) {
                         continue;
                     }
@@ -453,13 +428,11 @@ export function buildContactMap(rules: ReactionRule[], moleculeTypes: BNGLMolecu
     const componentStateMap = new Map<string, Set<string>>();
     const edgeMap = new Map<string, ContactEdge>();
 
-    (moleculeTypes ?? []).forEach((moleculeType) => {
-        if (!moleculeType) return;
+    moleculeTypes.forEach((moleculeType) => {
         if (!moleculeMap.has(moleculeType.name)) {
             moleculeMap.set(moleculeType.name, new Set());
         }
-        moleculeType.components?.forEach((componentDefinition) => {
-            if (typeof componentDefinition !== 'string') return;
+        moleculeType.components.forEach((componentDefinition) => {
             const parts = componentDefinition.split('~');
             const componentName = parts[0];
             moleculeMap.get(moleculeType.name)?.add(componentName);
@@ -473,30 +446,23 @@ export function buildContactMap(rules: ReactionRule[], moleculeTypes: BNGLMolecu
         });
     });
 
-    (rules ?? []).forEach((rule, index) => {
-        if (!rule) return;
+    rules.forEach((rule, index) => {
         const ruleId = rule.name ?? `rule_${index + 1}`;
         const ruleLabel = rule.name ?? `Rule ${index + 1}`;
-        const reactantGraphs = parseSpeciesGraphs(rule.reactants ?? []);
-        const productGraphs = parseSpeciesGraphs(rule.products ?? []);
+        const reactantGraphs = parseSpeciesGraphs(rule.reactants);
+        const productGraphs = parseSpeciesGraphs(rule.products);
         [...reactantGraphs, ...productGraphs].forEach((graph) => {
-            graph?.molecules?.forEach((molecule) => {
-                if (!molecule || molecule.name === '0') {
+            graph.molecules.forEach((molecule) => {
+                if (molecule.name === '0') {
                     return;
                 }
-                const name = molecule.name ?? '';
-                const dotIdx = name.indexOf('.');
-                const moleculeName = dotIdx === -1 ? name : name.slice(0, dotIdx);
-                if (moleculeName.length > 0) {
-                    if (!moleculeMap.has(moleculeName)) {
-                        moleculeMap.set(moleculeName, new Set());
-                    }
+                const dotIdx = molecule.name.indexOf('.');
+                const moleculeName = dotIdx === -1 ? molecule.name : molecule.name.slice(0, dotIdx);
+                if (!moleculeMap.has(moleculeName)) {
+                    moleculeMap.set(moleculeName, new Set());
                 }
-                molecule.components?.forEach((component) => {
-                    if (!component || typeof component.name !== 'string') return;
-                    if (moleculeName.length > 0) {
-                        moleculeMap.get(moleculeName)?.add(component.name);
-                    }
+                molecule.components.forEach((component) => {
+                    moleculeMap.get(moleculeName)?.add(component.name);
                     if (component.state && component.state !== '?') {
                         const stateKey = `${moleculeName}_${component.name}`;
                         if (!componentStateMap.has(stateKey)) {

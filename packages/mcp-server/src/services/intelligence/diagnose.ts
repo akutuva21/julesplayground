@@ -14,7 +14,6 @@ import {
     updateMassActionRates,
     expandModel,
     buildSimulationOptions,
-    withDataOnlySimulationOutput,
     findUnreachableRules,
 } from '../../services/engine.js';
 import { handleSimulate } from '../../handlers/simulate.js';
@@ -116,7 +115,7 @@ export async function diagnoseModelDeep(args: {
                 performanceNote: `All ${totalRules} rules are reachable from the seed species.`
             };
         }
-    } catch {
+    } catch (err) {
         // Non-fatal: if unreachable analysis fails, continue with the rest of the pipeline
         unreachableAnalysis = undefined;
     }
@@ -165,15 +164,15 @@ export async function diagnoseModelDeep(args: {
         .sort(([a], [b]) => a.localeCompare(b));
 
     const maxParameters = Math.max(1, Math.min(args.max_parameters ?? 5, 20));
+    let parameterEntries: Array<[string, number]> = [];
 
     let profileLikelihoodResult: ProfileLikelihoodResult | undefined = undefined;
     let compilationSurprise: { numRules: number; numGeneratedSpecies: number; numGeneratedReactions: number; surpriseLevel: 'high' | 'moderate' | 'none'; warning?: string } | undefined = undefined;
     let irreversibleSteps: Array<{ rule: string; type: string; controllingParameters: string[]; note: string }> = [];
     let plausibilityChecks: Array<{ parameter: string; value: number; issue: string; physicalBound: number; message: string }> = [];
-    let surprises: Array<{ type: 'overshoot' | 'oscillation' | 'decorrelation' | 'insensitive_parameter' | 'unexpected_sensitivity'; description: string; observable?: string; parameter?: string }> = [];
+    let surprises: Array<{ type: 'overshoot' | 'oscillation' | 'decorrelation' | 'insensitive_parameter' | 'unexpected_sensitivity'; description: string; observable?: string; parameter?: string }> = detectSurprises(timeSeries, observableNames);
 
     if (allParameterEntries.length > 0) {
-        let parameterEntries: Array<[string, number]>;
         const ruleDescriptors = reactionRules.map((rule, index) => ({
             name: rule.name ?? `rule_${index + 1}`,
             reactants: rule.reactants,
@@ -213,11 +212,11 @@ export async function diagnoseModelDeep(args: {
 
         plausibilityChecks = checkPlausibility(model.parameters, model.species.map(s => s.name));
 
-        const simOptions = withDataOnlySimulationOutput(buildSimulationOptions({
+        const simOptions = buildSimulationOptions({
             method: args.method,
             t_end: args.t_end,
             n_steps: args.n_steps,
-        }));
+        });
 
         await loadEvaluator();
         const simulateWithOverrides = async (overrides: Record<string, number>) => {
@@ -531,10 +530,6 @@ export async function diagnoseModelDeep(args: {
                 console.warn('Profile likelihood computation failed:', error);
             }
         }
-    }
-
-    if (surprises.length === 0) {
-        surprises = detectSurprises(timeSeries, observableNames);
     }
 
     const summary = generateThreeRegisters({

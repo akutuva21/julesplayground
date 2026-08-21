@@ -9,27 +9,10 @@
  * Reference: bionetgen/bng2/Perl2/BNGAction.pm (Perl coordination)
  */
 
-import type { BNGLModel, GeneratorProgress, BNGLCompartment } from '../../types';
+import type { BNGLModel, GeneratorProgress } from '../../types';
 import { BNGLParser } from '../graph/core/BNGLParser';
 import { Species } from '../graph/core/Species';
 import { Rxn } from '../graph/core/Rxn';
-import { RxnRule } from '../graph/core/RxnRule';
-
-interface ExtendedRxnRule extends RxnRule {
-    originalRate?: string;
-    isFunctionalRate?: boolean;
-    propensityFactor?: number;
-    localFunctionContext?: {
-        functionName: string;
-        contextVar: string;
-        observablePatterns: Array<{ name: string; pattern: string }>;
-        bodyTemplate: string;
-    };
-}
-
-interface ExtendedRxn extends Rxn {
-    originalRate?: string;
-}
 import { NetworkGenerator } from '../graph/NetworkGenerator';
 import { GraphCanonicalizer } from '../graph/core/Canonical';
 import { GraphMatcher } from '../graph/core/Matcher';
@@ -181,11 +164,11 @@ export async function generateExpandedNetwork(
         const normalized = evaluated / volume;
         return Number.isFinite(normalized) && normalized >= 0 ? normalized : evaluated;
     };
-    const evalFunctionMap = new Map<string, { args: string[]; expr: string }>(
-        (inputModel.functions || []).map((f) => [f.name, { args: f.args, expr: f.expression }])
+    const evalFunctionMap = new Map(
+        (inputModel.functions || []).map((f) => [f.name, { args: f.args, expr: f.expression } as any])
     );
-    const resolveSeedConcentration = (species: { name?: string; initialConcentration: number | string; initialExpression?: string }): number => {
-        const raw = species.initialConcentration;
+    const resolveSeedConcentration = (species: { name?: string; initialConcentration: number; initialExpression?: string }): number => {
+        const raw = (species as any).initialConcentration;
         if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
         if (typeof raw === 'string' && raw.trim().length > 0) {
             const parsed = Number(raw);
@@ -208,37 +191,17 @@ export async function generateExpandedNetwork(
     };
     const resolvedSeedConcentrations = inputModel.species.map((s) => resolveSeedConcentration(s));
 
-    type SeedEntry = {
-        graph: ReturnType<typeof BNGLParser.parseSpeciesGraph>;
-        canonical: string;
-        concentration: number;
-        isConstant: boolean;
-    };
-    const seedEntries: SeedEntry[] = inputModel.species.map((species, index) => ({
-        graph: __seedSpecies[index],
-        canonical: GraphCanonicalizer.canonicalize(__seedSpecies[index]),
-        concentration: resolvedSeedConcentrations[index] ?? 0,
-        isConstant: !!species.isConstant,
-    }));
-
     // CRITICAL FIX (Parity Issue 2): Map Canonical Names -> Initial Concentrations
     // BNG2 evaluates species concentrations *after* parameters.
     // In our Visitor, we pre-evaluate them. Here, we build a lookup map.
     // When generating species, we check this map to assign the correct initial value (e.g. "A0" -> 100).
     // Reference: BNG2.pl parameter evaluation order.
     const seedConcentrationMap = new Map<string, number>();
-    const seedEntryMap = new Map<string, SeedEntry>();
-    const normalizedSeedEntryMap = new Map<string, SeedEntry>();
-    const structuralSeedBuckets = new Map<string, SeedEntry[]>();
-    for (const entry of seedEntries) {
-        seedConcentrationMap.set(entry.canonical, entry.concentration);
-        seedEntryMap.set(entry.canonical, entry);
-        normalizedSeedEntryMap.set(normalizeCompartmentSyntax(entry.canonical), entry);
-        const structuralHash = entry.graph.getStructuralHash();
-        const bucket = structuralSeedBuckets.get(structuralHash);
-        if (bucket) bucket.push(entry);
-        else structuralSeedBuckets.set(structuralHash, [entry]);
-    }
+    inputModel.species.forEach((s, index) => {
+        const g = BNGLParser.parseSpeciesGraph(s.name);
+        const canonicalName = GraphCanonicalizer.canonicalize(g);
+        seedConcentrationMap.set(canonicalName, resolvedSeedConcentrations[index] ?? 0);
+    });
 
     // -------------------------------------------------------------------------
     // 2. Rule Preparation
@@ -309,9 +272,7 @@ export async function generateExpandedNetwork(
 
     // ⚡ Bolt Optimization: Hoist Map creations out of hot rule parsing loop
     const staticParamMap = new Map(Object.entries(inputModel.parameters || {}));
-    const staticFunctionMap = new Map<string, { args: string[]; expr: string }>(
-        (inputModel.functions || []).map(f => [f.name, { args: f.args, expr: f.expression }])
-    );
+    const staticFunctionMap = new Map((inputModel.functions || []).map(f => [f.name, { args: f.args, expr: f.expression } as any]));
 
     const rules = reactionRules.flatMap((r) => {
         // BNG2 Semantics: The first reactant often defines the "substrate" variable in rate laws.
@@ -351,7 +312,7 @@ export async function generateExpandedNetwork(
                 // Parity Check: Evaluate constant expressions using the Model's parameter context.
                 rate = BNGLParser.evaluateExpression(expandedRate, staticParamMap, new Set(), staticFunctionMap);
                 if (isNaN(rate)) rate = 0;
-            } catch {
+            } catch (e) {
                 console.warn('[NetworkExpansion] Could not evaluate rate expression:', expandedRate, '- available parameters:', Object.keys(inputModel.parameters || {}), '- using 0');
                 rate = 0;
             }
@@ -387,7 +348,7 @@ export async function generateExpandedNetwork(
                 try {
                     reverseRate = BNGLParser.evaluateExpression(revExpanded, staticParamMap, new Set(), staticFunctionMap);
                     if (isNaN(reverseRate)) reverseRate = 0;
-                } catch {
+                } catch (e) {
                     console.warn('[NetworkExpansion] Could not evaluate reverse rate expression:', revExpanded, '- available parameters:', Object.keys(inputModel.parameters || {}), '- using 0');
                     reverseRate = 0;
                 }
@@ -407,15 +368,15 @@ export async function generateExpandedNetwork(
             isForwardFunctional ? 1 : rate,
             undefined,
             {
-                isMoveConnected: !!r.moveConnected,
-                isMatchOnce: !!r.matchOnce,
+                isMoveConnected: !!(r as any).moveConnected,
+                isMatchOnce: !!(r as any).matchOnce,
             }
-        ) as ExtendedRxnRule;
+        );
         if (r.name) {
             forwardRule.name = r.name;
         }
-        if (r.deleteMolecules) {
-            forwardRule.isDeleteMolecules = true;
+        if ((r as any).deleteMolecules) {
+            (forwardRule as any).isDeleteMolecules = true;
             let globalMolOffset = 0;
             const deleteIndices: number[] = [];
             for (const reactantPattern of forwardRule.reactants) {
@@ -427,38 +388,39 @@ export async function generateExpandedNetwork(
             forwardRule.deleteMolecules = deleteIndices;
         }
         // Preserve BNGL rule modifiers.
-        forwardRule.totalRate = !!r.totalRate;
+        (forwardRule as any).totalRate = !!(r as any).totalRate;
         // Always preserve original rate expression for parameter updates
-        forwardRule.originalRate = expandedRate;
-        forwardRule.rateExpression = expandedRate;
+        (forwardRule as any).originalRate = expandedRate;
+        (forwardRule as unknown as { rateExpression?: string; isFunctionalRate?: boolean; propensityFactor?: number }).rateExpression = expandedRate;
 
         if (isForwardFunctional) {
-            forwardRule.isFunctionalRate = true;
-            forwardRule.propensityFactor = 1;
+            (forwardRule as any).isFunctionalRate = true;
+            (forwardRule as any).propensityFactor = 1;
         }
 
         // Local function: tag the rule so NetworkGenerator can compute per-species rates.
         // These are BNG2-style %x:: rules where f(x) evaluates observable patterns within
         // the matched reactant species (a constant per concrete reaction at network-gen time).
         if (localFnDetected) {
-            forwardRule.localFunctionContext = {
+            (forwardRule as any).localFunctionContext = {
                 functionName: localFnDetected.functionName,
                 contextVar: localFnDetected.contextVar,
                 observablePatterns: localFnDetected.observablePatterns,
                 bodyTemplate: localFnDetected.bodyTemplate,
             };
             // Local function rates are statically computed; no dynamic rateExpression.
-            forwardRule.rateExpression = undefined;
-            forwardRule.originalRate = undefined;
+            (forwardRule as any).rateExpression = undefined;
+            (forwardRule as any).originalRate = undefined;
         }
 
-        // Propagate Arrhenius fields for forward rule
-        if (r.isArrhenius) {
-            forwardRule.isArrhenius = true;
-            forwardRule.arrheniusPhi = r.arrheniusPhi;
-            forwardRule.arrheniusEact = r.arrheniusEact;
-            forwardRule.arrheniusA = r.arrheniusA;
-        }
+            // Propagate Arrhenius fields for forward rule
+            if (r.isArrhenius) {
+                (forwardRule as any).isArrhenius = true;
+                (forwardRule as any).arrheniusPhi = r.arrheniusPhi;
+                (forwardRule as any).arrheniusEact = r.arrheniusEact;
+                (forwardRule as any).arrheniusA = r.arrheniusA;
+            }
+
 
         // Apply Constraints (if any)
         if (r.constraints && r.constraints.length > 0) {
@@ -473,10 +435,10 @@ export async function generateExpandedNetwork(
                 isReverseFunctional ? 1 : reverseRate,
                 undefined,
                 {
-                    isMoveConnected: !!r.moveConnected,
-                    isMatchOnce: !!r.matchOnce,
+                    isMoveConnected: !!(r as any).moveConnected,
+                    isMatchOnce: !!(r as any).matchOnce,
                 }
-            ) as ExtendedRxnRule;
+            );
             if (r.name) {
                 reverseRule.name = r.name + '_rev';
             }
@@ -498,27 +460,27 @@ export async function generateExpandedNetwork(
                 reverseRule.applyConstraints(reverseConstraints, (s) => BNGLParser.parseSpeciesGraph(s));
             }
 
-            reverseRule.totalRate = !!r.totalRate;
-            reverseRule.originalRate = expandedReverseRate;
-            reverseRule.rateExpression = expandedReverseRate;
+            (reverseRule as any).totalRate = !!(r as any).totalRate;
+            (reverseRule as any).originalRate = expandedReverseRate;
+            (reverseRule as any).rateExpression = expandedReverseRate;
 
             if (isReverseFunctional && expandedReverseRate) {
-                reverseRule.isFunctionalRate = true;
+                (reverseRule as any).isFunctionalRate = true;
             }
 
             // Propagate Arrhenius fields for reverse rule
             if (r.isReverseArrhenius) {
-                reverseRule.isArrhenius = true;
-                reverseRule.arrheniusPhi = r.reverseArrheniusPhi;
-                reverseRule.arrheniusEact = r.reverseArrheniusEact;
-                reverseRule.arrheniusA = r.reverseArrheniusA;
+                (reverseRule as any).isArrhenius = true;
+                (reverseRule as any).arrheniusPhi = r.reverseArrheniusPhi;
+                (reverseRule as any).arrheniusEact = r.reverseArrheniusEact;
+                (reverseRule as any).arrheniusA = r.reverseArrheniusA;
             } else if (r.isArrhenius) {
                 // Fallback to symmetry-based reverse if only forward is Arrhenius
-                reverseRule.isArrhenius = true;
+                (reverseRule as any).isArrhenius = true;
                 // Reverse Arrhenius symmetry factor: 1 - phi (BNG2 parity)
-                reverseRule.arrheniusPhi = r.arrheniusPhi ? `1 - (${r.arrheniusPhi})` : "0.5";
-                reverseRule.arrheniusEact = r.arrheniusEact;
-                reverseRule.arrheniusA = r.arrheniusA;
+                (reverseRule as any).arrheniusPhi = r.arrheniusPhi ? `1 - (${r.arrheniusPhi})` : "0.5";
+                (reverseRule as any).arrheniusEact = r.arrheniusEact;
+                (reverseRule as any).arrheniusA = r.arrheniusA;
             }
 
             return [forwardRule, reverseRule];
@@ -530,14 +492,11 @@ export async function generateExpandedNetwork(
     const VERBOSE_NETEXP_DEBUG = false; // set true to enable network expansion debug
     if (VERBOSE_NETEXP_DEBUG) {
         try {
-            console.log('[NetworkExpansion] Prepared rules:', rules.map(r => {
-                const extRule = r as ExtendedRxnRule;
-                return {
-                    name: extRule.name,
-                    rate: extRule.rateConstant ?? extRule.rateExpression ?? null,
-                    isFunctional: !!extRule.isFunctionalRate
-                };
-            }));
+            console.log('[NetworkExpansion] Prepared rules:', rules.map(r => ({
+                name: (r as any).name,
+                rate: (r as any).rate ?? (r as any).rateExpression ?? null,
+                isFunctional: !!(r as any).isFunctionalRate
+            })));
         } catch (e) {
             console.warn('[NetworkExpansion] Failed to stringify prepared rules for debug:', e);
         }
@@ -600,17 +559,29 @@ export async function generateExpandedNetwork(
             memoryUsed: 0,
             timeElapsed: 0
         });
-    } catch (e) {
-        const error = e as Error;
-        console.error('[NetworkExpansion] generator.generate() FAILED:', error.message);
+    } catch (e: any) {
+        console.error('[NetworkExpansion] generator.generate() FAILED:', e.message);
         throw e;
     }
 
     checkCancelled();
 
-    if (VERBOSE_NETEXP_DEBUG) {
-        for (const entry of seedEntries) {
-            console.log('[NetworkExpansion] Seed canonical:', entry.canonical, 'Constant:', entry.isConstant);
+    // Map of canonical seed names to their species objects for efficient lookup
+    const seedMap = new Map<string, { isConstant: boolean }>();
+    type SeedEntry = { graph: ReturnType<typeof BNGLParser.parseSpeciesGraph>; concentration: number; isConstant: boolean };
+    const seedEntries = inputModel.species.map((sp, i) => ({
+        graph: __seedSpecies[i],
+        concentration: resolvedSeedConcentrations[i] ?? 0,
+        isConstant: !!sp.isConstant,
+    })) as SeedEntry[];
+    for (const sp of inputModel.species) {
+        try {
+            const seedG = BNGLParser.parseSpeciesGraph(sp.name);
+            const canon = GraphCanonicalizer.canonicalize(seedG);
+            seedMap.set(canon, { isConstant: !!sp.isConstant });
+            if (VERBOSE_NETEXP_DEBUG) console.log('[NetworkExpansion] Seed:', sp.name, '-> Canonical:', canon, 'Constant:', !!sp.isConstant);
+        } catch (e) {
+            console.warn('[NetworkExpansion] Could not parse seed species:', sp.name, e);
         }
     }
 
@@ -620,12 +591,10 @@ export async function generateExpandedNetwork(
 
     // BNG2 Logic: Identify Species and assign Initial Concentrations.
     // Unlike implicit simulation, we must map back to the input "seed" concentrations.
-    const canonicalSpeciesNames = new Array<string>(result.species.length);
-    const generatedSpecies = result.species.map((s: Species, speciesIndex: number) => {
+    const generatedSpecies = result.species.map((s: Species) => {
         // Canonicalize the graph representation for consistent string keys.
         const canonicalName = GraphCanonicalizer.canonicalize(s.graph);
-        canonicalSpeciesNames[speciesIndex] = canonicalName;
-        let matchedSeedEntry = seedEntryMap.get(canonicalName);
+        let matchedSeedEntry: SeedEntry | undefined;
 
         // Lookup exact match in the pre-calculated seed map.
         let concentration = seedConcentrationMap.get(canonicalName);
@@ -635,11 +604,11 @@ export async function generateExpandedNetwork(
         // If exact canonical match fails, we normalize whitespace and 'in' syntax, then try again.
         if (concentration === undefined) {
             const normalizedTarget = normalizeCompartmentSyntax(canonicalName);
-            matchedSeedEntry = normalizedSeedEntryMap.get(normalizedTarget);
-            concentration = matchedSeedEntry?.concentration;
-            if (concentration !== undefined) {
-                if (VERBOSE_NETEXP_DEBUG) {
-                    console.log(`[NetworkExpansion] Found concentration via loose match for '${canonicalName}': ${concentration}`);
+            for (const [seedCanon, seedConc] of seedConcentrationMap.entries()) {
+                if (normalizeCompartmentSyntax(seedCanon) === normalizedTarget) {
+                    concentration = seedConc;
+                    if (VERBOSE_NETEXP_DEBUG) console.log(`[NetworkExpansion] Found concentration via loose match for '${canonicalName}': ${concentration}`);
+                    break;
                 }
             }
         }
@@ -647,8 +616,7 @@ export async function generateExpandedNetwork(
         // Structural fallback for canonicalization-order discrepancies.
         // This ensures seed concentrations transfer even if canonical string formatting differs.
         if (concentration === undefined) {
-            const candidates = structuralSeedBuckets.get(s.graph.getStructuralHash()) ?? [];
-            for (const entry of candidates) {
+            for (const entry of seedEntries) {
                 const forward = GraphMatcher.matchesPattern(entry.graph, s.graph);
                 if (!forward) continue;
                 const backward = GraphMatcher.matchesPattern(s.graph, entry.graph);
@@ -669,7 +637,8 @@ export async function generateExpandedNetwork(
 
         // Check if this species was marked as "Constant" (Fixed concentration) in inputs.
         // Reference: BNG2 "Species" block attributes.
-        const isConstant = matchedSeedEntry?.isConstant ?? false;
+        const seedInfo = seedMap.get(canonicalName);
+        const isConstant = seedInfo?.isConstant ?? matchedSeedEntry?.isConstant ?? false;
 
         if (VERBOSE_NETEXP_DEBUG) {
             console.log(`[NetworkExpansion] Expanded Species: '${canonicalName}', Conc: ${concentration}, Constant: ${isConstant}`);
@@ -689,7 +658,7 @@ export async function generateExpandedNetwork(
     const totalRateByRuleName = new Map<string, boolean>();
     for (const rr of inputModel.reactionRules) {
         if (!rr.name) continue;
-        const val = !!rr.totalRate;
+        const val = !!(rr as any).totalRate;
         totalRateByRuleName.set(rr.name, val);
         if (rr.isBidirectional) totalRateByRuleName.set(rr.name + '_rev', val);
     }
@@ -698,31 +667,30 @@ export async function generateExpandedNetwork(
     // Ensure all reactants/products are canonicalized strings.
     const generatedReactions = result.reactions.map((r: Rxn, idx: number) => {
         try {
-            const extRxn = r as ExtendedRxn;
-            const rateExpression = extRxn.rateExpression ?? undefined;
-            const statFactor = Number.isFinite(extRxn.statFactor) ? Number(extRxn.statFactor) : 1;
-            const rxnName = extRxn.name ?? '';
-            const totalRate = extRxn.totalRate ?? totalRateByRuleName.get(rxnName) ?? false;
+            const rateExpression = (r as any).rateExpression ?? null;
+            const statFactor = Number.isFinite((r as any).statFactor) ? Number((r as any).statFactor) : 1;
+            const rxnName = (r as any).name ?? '';
+            const totalRate = (r as any).totalRate ?? totalRateByRuleName.get(rxnName) ?? false;
             // BNG2 parity: TotalRate disables the statFactor multiply (sf=1).
             const effectiveStatFactor = totalRate ? 1 : statFactor;
             const foldedRateExpression =
-                rateExpression !== undefined && Math.abs(effectiveStatFactor - 1) > 1e-15
+                rateExpression != null && Math.abs(effectiveStatFactor - 1) > 1e-15
                     ? `(${effectiveStatFactor})*(${rateExpression})`
                     : rateExpression;
             // Functional Rate Flag Logic:
             // Rxn objects generated by NetworkGenerator preserve `rateExpression` strings but loose the boolean flag.
             // We re-derive it: if a rate expression exists, it IS a functional rate.
-            const isFunctionalRate = foldedRateExpression !== undefined && isFunctionalRateExpr(foldedRateExpression, observableNamesSet, functionNamesSet, changingParameterNames);
-            const degeneracy = extRxn.degeneracy ?? 1;
+            const isFunctionalRate = foldedRateExpression != null && isFunctionalRateExpr(foldedRateExpression, observableNamesSet, functionNamesSet, changingParameterNames);
+            const degeneracy = (r as any).degeneracy ?? 1;
 
             // NOTE: Use originalRate to preserve parameter names for non-functional updates
-            const preservedRate = foldedRateExpression || extRxn.originalRate || String(extRxn.rate);
+            const preservedRate = foldedRateExpression || (r as any).originalRate || String(r.rate);
 
             const reaction = {
-                reactants: extRxn.reactants.map((ridx: number) => canonicalSpeciesNames[ridx]),
-                products: extRxn.products.map((pidx: number) => canonicalSpeciesNames[pidx]),
+                reactants: r.reactants.map((ridx: number) => GraphCanonicalizer.canonicalize(result.species[ridx].graph)),
+                products: r.products.map((pidx: number) => GraphCanonicalizer.canonicalize(result.species[pidx].graph)),
                 rate: preservedRate,
-                rateConstant: typeof extRxn.rate === 'number' ? extRxn.rate : 0,
+                rateConstant: typeof r.rate === 'number' ? r.rate : 0,
                 isFunctionalRate,
                 rateExpression: foldedRateExpression,
                 degeneracy,
@@ -730,14 +698,13 @@ export async function generateExpandedNetwork(
                 totalRate,
                 // Preserve the rule name so NetworkExporter can look up pre-assigned _rateLawN names
                 name: rxnName,
-                propensityFactor: extRxn.propensityFactor ?? 1,
-                productStoichiometries: extRxn.productStoichiometries ?? undefined,
-                scalingVolume: extRxn.scalingVolume ?? undefined
+                propensityFactor: (r as unknown as { propensityFactor?: number }).propensityFactor ?? 1,
+                productStoichiometries: (r as any).productStoichiometries ?? null,
+                scalingVolume: (r as any).scalingVolume ?? null
             };
             return reaction;
-        } catch (e) {
-            const error = e as Error;
-            console.error(`[NetworkExpansion] Error mapping reaction ${idx}:`, error.message);
+        } catch (e: any) {
+            console.error(`[NetworkExpansion] Error mapping reaction ${idx}:`, e.message);
             throw e;
         }
     });
@@ -757,30 +724,64 @@ export async function generateExpandedNetwork(
     // Optimized Approach: Filter candidate species by molecule content first.
     // Reduces complexity to O(O * Candidates), massive speedup for large networks.
     const molToSpecies = new Map<string, Set<number>>();
-    result.species.forEach((species, idx) => {
-        // The generator already retains parsed species graphs. Index their
-        // molecule names directly instead of reparsing every canonical species
-        // string after expansion.
-        for (const molecule of species.graph.molecules) {
-            let indices = molToSpecies.get(molecule.name);
-            if (!indices) {
-                indices = new Set<number>();
-                molToSpecies.set(molecule.name, indices);
+    generatedSpecies.forEach((s, idx) => {
+        // Extract base molecule names from the string representation
+        // ⚡ Bolt Optimization: Use fast index-based parsing instead of chained array
+        // methods (.split.map) and regular expressions to avoid allocation overhead in hot loops.
+        const mols: string[] = [];
+        const name = s.name;
+        let start = 0;
+        while (start < name.length) {
+            let dotIdx = name.indexOf('.', start);
+            if (dotIdx === -1) dotIdx = name.length;
+
+            let mStart = start;
+            if (name.charCodeAt(mStart) === 64) { // '@'
+                const colonIdx = name.indexOf(':', mStart);
+                if (colonIdx > 0 && colonIdx < dotIdx) {
+                    if (name.charCodeAt(colonIdx + 1) === 58) { // ':'
+                        mStart = colonIdx + 2;
+                    } else {
+                        mStart = colonIdx + 1;
+                    }
+                }
             }
-            indices.add(idx);
+
+            const parenIdx = name.indexOf('(', mStart);
+            let mEnd = parenIdx !== -1 && parenIdx < dotIdx ? parenIdx : dotIdx;
+
+            let lastAtIdx = -1;
+            for (let i = mEnd - 1; i >= mStart; i--) {
+                if (name.charCodeAt(i) === 64) { // '@'
+                    lastAtIdx = i;
+                    break;
+                }
+            }
+            if (lastAtIdx !== -1) {
+                mEnd = lastAtIdx;
+            }
+
+            mols.push(name.substring(mStart, mEnd));
+            start = dotIdx + 1;
+        }
+
+        for (let i = 0; i < mols.length; i++) {
+            const m = mols[i];
+            if (!molToSpecies.has(m)) molToSpecies.set(m, new Set());
+            molToSpecies.get(m)!.add(idx);
         }
     });
 
     try {
         // Optimization: Precompute compartment map for O(1) lookups during observable generation
-        const compMap = new Map<string, BNGLCompartment>();
+        const compMap = new Map<string, any>();
         if (inputModel.compartments) {
             for (const c of inputModel.compartments) {
                 compMap.set(c.name, c);
             }
         }
 
-        generatedModel.concreteObservables = inputModel.observables.map(obs => {
+        (generatedModel as any).concreteObservables = inputModel.observables.map(obs => {
             const patterns = splitByTopLevelCommas(String(obs.pattern || ''));
             const coeffMap = new Map<number, number>();
 
@@ -902,7 +903,7 @@ export async function generateExpandedNetwork(
                     const specCompName = getCompartment(s.name);
                     const comp = compMap.get(specCompName || '');
                     if (comp) {
-                        vol = comp.resolvedVolume ?? comp.size ?? 1.0;
+                        vol = (comp as any).resolvedVolume ?? comp.size ?? 1.0;
                     }
                 }
                 volumes.push(vol);

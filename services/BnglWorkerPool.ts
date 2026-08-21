@@ -129,126 +129,16 @@ export const getSharedEnsembleFeatureVector = (
     return Array.from(shared.values.subarray(start, start + runStride));
 };
 
-interface PendingPoolRequest {
-    messageId: number;
-    successType: WorkerResponse['type'];
-    errorType: WorkerResponse['type'];
-    defaultErrorMessage: string;
-    errorLogLabel?: string;
-    resolvePayload: (payload: unknown) => void;
-    reject: (err: Error) => void;
-}
-
 export class BnglWorkerPool {
     private workers: Worker[] = [];
     private poolSize: number;
     private nextWorkerIdx = 0;
     private isInitialized = false;
-    private pendingWorkerRequests = new Map<Worker, Map<number, PendingPoolRequest>>();
-    private workerResponseHandlers = new Map<Worker, (event: MessageEvent<WorkerResponse>) => void>();
 
     constructor(poolSize?: number) {
         // Default to hardware concurrency - 1 (leave one for UI)
         const hardwareConcurrency = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency || 4) : 4;
         this.poolSize = poolSize ?? Math.max(1, hardwareConcurrency - 1);
-    }
-
-    private registerPendingRequest(worker: Worker, req: PendingPoolRequest) {
-        let requests = this.pendingWorkerRequests.get(worker);
-        if (!requests) {
-            requests = new Map();
-            this.pendingWorkerRequests.set(worker, requests);
-        }
-        requests.set(req.messageId, req);
-    }
-
-    private removePendingRequest(worker: Worker, messageId: number) {
-        this.pendingWorkerRequests.get(worker)?.delete(messageId);
-    }
-
-    private rejectAllPendingOnWorker(worker: Worker, error: Error) {
-        const requests = this.pendingWorkerRequests.get(worker);
-        if (requests) {
-            for (const req of requests.values()) {
-                req.reject(error);
-            }
-            requests.clear();
-        }
-    }
-
-    private dispatchWorkerResponse(worker: Worker, workerIdx: number, event: MessageEvent<WorkerResponse>): void {
-        const { id, type, payload } = event.data ?? {};
-
-        if (type === 'worker_internal_error') {
-            const errorMsg = payload?.message || 'Worker internal error';
-            console.error(`[Pool] Worker ${workerIdx} internal error reported:`, payload);
-            this.rejectAllPendingOnWorker(worker, new Error(`Worker internal error: ${errorMsg}`));
-            return;
-        }
-
-        if (typeof id !== 'number') return;
-        const req = this.pendingWorkerRequests.get(worker)?.get(id);
-        if (!req) return;
-
-        if (type === req.successType) {
-            this.removePendingRequest(worker, id);
-            req.resolvePayload(payload);
-        } else if (type === req.errorType) {
-            this.removePendingRequest(worker, id);
-            const errorMsg = (payload as { message?: string } | undefined)?.message || req.defaultErrorMessage;
-            if (req.errorLogLabel) {
-                console.error(`[Pool] Worker ${req.errorLogLabel}: ${errorMsg}`, payload);
-            }
-            req.reject(new Error(errorMsg));
-        }
-        // Progress and warning notifications are intentionally non-terminal.
-    }
-
-    private requestOnWorker<T>(
-        worker: Worker,
-        createRequest: (messageId: number) => WorkerRequest,
-        successType: WorkerResponse['type'],
-        errorType: WorkerResponse['type'],
-        defaultErrorMessage: string,
-        mapPayload: (payload: unknown) => T,
-        errorLogLabel?: string
-    ): Promise<T> {
-        return new Promise((resolve, reject) => {
-            const requests = this.pendingWorkerRequests.get(worker);
-            if (!requests) {
-                reject(new Error('Worker is not initialized'));
-                return;
-            }
-
-            let messageId = generateSecureMessageId();
-            while (requests.has(messageId)) {
-                messageId = generateSecureMessageId();
-            }
-
-            const req: PendingPoolRequest = {
-                messageId,
-                successType,
-                errorType,
-                defaultErrorMessage,
-                errorLogLabel,
-                resolvePayload: (payload) => {
-                    try {
-                        resolve(mapPayload(payload));
-                    } catch (error) {
-                        reject(error instanceof Error ? error : new Error(String(error)));
-                    }
-                },
-                reject
-            };
-            this.registerPendingRequest(worker, req);
-
-            try {
-                worker.postMessage(createRequest(messageId));
-            } catch (error) {
-                this.removePendingRequest(worker, messageId);
-                reject(error instanceof Error ? error : new Error(String(error)));
-            }
-        });
     }
 
     async initialize(): Promise<void> {
@@ -257,26 +147,19 @@ export class BnglWorkerPool {
         for (let i = 0; i < this.poolSize; i++) {
             // Use the same worker as BnglService
             const worker = new Worker(new URL('./bnglWorker.ts', import.meta.url), { type: 'module' });
-            this.pendingWorkerRequests.set(worker, new Map());
-
-            const responseHandler = (event: MessageEvent<WorkerResponse>) => {
-                this.dispatchWorkerResponse(worker, i, event);
-            };
-            this.workerResponseHandlers.set(worker, responseHandler);
-            worker.addEventListener('message', responseHandler);
             
             // Add global error handler to catch worker crashes
             worker.addEventListener('error', (err) => {
                 console.error(`[Pool] Worker ${i} global error:`, err);
-                const errorMsg = err instanceof Error ? err.message : (err && typeof err === 'object' && 'message' in err ? (err as any).message : String(err));
-                this.rejectAllPendingOnWorker(worker, new Error(`Worker global error: ${errorMsg}`));
             });
 
-            // Add global messageerror handler to catch deserialization/serialization failures
-            worker.addEventListener('messageerror', (event) => {
-                console.error(`[Pool] Worker ${i} deserialization error:`, event.data);
-                this.rejectAllPendingOnWorker(worker, new Error('Worker posted an unserializable message'));
+            // Listen for internal error messages from our own error trapping in the worker
+            worker.addEventListener('message', (event: MessageEvent<WorkerResponse>) => {
+                if (event.data.type === 'worker_internal_error') {
+                   console.error(`[Pool] Worker ${i} internal error reported:`, event.data.payload);
+                }
             });
+
             this.workers.push(worker);
         }
         this.isInitialized = true;
@@ -290,19 +173,36 @@ export class BnglWorkerPool {
 
         const idx = workerIdx ?? (this.nextWorkerIdx++ % this.poolSize);
         const worker = this.workers[idx];
-        return this.requestOnWorker(
-            worker,
-            (messageId) => ({
+
+        return new Promise((resolve, reject) => {
+            const messageId = generateSecureMessageId();
+
+            const handler = (event: MessageEvent<WorkerResponse>) => {
+                const { id, type, payload } = event.data;
+                if (id !== messageId) return;
+
+                if (type === 'simulate_success') {
+                    worker.removeEventListener('message', handler);
+                    resolve(payload as SimulationResults);
+                } else if (type === 'simulate_error') {
+                    worker.removeEventListener('message', handler);
+                    const errorMsg = (payload as any)?.message || 'Simulation failed';
+                    console.error(`[Pool] Worker simulate_error: ${errorMsg}`, payload);
+                    reject(new Error(errorMsg));
+                }
+                // Ignore other types like 'progress'
+            };
+
+            worker.addEventListener('message', handler);
+
+            const request: WorkerRequest = {
                 id: messageId,
                 type: 'simulate',
                 payload: { model, options }
-            }),
-            'simulate_success',
-            'simulate_error',
-            'Simulation failed',
-            (payload) => payload as SimulationResults,
-            'simulate_error'
-        );
+            };
+
+            worker.postMessage(request);
+        });
     }
 
     /**
@@ -316,72 +216,26 @@ export class BnglWorkerPool {
     ): Promise<SimulationResults[] | SharedEnsembleResultsHandle> {
         if (!this.isInitialized) await this.initialize();
 
-        // Prepare model on ALL workers for cached simulation using Promise.allSettled to avoid leaking on partial failures
-        const preparationResults = await Promise.allSettled(
-            this.workers.map(w => this.prepareModelOnWorker(w, model))
-        );
-
-        const failures = preparationResults.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
-        if (failures.length > 0) {
-            // Release the successfully prepared models to prevent memory leaks in the workers
-            await Promise.all(
-                preparationResults.map((res, i) => {
-                    if (res.status === 'fulfilled') {
-                        return this.releaseModelOnWorker(this.workers[i], res.value).catch(() => {});
-                    }
-                    return Promise.resolve();
-                })
-            );
-            throw failures[0].reason;
-        }
-
-        const modelIds = preparationResults.map((r) => (r as PromiseFulfilledResult<number>).value);
+        // Prepare model on ALL workers for cached simulation
+        const modelIds = await Promise.all(this.workers.map(w => this.prepareModelOnWorker(w, model)));
         try {
-            const initialWaveCount = Math.min(count, this.workers.length);
-            const initialResults: SimulationResults[] = new Array(initialWaveCount);
-            let completed = 0;
-            const initialWave = await Promise.allSettled(
-                Array.from({ length: initialWaveCount }, async (_, taskIdx) => {
-                    const result = await this.simulateCachedOnWorker(
-                        this.workers[taskIdx],
-                        modelIds[taskIdx],
-                        { ...options, seed: taskIdx }
-                    );
-                    initialResults[taskIdx] = result;
-                    completed++;
-                    onProgress?.(completed);
-                })
-            );
-            const initialFailure = initialWave.find(
-                (result): result is PromiseRejectedResult => result.status === 'rejected'
-            );
-            if (initialFailure) throw initialFailure.reason;
+            const firstWorker = this.workers[0];
+            const firstModelId = modelIds[0];
+            const firstResult = await this.simulateCachedOnWorker(firstWorker, firstModelId, { ...options, seed: 0 });
 
             if (count === 1) {
-                return initialResults;
+                onProgress?.(1);
+                return [firstResult];
             }
 
-            const referenceResult = initialResults[0];
-            const hasSharedShape = canUseSharedArrayBuffer()
-                && referenceResult.data.length > 0
-                && referenceResult.headers.length > 0
-                && initialResults.every((result) =>
-                    result.data.length === referenceResult.data.length
-                    && result.headers.length === referenceResult.headers.length
-                    && result.headers.every((header, index) => header === referenceResult.headers[index])
-                );
+            if (canUseSharedArrayBuffer() && firstResult.data.length > 0 && firstResult.headers.length > 0) {
+                const shared = createSharedEnsembleResults(count, firstResult.headers, firstResult.data.length);
+                writeSimulationResultsToShared(shared, 0, firstResult);
+                let completed = 1;
+                onProgress?.(completed);
 
-            if (hasSharedShape) {
-                const shared = createSharedEnsembleResults(
-                    count,
-                    referenceResult.headers,
-                    referenceResult.data.length
-                );
-                for (let taskIdx = 0; taskIdx < initialWaveCount; taskIdx++) {
-                    writeSimulationResultsToShared(shared, taskIdx, initialResults[taskIdx]);
-                }
-
-                await this.runBoundedEnsembleTasks(count, initialWaveCount, async (workerIdx, taskIdx) => {
+                const runSharedTask = async (taskIdx: number) => {
+                    const workerIdx = taskIdx % this.poolSize;
                     const worker = this.workers[workerIdx];
                     const modelId = modelIds[workerIdx];
                     await this.simulateCachedOnWorkerShared(worker, modelId, { ...options, seed: taskIdx }, {
@@ -395,17 +249,19 @@ export class BnglWorkerPool {
                     });
                     completed++;
                     onProgress?.(completed);
-                });
+                };
 
+                await Promise.all(Array.from({ length: count - 1 }, (_, index) => runSharedTask(index + 1)));
                 return shared;
             }
 
             const results: SimulationResults[] = new Array(count);
-            for (let taskIdx = 0; taskIdx < initialWaveCount; taskIdx++) {
-                results[taskIdx] = initialResults[taskIdx];
-            }
+            results[0] = firstResult;
+            let completed = 1;
+            onProgress?.(completed);
 
-            await this.runBoundedEnsembleTasks(count, initialWaveCount, async (workerIdx, taskIdx) => {
+            const runTask = async (taskIdx: number) => {
+                const workerIdx = taskIdx % this.poolSize;
                 const worker = this.workers[workerIdx];
                 const modelId = modelIds[workerIdx];
 
@@ -413,62 +269,57 @@ export class BnglWorkerPool {
                 results[taskIdx] = res;
                 completed++;
                 onProgress?.(completed);
-            });
+            };
 
+            await Promise.all(Array.from({ length: count - 1 }, (_, index) => runTask(index + 1)));
             return results;
         } finally {
             await Promise.all(this.workers.map((w, i) => this.releaseModelOnWorker(w, modelIds[i])));
         }
     }
 
-    private async runBoundedEnsembleTasks(
-        count: number,
-        initialWaveCount: number,
-        runTask: (workerIdx: number, taskIdx: number) => Promise<void>
-    ): Promise<void> {
-        const workerCount = this.workers.length;
-        const workerLoops = this.workers.map(async (_worker, workerIdx) => {
-            // Each worker already completed its corresponding initial-wave task.
-            // Continue the same modulo assignment while awaiting every request
-            // before posting that worker's next simulation.
-            const firstTaskIdx = workerIdx < initialWaveCount
-                ? workerIdx + workerCount
-                : workerIdx;
-            for (let taskIdx = firstTaskIdx; taskIdx < count; taskIdx += workerCount) {
-                await runTask(workerIdx, taskIdx);
-            }
-        });
-
-        // Wait for every worker loop to settle before release_model messages are
-        // posted. This prevents a failure on one worker from releasing models
-        // underneath simulations that are still active on other workers.
-        const settled = await Promise.allSettled(workerLoops);
-        const failure = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-        if (failure) throw failure.reason;
-    }
-
     private prepareModelOnWorker(worker: Worker, model: BNGLModel): Promise<number> {
-        return this.requestOnWorker(
-            worker,
-            (messageId) => ({ id: messageId, type: 'cache_model', payload: { model } }),
-            'cache_model_success',
-            'cache_model_error',
-            'Failed to cache model',
-            (payload) => (payload as { modelId: number }).modelId,
-            'cache_model_error'
-        );
+        return new Promise((resolve, reject) => {
+            const messageId = generateSecureMessageId();
+            const handler = (event: MessageEvent<WorkerResponse>) => {
+                const { id, type, payload } = event.data;
+                if (id !== messageId) return;
+
+                if (type === 'cache_model_success') {
+                    worker.removeEventListener('message', handler);
+                    resolve((payload as any).modelId);
+                } else if (type === 'cache_model_error') {
+                    worker.removeEventListener('message', handler);
+                    const errorMsg = (payload as any)?.message || 'Failed to cache model';
+                    console.error(`[Pool] Worker cache_model_error: ${errorMsg}`, payload);
+                    reject(new Error(errorMsg));
+                }
+            };
+            worker.addEventListener('message', handler);
+            worker.postMessage({ id: messageId, type: 'cache_model', payload: { model } });
+        });
     }
 
     private simulateCachedOnWorker(worker: Worker, modelId: number, options: SimulationOptions): Promise<SimulationResults> {
-        return this.requestOnWorker(
-            worker,
-            (messageId) => ({ id: messageId, type: 'simulate', payload: { modelId, options } }),
-            'simulate_success',
-            'simulate_error',
-            'Simulation failed',
-            (payload) => payload as SimulationResults,
-            'simulate_error'
-        );
+        return new Promise((resolve, reject) => {
+            const messageId = generateSecureMessageId();
+            const handler = (event: MessageEvent<WorkerResponse>) => {
+                const { id, type, payload } = event.data;
+                if (id !== messageId) return;
+
+                if (type === 'simulate_success') {
+                    worker.removeEventListener('message', handler);
+                    resolve(payload as SimulationResults);
+                } else if (type === 'simulate_error') {
+                    worker.removeEventListener('message', handler);
+                    const errorMsg = (payload as any)?.message || 'Simulation failed';
+                    console.error(`[Pool] Worker simulate_error: ${errorMsg}`, payload);
+                    reject(new Error(errorMsg));
+                }
+            };
+            worker.addEventListener('message', handler);
+            worker.postMessage({ id: messageId, type: 'simulate', payload: { modelId, options } });
+        });
     }
 
     private simulateCachedOnWorkerShared(
@@ -477,44 +328,48 @@ export class BnglWorkerPool {
         options: SimulationOptions,
         sharedOutput: SharedSimulationOutputDescriptor
     ): Promise<void> {
-        return this.requestOnWorker(
-            worker,
-            (messageId) => ({
-                    id: messageId,
-                    type: 'simulate',
-                    payload: { modelId, options, sharedOutput }
-                }),
-            'simulate_shared_success',
-            'simulate_error',
-            'Simulation failed',
-            () => undefined
-        );
+        return new Promise((resolve, reject) => {
+            const messageId = generateSecureMessageId();
+            const handler = (event: MessageEvent<WorkerResponse>) => {
+                const { id, type, payload } = event.data;
+                if (id !== messageId) return;
+
+                if (type === 'simulate_shared_success') {
+                    worker.removeEventListener('message', handler);
+                    resolve();
+                } else if (type === 'simulate_error') {
+                    worker.removeEventListener('message', handler);
+                    const errorMsg = (payload as any)?.message || 'Simulation failed';
+                    reject(new Error(errorMsg));
+                }
+            };
+
+            worker.addEventListener('message', handler);
+            worker.postMessage({
+                id: messageId,
+                type: 'simulate',
+                payload: { modelId, options, sharedOutput }
+            } satisfies WorkerRequest);
+        });
     }
 
     private releaseModelOnWorker(worker: Worker, modelId: number): Promise<void> {
-        return this.requestOnWorker(
-            worker,
-            (messageId) => ({ id: messageId, type: 'release_model', payload: { modelId } }),
-            'release_model_success',
-            'release_model_error',
-            'Failed to release model',
-            () => undefined
-        );
+        return new Promise((resolve) => {
+            const messageId = generateSecureMessageId();
+            const handler = (event: MessageEvent<WorkerResponse>) => {
+                if (event.data.id !== messageId) return;
+                worker.removeEventListener('message', handler);
+                resolve();
+            };
+            worker.addEventListener('message', handler);
+            worker.postMessage({ id: messageId, type: 'release_model', payload: { modelId } });
+        });
     }
 
     terminate(): void {
-        this.workers.forEach(w => {
-            this.rejectAllPendingOnWorker(w, new Error('Worker was terminated'));
-            const responseHandler = this.workerResponseHandlers.get(w);
-            if (responseHandler) {
-                w.removeEventListener('message', responseHandler);
-            }
-            w.terminate();
-        });
+        this.workers.forEach(w => w.terminate());
         this.workers = [];
         this.isInitialized = false;
-        this.pendingWorkerRequests.clear();
-        this.workerResponseHandlers.clear();
     }
 }
 

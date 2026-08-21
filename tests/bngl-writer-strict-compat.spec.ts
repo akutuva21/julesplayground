@@ -46,17 +46,14 @@ describe('BNGL writer strict-parser compatibility', () => {
       new Map(),
       [],
       new Set(),
-      false,
-      new Set(),
-      new Map(),      // reactionKineticLaws
-      true            // keepParameterized
+      false
     );
 
     expect(section).toContain(
-      'function_id(_farg0_param_id, _farg1_mod_id, _farg2_parameter_id, _farg3_modifier_id, _farg4_substrate_id)'
+      'function_id(param_id, mod_id, parameter_id, modifier_id, substrate_id)'
     );
-    expect(section).toContain('function_1(_farg0_param_id, _farg1_mod_id)');
-    expect(section).toContain('function_2(_farg0_parameter_id, _farg1_modifier_id)');
+    expect(section).toContain('function_1(param_id, mod_id)');
+    expect(section).toContain('function_2(parameter_id, modifier_id)');
     expect(section).not.toContain('function(param, mod');
   });
 

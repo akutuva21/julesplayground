@@ -38,30 +38,6 @@ export async function handleFirstPassageTime(args: ToolArgs): Promise<ToolResult
         const parsedArgs = parseArgs('first_passage_time', firstPassageTimeArgsSchema, args);
         await loadEvaluator();
 
-        if (!parsedArgs.code || parsedArgs.code.trim() === '') {
-            return createToolResult(structureError(
-                new Error('Model code must be a non-empty string.'),
-            ));
-        }
-
-        if (parsedArgs.t_end <= 0) {
-            return createToolResult(structureError(
-                new Error('t_end must be positive.'),
-            ));
-        }
-
-        if (parsedArgs.n_steps <= 0) {
-            return createToolResult(structureError(
-                new Error('n_steps must be positive.'),
-            ));
-        }
-
-        if (parsedArgs.n_trajectories <= 0) {
-            return createToolResult(structureError(
-                new Error('n_trajectories must be positive.'),
-            ));
-        }
-
         const model = parseModelOrThrow(parsedArgs.code);
         const expanded = await expandModel(model);
 
@@ -102,7 +78,7 @@ export async function handleFirstPassageTime(args: ToolArgs): Promise<ToolResult
                     values[obsName] = simResult.data.map((d) => Number(d[obsName] ?? NaN));
                 }
                 trajectories.push({ times, values });
-            } catch {
+            } catch (e) {
                 nFailed++;
             }
         }
@@ -140,6 +116,6 @@ export async function handleFirstPassageTime(args: ToolArgs): Promise<ToolResult
             })),
         });
     } catch (error) {
-        return createToolResult(structureError(error instanceof Error ? error : new Error(String(error), { cause: error })));
+        return createToolResult(structureError(error instanceof Error ? error : new Error(String(error))));
     }
 }

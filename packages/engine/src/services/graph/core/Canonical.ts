@@ -2,7 +2,6 @@
 import { SpeciesGraph } from './SpeciesGraph.ts';
 import { NautyService } from './NautyService.ts';
 import { Molecule } from './Molecule.ts';
-import { Component } from './Component.ts';
 
 interface MoleculeInfo {
   originalIndex: number;
@@ -242,12 +241,11 @@ export class GraphCanonicalizer {
       const placed = new Set<number>();
       const startIdx = 0; // sortedInfos is already sorted
       const queue: number[] = [startIdx];
-      let queueHead = 0;
       placed.add(startIdx);
       const sortedOrderVertices: number[] = [startIdx];
 
-      while (queueHead < queue.length) {
-        const current = queue[queueHead++];
+      while (queue.length > 0) {
+        const current = queue.shift()!;
         for (const edge of adjList.get(current)!) {
           if (!placed.has(edge.neighbor)) {
             placed.add(edge.neighbor);
@@ -513,15 +511,15 @@ export class GraphCanonicalizer {
    * Components are sorted alphabetically to match BNG2 canonical form
    */
   private static getLocalSignature(mol: Molecule): string {
-    const compSigs = mol.components.map((comp: Component, idx: number) => {
+    const compSigs = mol.components.map((comp: any, idx: number) => {
       let sig = comp.name;
       if (comp.state && comp.state !== '?') sig += `~${comp.state}`;
       return { sig, idx };
     });
     // Sort components alphabetically by their string representation
-    compSigs.sort((a, b) => a.sig < b.sig ? -1 : a.sig > b.sig ? 1 : 0);
+    compSigs.sort((a: any, b: any) => a.sig < b.sig ? -1 : a.sig > b.sig ? 1 : 0);
     const compartmentStr = mol.compartment ? `@${mol.compartment}` : '';
-    return `${mol.name}${compartmentStr}(${compSigs.map(c => c.sig).join(',')})`;
+    return `${mol.name}${compartmentStr}(${compSigs.map((c: any) => c.sig).join(',')})`;
   }
 
   /**
@@ -531,7 +529,7 @@ export class GraphCanonicalizer {
    * BNG2 places bound components before unbound components.
    */
   private static getBondAwareSignature(mol: Molecule, molIdx: number, graph: SpeciesGraph): string {
-    const compSigs = mol.components.map((comp: Component, compIdx: number) => {
+    const compSigs = mol.components.map((comp: any, compIdx: number) => {
       let sig = comp.name;
       if (comp.state && comp.state !== '?') sig += `~${comp.state}`;
       // Check if this component has any bonds
@@ -542,9 +540,9 @@ export class GraphCanonicalizer {
       return { sig, compIdx };
     });
     // Sort components alphabetically by their string representation
-    compSigs.sort((a, b) => a.sig < b.sig ? -1 : a.sig > b.sig ? 1 : 0);
+    compSigs.sort((a: any, b: any) => a.sig < b.sig ? -1 : a.sig > b.sig ? 1 : 0);
     const compartmentStr = mol.compartment ? `@${mol.compartment}` : '';
-    return `${mol.name}${compartmentStr}(${compSigs.map(c => c.sig).join(',')})`;
+    return `${mol.name}${compartmentStr}(${compSigs.map((c: any) => c.sig).join(',')})`;
   }
 
   /**
@@ -587,7 +585,7 @@ export class GraphCanonicalizer {
     }
 
     // Build component strings with their original indices
-    const componentData = mol.components.map((comp, compIdx: number) => {
+    const componentData = mol.components.map((comp: any, compIdx: number) => {
       let baseStr = comp.name;
       if (comp.state && comp.state !== '?') baseStr += `~${comp.state}`;
 
@@ -604,7 +602,7 @@ export class GraphCanonicalizer {
 
     // Sort components alphabetically by base string.
     // When base strings are identical, bound before unbound (BNG2 convention).
-    componentData.sort((a, b) => {
+    componentData.sort((a: any, b: any) => {
       if (a.baseStr !== b.baseStr) return a.baseStr < b.baseStr ? -1 : 1;
       if (a.hasRealBond !== b.hasRealBond) return a.hasRealBond ? -1 : 1;
       if (a.bondStr !== b.bondStr) return a.bondStr < b.bondStr ? -1 : 1;
@@ -613,7 +611,7 @@ export class GraphCanonicalizer {
 
     // BNG2 convention: Only include molecule compartment when it differs from graph compartment
     const compartmentSuffix = (mol.compartment && mol.compartment !== graph.compartment) ? `@${mol.compartment}` : '';
-    const res = `${mol.name}(${componentData.map(c => c.baseStr + c.bondStr).join(',')})${compartmentSuffix}`;
+    const res = `${mol.name}(${componentData.map((c: any) => c.baseStr + c.bondStr).join(',')})${compartmentSuffix}`;
     return res;
   }
 
@@ -634,7 +632,7 @@ export class GraphCanonicalizer {
     const myCanIdx = sortedToCanonical.get(mySortedIdx)!;
 
     // Build component strings with their original indices for bond lookup
-    const componentData = mol.components.map((comp, compIdx: number) => {
+    const componentData = mol.components.map((comp: any, compIdx: number) => {
       let baseStr = comp.name;
       if (comp.state && comp.state !== '?') baseStr += `~${comp.state}`;
 
@@ -680,7 +678,7 @@ export class GraphCanonicalizer {
     // Sort components alphabetically by base string (name + state).
     // IMPORTANT: When base strings are identical (e.g., repeated site names like A(b,b)),
     // BNG2 places bound components before unbound components.
-    componentData.sort((a, b) => {
+    componentData.sort((a: any, b: any) => {
       if (a.baseStr !== b.baseStr) return a.baseStr < b.baseStr ? -1 : 1;
 
       // Bound before unbound for repeated component names
@@ -695,7 +693,7 @@ export class GraphCanonicalizer {
 
     // BNG2 convention: Only include molecule compartment when it differs from graph compartment
     const compartmentSuffix = (mol.compartment && mol.compartment !== graph.compartment) ? `@${mol.compartment}` : '';
-    return `${mol.name}(${componentData.map(c => c.baseStr + c.bondStr).join(',')})${compartmentSuffix}`;
+    return `${mol.name}(${componentData.map((c: any) => c.baseStr + c.bondStr).join(',')})${compartmentSuffix}`;
   }
 
   /**
@@ -858,7 +856,7 @@ export class GraphCanonicalizer {
 
     // 3. POST-REFINEMENT REMAP: Enforce Primary Sort by Initial Rank
     const finalStates = moleculeInfos.map(info => ({
-      rank: info.initialRank,
+      rank: (info as any).initialRank,
       hash: info.colorClass
     }));
 
@@ -880,7 +878,7 @@ export class GraphCanonicalizer {
 
     // Apply new ordered colors
     for (const info of moleculeInfos) {
-      const key = `${info.initialRank}:${info.colorClass}`;
+      const key = `${(info as any).initialRank}:${info.colorClass}`;
       info.colorClass = stateMap.get(key)!;
     }
 

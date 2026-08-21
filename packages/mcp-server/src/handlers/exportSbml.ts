@@ -37,7 +37,7 @@ export async function handleExportSbml(args: ToolArgs): Promise<ToolResult<any>>
             note: 'Includes SBO and MIRIAM annotations. Exported from web simulation engine.',
         });
     } catch (error) {
-        const structured = structureError(error instanceof Error ? error : new Error(String(error), { cause: error }));
+        const structured = structureError(error instanceof Error ? error : new Error(String(error)));
         return createToolResult(structured);
     }
 }

@@ -800,23 +800,12 @@ export class Species {
       const bMinBond = getMinBond(b);
       if (aMinBond !== bMinBond) return aMinBond - bMinBond;
 
-      let aBondedCount = 0;
-      let aStateCount = 0;
-      for (let i = 0; i < aCompCount; i++) {
-        const c = a.components[i];
-        if (c.bonds.length > 0) aBondedCount++;
-        if (c.activeState !== '' && c.activeState !== '0') aStateCount++;
-      }
-
-      let bBondedCount = 0;
-      let bStateCount = 0;
-      for (let i = 0; i < bCompCount; i++) {
-        const c = b.components[i];
-        if (c.bonds.length > 0) bBondedCount++;
-        if (c.activeState !== '' && c.activeState !== '0') bStateCount++;
-      }
-
+      const aBondedCount = a.components.filter(c => c.bonds.length > 0).length;
+      const bBondedCount = b.components.filter(c => c.bonds.length > 0).length;
       if (aBondedCount !== bBondedCount) return bBondedCount - aBondedCount;
+
+      const aStateCount = a.components.filter(c => c.activeState !== '' && c.activeState !== '0').length;
+      const bStateCount = b.components.filter(c => c.activeState !== '' && c.activeState !== '0').length;
       if (aStateCount !== bStateCount) return bStateCount - aStateCount;
 
       const aStr = a.toString();
