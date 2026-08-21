@@ -1,30 +1,30 @@
 [
   {
     "model": "chain_5 (baseline, unimolecular)",
-    "parseMs": 8.490804000000026,
-    "genMs": 4.31332499999985,
+    "parseMs": 18.093582999999853,
+    "genMs": 7.930299999999988,
     "simMs": {
-      "ode": 5.2060109999999895,
-      "ssa": 2.0679300000001604
+      "ode": 6.791676999999936,
+      "ssa": 3.0918239999998605
     },
     "species": 5,
     "reactions": 4,
-    "heapDeltaMB": 0.43646240234375,
+    "heapDeltaMB": 0.436126708984375,
     "breakdown": {
       "canonicalize": {
-        "ms": 0.02904700000021876,
+        "ms": 0.0727140000003601,
         "calls": 10
       },
       "findAllMaps": {
-        "ms": 0.2737959999999475,
+        "ms": 0.552220000000716,
         "calls": 20
       },
       "matchComponents": {
-        "ms": 0.006461999999828549,
+        "ms": 0.010906999999861,
         "calls": 5
       },
       "applyTransformation": {
-        "ms": 0.3808089999999993,
+        "ms": 0.789363000000094,
         "calls": 8
       },
       "isDuplicateReaction": {
@@ -36,14 +36,14 @@
         "calls": 0
       },
       "speciesDedup": {
-        "ms": 0.050855999999839696,
+        "ms": 0.15410600000018349,
         "calls": 9
       }
     },
     "odeVsSparse": {
-      "denseMs": 5.2060109999999895,
-      "sparseMs": 10.51204400000006,
-      "speedup": 0.49524250469270864,
+      "denseMs": 6.791676999999936,
+      "sparseMs": 5.199999000000162,
+      "speedup": 1.3060919819407129,
       "maxAbs": 1.7826502007878275e-7,
       "maxRel": 0.0000012319340089915371,
       "comparedCells": 101,
@@ -52,30 +52,30 @@
   },
   {
     "model": "binding_AB (bimolecular)",
-    "parseMs": 4.5476460000002135,
-    "genMs": 1.8538710000000265,
+    "parseMs": 9.189941999999974,
+    "genMs": 3.3668049999998857,
     "simMs": {
-      "ode": 2.531206000000111,
-      "ssa": 2.5267570000000887
+      "ode": 4.649449000000004,
+      "ssa": 3.7702200000001085
     },
     "species": 3,
     "reactions": 2,
-    "heapDeltaMB": 0.29927825927734375,
+    "heapDeltaMB": 0.299407958984375,
     "breakdown": {
       "canonicalize": {
-        "ms": 0.013323999999784064,
+        "ms": 0.030922000000373373,
         "calls": 6
       },
       "findAllMaps": {
-        "ms": 0.10730300000022908,
+        "ms": 0.21759200000019518,
         "calls": 11
       },
       "matchComponents": {
-        "ms": 0.002769000000171218,
+        "ms": 0.005299000000150045,
         "calls": 6
       },
       "applyTransformation": {
-        "ms": 0.13241800000014337,
+        "ms": 0.3973260000002483,
         "calls": 3
       },
       "isDuplicateReaction": {
@@ -87,14 +87,14 @@
         "calls": 0
       },
       "speciesDedup": {
-        "ms": 0.030980000000226937,
+        "ms": 0.09050200000001496,
         "calls": 6
       }
     },
     "odeVsSparse": {
-      "denseMs": 2.531206000000111,
-      "sparseMs": 3.6167679999998654,
-      "speedup": 0.6998530179431485,
+      "denseMs": 4.649449000000004,
+      "sparseMs": 5.239141000000018,
+      "speedup": 0.8874449074762425,
       "maxAbs": 3.08137458659985e-7,
       "maxRel": 3.446997717262528e-9,
       "comparedCells": 101,
@@ -103,30 +103,30 @@
   },
   {
     "model": "multisite_5 (2^5 species, combinatorial)",
-    "parseMs": 15.347676999999976,
-    "genMs": 74.47218099999986,
+    "parseMs": 22.3623869999999,
+    "genMs": 96.99637200000006,
     "simMs": {
-      "ode": 11.051347999999962,
-      "ssa": 143.780886
+      "ode": 17.5645599999998,
+      "ssa": 150.9976240000001
     },
     "species": 32,
     "reactions": 160,
-    "heapDeltaMB": 2.8037643432617188,
+    "heapDeltaMB": 2.4787521362304688,
     "breakdown": {
       "canonicalize": {
-        "ms": 5.173312000000578,
+        "ms": 0.6050929999996697,
         "calls": 64
       },
       "findAllMaps": {
-        "ms": 16.083069999999452,
+        "ms": 18.447843999999805,
         "calls": 320
       },
       "matchComponents": {
-        "ms": 5.6321960000004765,
+        "ms": 2.896869000003335,
         "calls": 176
       },
       "applyTransformation": {
-        "ms": 34.27375499999903,
+        "ms": 34.860221000001275,
         "calls": 320
       },
       "isDuplicateReaction": {
@@ -138,14 +138,14 @@
         "calls": 0
       },
       "speciesDedup": {
-        "ms": 1.3396950000001198,
+        "ms": 2.6444810000011785,
         "calls": 161
       }
     },
     "odeVsSparse": {
-      "denseMs": 11.051347999999962,
-      "sparseMs": 9.33019000000013,
-      "speedup": 1.1844719132193244,
+      "denseMs": 17.5645599999998,
+      "sparseMs": 13.19631900000013,
+      "speedup": 1.3310196578303106,
       "maxAbs": 0.0000016575586414546706,
       "maxRel": 2.4863387286784655e-9,
       "comparedCells": 101,
@@ -154,30 +154,30 @@
   },
   {
     "model": "multisite_7 (2^7 species, combinatorial)",
-    "parseMs": 16.987170000000333,
-    "genMs": 151.54070100000035,
+    "parseMs": 18.380359000000226,
+    "genMs": 229.85913200000005,
     "simMs": {
-      "ode": 76.42793799999981,
-      "ssa": 197.63007000000016
+      "ode": 51.983376000000135,
+      "ssa": 88.78710799999953
     },
     "species": 128,
     "reactions": 896,
-    "heapDeltaMB": 6.2802276611328125,
+    "heapDeltaMB": 7.1083831787109375,
     "breakdown": {
       "canonicalize": {
-        "ms": 1.1740609999992557,
+        "ms": 1.9178400000037072,
         "calls": 256
       },
       "findAllMaps": {
-        "ms": 34.28412500000786,
+        "ms": 41.80192000001807,
         "calls": 1792
       },
       "matchComponents": {
-        "ms": 8.461657999985164,
+        "ms": 11.031888999995317,
         "calls": 960
       },
       "applyTransformation": {
-        "ms": 54.62144900000021,
+        "ms": 65.63489799998479,
         "calls": 1792
       },
       "isDuplicateReaction": {
@@ -189,14 +189,14 @@
         "calls": 0
       },
       "speciesDedup": {
-        "ms": 6.038039999996272,
+        "ms": 10.125483999983771,
         "calls": 897
       }
     },
     "odeVsSparse": {
-      "denseMs": 76.42793799999981,
-      "sparseMs": 36.361472000000504,
-      "speedup": 2.1018933996951157,
+      "denseMs": 51.983376000000135,
+      "sparseMs": 28.89540599999964,
+      "speedup": 1.7990187090640215,
       "maxAbs": 0.000001768485049069568,
       "maxRel": 2.652774158805657e-9,
       "comparedCells": 101,

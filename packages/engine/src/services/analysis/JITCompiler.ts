@@ -16,6 +16,7 @@ import { ExpressionTranslator } from '../graph/core/ExpressionTranslator';
 import { OpCode } from '../simulation/ExpressionCompiler';
 import { SafeExpressionEvaluator } from '../../utils/safeExpressionEvaluator';
 import { getFeatureFlags } from '../../featureFlags';
+import { createCompiledFunction } from '../../utils/safeFunctionCompiler';
 import jsep from 'jsep';
 import { isJITSafe } from '../simulation/ExpressionEvaluator.ts';
 import {
@@ -188,7 +189,7 @@ export class JITCompiler {
                 throw new Error(`Invalid function argument name: ${a}`);
             }
         }
-        return new Function(...args, JSON.parse(JSON.stringify(body)));
+        return createCompiledFunction(args, JSON.parse(JSON.stringify(body)));
     }
 
     private buildReactionSignature(
