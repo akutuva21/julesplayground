@@ -140,6 +140,7 @@ export interface ConcreteObservable {
 
 export interface BNGLModel {
     name?: string;
+    phases?: SimulationPhase[];
     concreteObservables?: ConcreteObservable[];
     parameters: Record<string, number>;
     moleculeTypes: BNGLMoleculeType[];

@@ -121,8 +121,8 @@ export function resolveSimulationPhasesForRun(model: BNGLModel, options: Simulat
 
   const authoredPhases: SimulationPhase[] = (model.simulationPhases && model.simulationPhases.length > 0)
     ? model.simulationPhases.map((phase) => ({ ...phase }))
-    : ('phases' in model && Array.isArray((model as typeof model & { phases?: SimulationPhase[] }).phases) && (model as typeof model & { phases?: SimulationPhase[] }).phases!.length > 0)
-      ? (model as typeof model & { phases?: SimulationPhase[] }).phases!.map((phase: SimulationPhase) => ({ ...phase }))
+    : (model.phases && Array.isArray(model.phases) && model.phases.length > 0)
+      ? model.phases.map((phase: SimulationPhase) => ({ ...phase }))
       : [];
 
   const normalizedNSteps = normalizeNSteps(options.n_steps);
@@ -577,7 +577,7 @@ export async function simulate(
   // 3. Pre-process Observables
   // Prefer concrete observables attached to the model (produced earlier by NetworkExpansion). If not present,
   // fall back to dynamic matching here (legacy behavior).
-  const concreteObservables: ConcreteObservable[] = ('concreteObservables' in model && Array.isArray((model as typeof model & { concreteObservables?: ConcreteObservable[] }).concreteObservables)) ? (model as typeof model & { concreteObservables?: ConcreteObservable[] }).concreteObservables! : model.observables.map(obs => {
+  const concreteObservables: ConcreteObservable[] = (model.concreteObservables && Array.isArray(model.concreteObservables)) ? model.concreteObservables : model.observables.map(obs => {
     const splitPatternsSafe = (patternStr: string): string[] => {
       const commaChunks: string[] = [];
       let current = '';
@@ -684,8 +684,8 @@ export async function simulate(
     }
 
     let vol = 1.0;
-    if (compName && compartmentMap.has(compName)) {
-      vol = compartmentMap.get(compName)!;
+    if (compName) {
+      vol = compartmentMap.get(compName) ?? 1.0;
     }
     speciesVolumes[idx] = vol;
   });
@@ -723,9 +723,9 @@ export async function simulate(
       }
 
       const comp = compName ? compartmentMapForDim.get(compName) : null;
-      if (comp) {
+      if (comp && compName) {
         const dim = comp.dimension ?? 3;
-        const vol = compartmentMap.get(compName!) ?? 1.0;
+        const vol = compartmentMap.get(compName) ?? 1.0;
         if (dim < minDim) {
           minDim = dim;
           vAnchor = vol;
@@ -758,8 +758,9 @@ export async function simulate(
           paramMap.set(name, direct);
           continue;
         }
-        if (rawValue && typeof rawValue === 'object' && 'value' in (rawValue as Record<string, unknown>)) {
-          const nested = Number((rawValue as any).value);
+        if (rawValue && typeof rawValue === 'object' && 'value' in rawValue) {
+          const valObj = rawValue as { value: unknown };
+          const nested = Number(valObj.value);
           if (Number.isFinite(nested)) {
             paramMap.set(name, nested);
           }
@@ -1696,8 +1697,9 @@ export async function simulate(
           try {
             const rxn = concreteReactions[rxnIdx];
             const currentObs = buildSsaObsRecord();
+            const expr = rxn.rateExpression ?? '';
             const rate = evaluateFunctionalRate(
-              rxn.rateExpression!,
+              expr,
               model.parameters || {},
               currentObs,
               model.functions,
@@ -1727,9 +1729,11 @@ export async function simulate(
               return a * state[rxnReactant0[rxnIdx]] * state[rxnReactant1[rxnIdx]] * state[rxnReactant2[rxnIdx]];
             } else {
               a *= state[rxnReactant0[rxnIdx]] * state[rxnReactant1[rxnIdx]] * state[rxnReactant2[rxnIdx]];
-              const rem = rxnReactantsRemaining[rxnIdx]!;
-              for (let j = 0; j < rem.length; j++) {
-                a *= state[rem[j]];
+              const rem = rxnReactantsRemaining[rxnIdx];
+              if (rem) {
+                for (let j = 0; j < rem.length; j++) {
+                  a *= state[rem[j]];
+                }
               }
               return a;
             }
@@ -1752,9 +1756,11 @@ export async function simulate(
           return kEff[rxnIdx] * state[rxnReactant0[rxnIdx]] * state[rxnReactant1[rxnIdx]] * state[rxnReactant2[rxnIdx]];
         } else {
           let a = kEff[rxnIdx] * state[rxnReactant0[rxnIdx]] * state[rxnReactant1[rxnIdx]] * state[rxnReactant2[rxnIdx]];
-          const rem = rxnReactantsRemaining[rxnIdx]!;
-          for (let j = 0; j < rem.length; j++) {
-            a *= state[rem[j]];
+          const rem = rxnReactantsRemaining[rxnIdx];
+          if (rem) {
+            for (let j = 0; j < rem.length; j++) {
+              a *= state[rem[j]];
+            }
           }
           return a;
         }
@@ -1962,10 +1968,10 @@ export async function simulate(
           nEventsThisPhase++;
 
           // OPT 1/6: Record firing event into pre-allocated typed arrays
-          if (firingActive && logCount < maxFiringEvents) {
-            logTimes![logCount] = t;
-            logRxnIndices![logCount] = reactionIndex;
-            logPropensities![logCount] = propensities[reactionIndex];
+          if (firingActive && logCount < maxFiringEvents && logTimes && logRxnIndices && logPropensities) {
+            logTimes[logCount] = t;
+            logRxnIndices[logCount] = reactionIndex;
+            logPropensities[logCount] = propensities[reactionIndex];
             logCount++;
           }
 
@@ -2060,16 +2066,18 @@ export async function simulate(
               }
             }
             if (cc > 4) {
-              const remSp = changeSpeciesRemaining[reactionIndex]!;
-              const remDl = changeDeltaRemaining[reactionIndex]!;
-              for (let j = 0; j < remSp.length; j++) {
-                const sp = remSp[j];
-                const d = remDl[j];
-                state[sp] += d;
-                if (maintainObs) {
-                  const end = speciesObsOffsets[sp + 1];
-                  for (let k = speciesObsOffsets[sp]; k < end; k++) {
-                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d;
+              const remSp = changeSpeciesRemaining[reactionIndex];
+              const remDl = changeDeltaRemaining[reactionIndex];
+              if (remSp && remDl) {
+                for (let j = 0; j < remSp.length; j++) {
+                  const sp = remSp[j];
+                  const d = remDl[j];
+                  state[sp] += d;
+                  if (maintainObs) {
+                    const end = speciesObsOffsets[sp + 1];
+                    for (let k = speciesObsOffsets[sp]; k < end; k++) {
+                      ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d;
+                    }
                   }
                 }
               }
@@ -2209,10 +2217,16 @@ export async function simulate(
 
     // Debug: trace ODESolver loading
     if (VERBOSE_SIM_DEBUG) console.log('[Worker Debug] SimulationLoop: About to import ODESolver');
-    let createSolver: any;
+    type CreateSolverFn = (
+      numSpecies: number,
+      derivatives: (y: Float64Array, dydt: Float64Array) => void,
+      options: Record<string, unknown>
+    ) => Promise<{ integrate: (y: Float64Array, t0: number, tEnd: number, check?: () => void) => SolverResult; destroy?: () => void }>;
+
+    let createSolver: CreateSolverFn;
     try {
       const mod = await import('./ODESolver');
-      createSolver = mod.createSolver;
+      createSolver = mod.createSolver as CreateSolverFn;
       if (VERBOSE_SIM_DEBUG) console.log('[Worker Debug] SimulationLoop: Successfully imported ODESolver');
     } catch (err) {
       console.error('[Worker Debug] SimulationLoop: Failed to import ODESolver', err);
@@ -2480,7 +2494,9 @@ export async function simulate(
           // Return the JIT-compiled function but wrapped to handle speciesVolumes
           console.log(`[Worker] JIT compiler active for ${concreteReactions.length} reactions.`);
           return (yIn: Float64Array, dydt: Float64Array) => {
-            compiledMassActionJit!.evaluate(0, yIn, dydt, solverVolumes);
+            if (compiledMassActionJit) {
+              compiledMassActionJit.evaluate(0, yIn, dydt, solverVolumes);
+            }
           };
 
         } catch (e) {
@@ -2558,7 +2574,8 @@ export async function simulate(
               }
             } else {
               for (let j = rStart; j < rEnd; j++) {
-                multiplicative *= (yIn[sparseFlatReactantIdx[j]] * sparseFlatReactantScale![j]);
+                const scaleFactor = sparseFlatReactantScale ? sparseFlatReactantScale[j] : 1.0;
+                multiplicative *= (yIn[sparseFlatReactantIdx[j]] * scaleFactor);
               }
             }
 
@@ -2673,7 +2690,8 @@ export async function simulate(
             }
           } else {
             for (let j = rStart; j < rEnd; j++) {
-              multiplicative *= (yIn[flatReactantIdx[j]] * flatReactantScale![j]);
+              const scaleFactor = flatReactantScale ? flatReactantScale[j] : 1.0;
+              multiplicative *= (yIn[flatReactantIdx[j]] * scaleFactor);
             }
           }
 
@@ -2700,7 +2718,8 @@ export async function simulate(
             for (let j = rStart; j < rEnd; j++) {
               const idx = flatReactantIdx[j];
               if (!isConstant[idx]) {
-                dydt[idx] -= velocity * denseInvSpeciesVolumes![idx];
+                const invVol = denseInvSpeciesVolumes ? denseInvSpeciesVolumes[idx] : 1.0;
+                dydt[idx] -= velocity * invVol;
               }
             }
           }
@@ -2720,7 +2739,8 @@ export async function simulate(
             for (let j = pStart; j < pEnd; j++) {
               const idx = flatProductIdx[j];
               if (!isConstant[idx]) {
-                dydt[idx] += velocity * flatProductStoich[j] * denseInvSpeciesVolumes![idx];
+                const invVol = denseInvSpeciesVolumes ? denseInvSpeciesVolumes[idx] : 1.0;
+                dydt[idx] += velocity * flatProductStoich[j] * invVol;
               }
             }
           }
@@ -2859,7 +2879,7 @@ export async function simulate(
     const userAtol = options.atol ?? model.simulationOptions?.atol ?? BNG2_DEFAULT_ATOL;
     const userRtol = options.rtol ?? model.simulationOptions?.rtol ?? BNG2_DEFAULT_RTOL;
 
-    const solverOptions: any = {
+    const solverOptions: Record<string, unknown> = {
       _debug_v2: true, // Unique marker
       _debug_stab: options.stabLimDet,
       atol: userAtol,
@@ -3494,7 +3514,7 @@ export async function simulate(
       const phaseAtol = phase.atol ?? userAtol;
       const phaseRtol = phase.rtol ?? userRtol;
 
-      const phaseSolverOptions = { ...solverOptions, atol: phaseAtol, rtol: phaseRtol, solver: solverType };
+      const phaseSolverOptions: Record<string, any> = { ...solverOptions, atol: phaseAtol, rtol: phaseRtol, solver: solverType };
 
       let currentSolverType = solverType;
       // Upgrade logic: prefer analytical dense over sparse-finite-differences for small networks
@@ -3557,9 +3577,9 @@ export async function simulate(
       // matching BNG2's continuous-integration behavior.
       const canReuseCvode = isContinue && persistedSolver !== undefined && thisSolverKey === persistedSolverKey;
 
-      let solver;
-      if (canReuseCvode) {
-        solver = persistedSolver!;
+      let solver: { integrate: (y: Float64Array, t0: number, tEnd: number, check?: () => void) => SolverResult; destroy?: () => void };
+      if (canReuseCvode && persistedSolver) {
+        solver = persistedSolver;
       } else {
         // Dispose any stale persisted solver before creating a new one.
         const staleSolver = persistedSolver as { destroy?: () => void } | undefined;
@@ -3705,14 +3725,14 @@ export async function simulate(
             }
           }
 
-          if (steadyStateEnabled) {
-            derivatives(y, steadyStateDerivs!);
+          if (steadyStateEnabled && steadyStateDerivs) {
+            derivatives(y, steadyStateDerivs);
             // BNG2 uses: dx = NORM(derivs, n_species) / n_species
             // where NORM = sqrt(sum of squares), i.e., L2 norm
             let sumSq = 0;
-            const numSpecies = steadyStateDerivs!.length;
+            const numSpecies = steadyStateDerivs.length;
             for (let k = 0; k < numSpecies; k++) {
-              sumSq += steadyStateDerivs![k] * steadyStateDerivs![k];
+              sumSq += steadyStateDerivs[k] * steadyStateDerivs[k];
             }
             const dx = Math.sqrt(sumSq) / numSpecies;
 
@@ -3770,7 +3790,7 @@ export async function simulate(
         const shouldPersist = !solverError && nextUsesContinue && !nextHasParamChange
           && nextAtol === phaseAtol && nextRtol === phaseRtol && nextSolverType === currentSolverType;
         if (shouldPersist) {
-          persistedSolver = solver as typeof persistedSolver;
+          persistedSolver = solver;
           persistedSolverKey = thisSolverKey;
         } else {
           (solver as { destroy?: () => void })?.destroy?.();
