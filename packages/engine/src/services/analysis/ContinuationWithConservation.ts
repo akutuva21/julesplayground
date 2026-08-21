@@ -16,6 +16,8 @@ import {
   reduceSystem,
   type ReactionEntry,
 } from './ConservedMoietyDetector';
+import { JITCompiler } from './JITCompiler';
+import type { BNGLModel } from '../../types';
 
 export interface ConservedContinuationConfig {
   /** Number of species in the full (unreduced) system */
@@ -210,5 +212,134 @@ export function continuationWithConservation(
     seedConverged,
     reduced: true,
     nSpecies,
+  };
+}
+
+export interface RunBifurcationAnalysisOptions {
+  parameter: string;
+  max_steps?: number;
+  start_value?: number;
+  end_value?: number;
+}
+
+export interface RunBifurcationAnalysisResult {
+  bifurcations: Array<{
+    parameterValue: number;
+    type: string;
+    frequency?: number;
+    criticalEigenvalues?: Array<{
+      re?: number;
+      im?: number;
+      real?: number;
+      imag?: number;
+    }>;
+  }>;
+  totalPoints: number;
+  stablePoints: number;
+  unstablePoints: number;
+  technical: string;
+  biological: string;
+  strategic: string;
+}
+
+/**
+ * Runs a high-level bifurcation/continuation analysis with moiety-reduction and JIT compilation.
+ *
+ * Enforces strict shared-engine parity, keeping the MCP server as a pure service layer.
+ */
+export function runBifurcationAnalysis(
+  model: BNGLModel,
+  expandedModel: BNGLModel,
+  options: RunBifurcationAnalysisOptions
+): RunBifurcationAnalysisResult {
+  const nSpecies = expandedModel.species?.length || 0;
+  const params = { ...model.parameters };
+  const maxSteps = options.max_steps || 500;
+  const parameterName = options.parameter;
+  const parameterStart = options.start_value ?? 0;
+  const parameterEnd = options.end_value ?? 1;
+
+  if (!parameterName) {
+    throw new Error('Bifurcation analysis requires a parameter name.');
+  }
+  if (!(parameterName in params)) {
+    throw new Error(`Unknown continuation parameter: ${parameterName}`);
+  }
+
+  const speciesIndexMap = new Map<string, number>(
+    (expandedModel.species ?? []).map((species: any, index: number) => [species.name, index])
+  );
+
+  // Build RHS function from expanded model using JIT compiler.
+  const jit = new JITCompiler();
+  const reactionRules = expandedModel.reactions ?? [];
+  const compiled = jit.compileFromRxns(reactionRules as any, nSpecies, speciesIndexMap, params, {
+    modelName: model.name ?? 'unnamed-model',
+    analysis: 'bifurcation-mcp',
+    parameterName,
+    callsite: 'runBifurcationAnalysis',
+  });
+
+  const rhsFn = (y: Float64Array, p: number, dydt: Float64Array) => {
+    params[parameterName] = p;
+    compiled.updateParameters?.(params);
+    compiled.evaluate(0, y, dydt);
+  };
+
+  // Build initial state from seed species concentrations
+  const initialState = new Float64Array(
+    (expandedModel.species ?? []).map(
+      (s: any) => s.initialConcentration ?? s.initialAmount ?? 0
+    )
+  );
+
+  // Build reaction entries for conserved-moiety detection
+  const reactionEntries = (expandedModel.reactions ?? []).map((r: any) => ({
+    reactants: (r.reactants ?? []).map((name: string) => {
+      const idx = speciesIndexMap.get(String(name).trim());
+      if (idx === undefined) throw new Error(`Unknown reactant: ${name}`);
+      return idx;
+    }),
+    products: (r.products ?? []).map((name: string) => {
+      const idx = speciesIndexMap.get(String(name).trim());
+      if (idx === undefined) throw new Error(`Unknown product: ${name}`);
+      return idx;
+    }),
+  }));
+
+  // Run continuation with conserved-moiety reduction
+  const result = continuationWithConservation({
+    nSpecies,
+    reactions: reactionEntries,
+    rhsFn,
+    updateParams: (p: number) => {
+      params[parameterName] = p;
+      compiled?.updateParameters?.(params);
+    },
+    initialGuess: initialState,
+    parameterStart,
+    parameterEnd,
+    stepSize: (parameterEnd - parameterStart) / maxSteps,
+    maxSteps,
+  });
+
+  // Attribute bifurcations if any found
+  const attributions = result.bifurcations.map((b: any) => ({
+    parameterValue: b.parameterValue,
+    type: b.type,
+    frequency: b.frequency,
+    criticalEigenvalues: b.criticalEigenvalues?.slice(0, 3),
+  }));
+
+  return {
+    bifurcations: attributions,
+    totalPoints: result.path.length,
+    stablePoints: result.path.filter((p: any) => p.stable).length,
+    unstablePoints: result.path.filter((p: any) => !p.stable).length,
+    technical: `Continuation along ${parameterName} from ${parameterStart} to ${parameterEnd}. Found ${result.bifurcations.length} bifurcation(s).`,
+    biological: result.bifurcations.length > 0
+      ? `Qualitative behavior changes detected: ${result.bifurcations.map((b: any) => `${b.type} at ${parameterName}=${b.parameterValue.toPrecision(4)}`).join('; ')}.`
+      : `No bifurcations detected in the parameter range. The system maintains qualitative stability.`,
+    strategic: 'Bifurcation analysis reveals parameter thresholds where the system changes qualitative behavior (oscillation onset, bistability, etc.).',
   };
 }
