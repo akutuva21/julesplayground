@@ -8,7 +8,7 @@
 import { parseBNGLWithANTLR } from '@bngplayground/engine';
 
 const PC_API_BASE = 'https://www.pathwaycommons.org/pc2';
-const DEFAULT_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = 2_000;
 
 export interface PCInteraction {
   source: string;
