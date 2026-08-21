@@ -753,3 +753,44 @@ describe('bnglWorker cached network expansion', () => {
     expect(engine.generateExpandedNetwork).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('bnglWorker unknown request error handling', () => {
+  let mockPostMessage: ReturnType<typeof vi.fn>;
+  let mockAddEventListener: ReturnType<typeof vi.fn>;
+  let messageListener: (event: unknown) => Promise<void>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    mockPostMessage = vi.fn();
+    mockAddEventListener = vi.fn();
+    (global as any).self = {
+      postMessage: mockPostMessage,
+      addEventListener: mockAddEventListener,
+      location: { origin: '' },
+    };
+
+    await import('../../services/bnglWorker');
+    messageListener = mockAddEventListener.mock.calls.find((c: any) => c[0] === 'message')[1];
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    delete (global as any).self;
+  });
+
+  it('posts worker_internal_error when receiving unknown message types', async () => {
+    await messageListener({
+      origin: '',
+      data: { id: 999, type: 'unknown_action_type', payload: {} },
+    });
+
+    expect(mockPostMessage).toHaveBeenCalledWith(expect.objectContaining({
+      id: 999,
+      type: 'worker_internal_error',
+      payload: expect.objectContaining({
+        message: expect.stringContaining('Unrecognized worker message type: unknown_action_type'),
+      }),
+    }));
+  });
+});

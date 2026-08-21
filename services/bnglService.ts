@@ -147,25 +147,36 @@ class BnglService {
         return;
       }
 
-      if (id === -1 && type === 'worker_internal_error') {
+      if (type === 'worker_internal_error') {
         const detail = extractErrorMessage(payload);
-        const p = payload && typeof payload === 'object' ? (payload as SerializedWorkerError) : undefined;
-        const details = p?.details;
-        const filename = details && typeof details.filename === 'string' ? details.filename : undefined;
-        const lineno = details && typeof details.lineno === 'number' ? details.lineno : undefined;
-        const colno = details && typeof details.colno === 'number' ? details.colno : undefined;
-        const location = `${filename ?? 'unknown'}:${lineno ?? '?'}:${colno ?? '?'}`;
-        const stack =
-          payload && typeof payload === 'object' && 'stack' in payload && typeof (payload as { stack?: unknown }).stack === 'string'
-            ? (payload as { stack: string }).stack
-            : undefined;
-        if (stack) {
-          console.error(`[Worker] ${detail} (${location})\n${stack}`);
-        } else {
-          console.error(`[Worker] ${detail} (${location})`);
+        if (id === -1) {
+          const p = payload && typeof payload === 'object' ? (payload as SerializedWorkerError) : undefined;
+          const details = p?.details;
+          const filename = details && typeof details.filename === 'string' ? details.filename : undefined;
+          const lineno = details && typeof details.lineno === 'number' ? details.lineno : undefined;
+          const colno = details && typeof details.colno === 'number' ? details.colno : undefined;
+          const location = `${filename ?? 'unknown'}:${lineno ?? '?'}:${colno ?? '?'}`;
+          const stack =
+            payload && typeof payload === 'object' && 'stack' in payload && typeof (payload as { stack?: unknown }).stack === 'string'
+              ? (payload as { stack: string }).stack
+              : undefined;
+          if (stack) {
+            console.error(`[Worker] ${detail} (${location})\n${stack}`);
+          } else {
+            console.error(`[Worker] ${detail} (${location})`);
+          }
+          this.rejectAllPending(`Worker internal error: ${detail} (${location})`);
+          return;
         }
-        this.rejectAllPending(`Worker internal error: ${detail} (${location})`);
-        return;
+
+        if (typeof id === 'number' && this.promises.has(id)) {
+          const pending = this.promises.get(id)!;
+          this.promises.delete(id);
+          pending.cleanup();
+          const err = toError('worker', payload);
+          pending.reject(err);
+          return;
+        }
       }
 
       if (typeof id !== 'number') {
