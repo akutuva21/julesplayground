@@ -248,3 +248,5 @@ export const RuleCartoon = React.memo<RuleCartoonProps>(({
     </button>
   );
 });
+
+export const EnhancedRuleCartoon = RuleCartoon;
