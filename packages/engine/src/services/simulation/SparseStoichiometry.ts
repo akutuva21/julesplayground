@@ -72,7 +72,7 @@ export function buildCSRStoichiometry(
     entries[i] = [];
   }
 
-  const tmpCounts = new Int32Array(numSpecies);
+  const tmpCounts = new Float64Array(numSpecies);
   const seen = new Int32Array(numSpecies);
 
   for (let j = 0; j < numReactions; j++) {
