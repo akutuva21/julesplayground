@@ -186,15 +186,17 @@ export function buildContactMap(rules: ReactionRule[], moleculeTypes: BNGLMolecu
     extractBonds(productGraphs).forEach((value, key) => bonds.set(key, value));
 
     bonds.forEach((bond) => {
-      const source = makeComponentKey(bond.mol1, bond.comp1);
-      const target = makeComponentKey(bond.mol2, bond.comp2);
+      const k1 = makeComponentKey(bond.mol1, bond.comp1);
+      const k2 = makeComponentKey(bond.mol2, bond.comp2);
+      const [source, target] = k1 <= k2 ? [k1, k2] : [k2, k1];
+      const compPair: [string, string] = k1 <= k2 ? [bond.comp1, bond.comp2] : [bond.comp2, bond.comp1];
       const edgeKey = `${source}->${target}`;
       if (!edgeMap.has(edgeKey)) {
         edgeMap.set(edgeKey, {
           from: source,
           to: target,
           interactionType: 'binding',
-          componentPair: [bond.comp1, bond.comp2],
+          componentPair: compPair,
           ruleIds: [],
           ruleLabels: [],
         });

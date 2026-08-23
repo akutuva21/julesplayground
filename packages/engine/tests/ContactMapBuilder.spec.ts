@@ -34,11 +34,10 @@ describe('ContactMapBuilder', () => {
     expect(compCNode).toBeDefined();
     expect(compBcNode).toBeDefined();
 
-    // Verify edges connect the distinct components properly
+    // Verify edges connect the distinct components properly (canonicalized endpoints)
     expect(contactMap.edges.length).toBe(1);
     const edge = contactMap.edges[0];
-    expect(edge.from).toBe(compCNode?.id);
-    expect(edge.to).toBe(compBcNode?.id);
+    expect([edge.from, edge.to].sort()).toEqual([compCNode?.id, compBcNode?.id].sort());
     expect(edge.ruleIds).toContain('R1');
   });
 
@@ -64,5 +63,40 @@ describe('ContactMapBuilder', () => {
     expect(contactMap.nodes.some((n) => n.label === 'Egfr')).toBe(true);
     expect(contactMap.edges.length).toBe(1);
     expect(contactMap.edges[0].ruleLabels).toContain('bind_egf');
+  });
+
+  it('aggregates rules with reversed reactant/product order into a single edge', () => {
+    const moleculeTypes: BNGLMoleculeType[] = [
+      { name: 'A', components: ['x'] },
+      { name: 'B', components: ['y'] },
+    ];
+
+    const rules: ReactionRule[] = [
+      {
+        name: 'R_forward',
+        reactants: ['A(x)', 'B(y)'],
+        products: ['A(x!1).B(y!1)'],
+        rate: 'k1',
+        isBidirectional: false,
+      },
+      {
+        name: 'R_reversed',
+        reactants: ['B(y)', 'A(x)'],
+        products: ['B(y!1).A(x!1)'],
+        rate: 'k2',
+        isBidirectional: false,
+      },
+    ];
+
+    const contactMap = buildContactMap(rules, moleculeTypes);
+
+    // Both rules write the exact same bond (A.x - B.y), but in opposite reactant order.
+    // They must aggregate into a single edge containing both rule IDs.
+    expect(contactMap.edges.length).toBe(1);
+    const edge = contactMap.edges[0];
+    expect(edge.ruleIds).toContain('R_forward');
+    expect(edge.ruleIds).toContain('R_reversed');
+    expect(edge.ruleLabels).toContain('R_forward');
+    expect(edge.ruleLabels).toContain('R_reversed');
   });
 });
