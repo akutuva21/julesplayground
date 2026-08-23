@@ -8,6 +8,8 @@ export {
     parameterScanArgsSchema,
     validateModelArgsSchema,
     getContactMapArgsSchema,
+    verifyModelArgsSchema,
+    searchStructureArgsSchema,
 } from './core.js';
 
 export {
@@ -24,6 +26,7 @@ export {
     qssaReductionArgsSchema,
     temporalAnalysisArgsSchema,
     symbolicSteadyStateArgsSchema,
+    bifurcationAnalysisArgsSchema,
 } from './analysis.js';
 
 export {
