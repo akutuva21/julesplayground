@@ -316,6 +316,8 @@ export interface SimulationOptions {
     verbose?: boolean;
     includeInfluence?: boolean;
     includeSpeciesData?: boolean;
+    /** Include expanded reaction/species metadata in results (default: true). */
+    includeExpandedNetwork?: boolean;
     maxEvents?: number;
     /** Record individual reaction firing events for information-theoretic analysis */
     recordFirings?: boolean;
@@ -394,7 +396,9 @@ export type WorkerResponse =
     | { id: number; type: 'generate_network_error'; payload: SerializedWorkerError }
     | { id: number; type: 'generate_network_progress'; payload: GeneratorProgress }
     | { id: number; type: 'analyse_network_success'; payload: IgraphAnalysisResult }
-    | { id: number; type: 'analyse_network_error'; payload: SerializedWorkerError };
+    | { id: number; type: 'analyse_network_error'; payload: SerializedWorkerError }
+    | { id: number; type: 'progress'; payload: unknown }
+    | { id: number | -1; type: 'warning'; payload: unknown };
 
 export interface AtomizerResult {
     bngl: string;
