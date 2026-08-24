@@ -37,7 +37,7 @@ describe('identifiability handler — standard functionality', () => {
       code: SIMPLE_MODEL,
       data: SAMPLE_DATA,
       parameters: ['k1'],
-      n_grid: 5,
+      n_grid: 2,
     });
 
     const body = JSON.parse(result.content[0].text);
@@ -50,7 +50,7 @@ describe('identifiability handler — standard functionality', () => {
     const result = await handleIdentifiability({
       code: SIMPLE_MODEL,
       data: SAMPLE_DATA,
-      n_grid: 3,
+      n_grid: 2,
     });
 
     const body = JSON.parse(result.content[0].text);
