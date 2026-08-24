@@ -60,8 +60,15 @@ export async function handleDoseResponse(args: ToolArgs): Promise<ToolResult<any
             ));
         }
 
+        const fullModel = {
+            ...model,
+            reactions: expanded.reactions ?? [],
+            species: expanded.species ?? [],
+            ...(expanded.concreteObservables ? { concreteObservables: expanded.concreteObservables } : {}),
+        };
+
         const result = await computeDoseResponse({
-            model,
+            model: fullModel,
             reactions: expanded.reactions ?? [],
             species: expanded.species,
             inputParameter: parsedArgs.input_parameter,
