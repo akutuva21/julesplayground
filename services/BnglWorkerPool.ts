@@ -6,7 +6,7 @@
  */
 
 import { BNGLModel, SharedSimulationOutputDescriptor, SimulationOptions, SimulationResults, WorkerRequest, WorkerResponse } from '../types';
-import { extractErrorMessage, toError } from './workerErrorUtils';
+import { toError } from './workerErrorUtils';
 
 export interface SharedEnsembleResultsHandle {
     kind: 'shared';
@@ -186,6 +186,14 @@ export class BnglWorkerPool {
                 console.error(`[Pool] Worker ${workerIdx} internal error reported: ${err.message}\n${err.stack}`);
             } else {
                 console.error(`[Pool] Worker ${workerIdx} internal error reported: ${err.message}`);
+            }
+            if (typeof id === 'number' && id !== -1) {
+                const req = this.pendingWorkerRequests.get(worker)?.get(id);
+                if (req) {
+                    this.removePendingRequest(worker, id);
+                    req.reject(err);
+                    return;
+                }
             }
             this.rejectAllPendingOnWorker(worker, err);
             return;
