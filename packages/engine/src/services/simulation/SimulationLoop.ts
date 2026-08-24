@@ -11,7 +11,7 @@
  */
 
 import { BNGLFunction, BNGLModel, BNGLReaction, SimulationOptions, SimulationResults, SimulationPhase, SSAInfluenceData, SSAInfluenceTimeSeries, OdeSystemHandle } from '../../types';
-import type { SolverResult } from './ODESolver';
+import type { SolverOptions } from './ODESolver';
 
 import { BNGLParser } from '../graph/core/BNGLParser';
 import { toBngGridTime } from '../parity/ParityService';
@@ -119,10 +119,11 @@ export function resolveSimulationPhasesForRun(model: BNGLModel, options: Simulat
     return Math.max(1, Math.floor(value as number));
   };
 
+  const modelWithPhases = model as BNGLModel & { phases?: SimulationPhase[] };
   const authoredPhases: SimulationPhase[] = (model.simulationPhases && model.simulationPhases.length > 0)
     ? model.simulationPhases.map((phase) => ({ ...phase }))
-    : ('phases' in model && Array.isArray((model as typeof model & { phases?: SimulationPhase[] }).phases) && (model as typeof model & { phases?: SimulationPhase[] }).phases!.length > 0)
-      ? (model as typeof model & { phases?: SimulationPhase[] }).phases!.map((phase: SimulationPhase) => ({ ...phase }))
+    : (Array.isArray(modelWithPhases.phases) && modelWithPhases.phases.length > 0)
+      ? modelWithPhases.phases.map((phase: SimulationPhase) => ({ ...phase }))
       : [];
 
   const normalizedNSteps = normalizeNSteps(options.n_steps);
@@ -524,7 +525,7 @@ export async function simulate(
         if (!Number.isNaN(evalVal) && Number.isFinite(evalVal)) {
           rate = evalVal;
         }
-      } catch (e) {
+      } catch {
         // ignore and fallback
       }
     }
@@ -588,7 +589,10 @@ export async function simulate(
   // 3. Pre-process Observables
   // Prefer concrete observables attached to the model (produced earlier by NetworkExpansion). If not present,
   // fall back to dynamic matching here (legacy behavior).
-  const concreteObservables: ConcreteObservable[] = ('concreteObservables' in model && Array.isArray((model as typeof model & { concreteObservables?: ConcreteObservable[] }).concreteObservables)) ? (model as typeof model & { concreteObservables?: ConcreteObservable[] }).concreteObservables! : model.observables.map(obs => {
+  const modelConObs = model.concreteObservables;
+  const concreteObservables: ConcreteObservable[] = (Array.isArray(modelConObs) && modelConObs.length > 0)
+    ? modelConObs
+    : model.observables.map(obs => {
     const splitPatternsSafe = (patternStr: string): string[] => {
       const commaChunks: string[] = [];
       let current = '';
@@ -699,8 +703,11 @@ export async function simulate(
     }
 
     let vol = 1.0;
-    if (compName && compartmentMap.has(compName)) {
-      vol = compartmentMap.get(compName)!;
+    if (compName) {
+      const compVol = compartmentMap.get(compName);
+      if (compVol !== undefined) {
+        vol = compVol;
+      }
     }
     speciesVolumes[idx] = vol;
   });
@@ -738,9 +745,9 @@ export async function simulate(
       }
 
       const comp = compName ? compartmentMapForDim.get(compName) : null;
-      if (comp) {
+      if (comp && compName) {
         const dim = comp.dimension ?? 3;
-        const vol = compartmentMap.get(compName!) ?? 1.0;
+        const vol = compartmentMap.get(compName) ?? 1.0;
         if (dim < minDim) {
           minDim = dim;
           vAnchor = vol;
@@ -773,8 +780,8 @@ export async function simulate(
           paramMap.set(name, direct);
           continue;
         }
-        if (rawValue && typeof rawValue === 'object' && 'value' in (rawValue as Record<string, unknown>)) {
-          const nested = Number((rawValue as any).value);
+        if (rawValue && typeof rawValue === 'object' && 'value' in rawValue) {
+          const nested = Number((rawValue as { value?: unknown }).value);
           if (Number.isFinite(nested)) {
             paramMap.set(name, nested);
           }
@@ -901,7 +908,7 @@ export async function simulate(
   // Minimal runtime debug to avoid noisy console output
   try {
     if (VERBOSE_SIM_DEBUG) console.log('[Worker] Model name:', model.name);
-  } catch (e) {
+  } catch {
     /* ignore */
   }
 
@@ -1158,10 +1165,8 @@ export async function simulate(
     });
 
     let compiledMassActionJit: JITCompiledFunction | undefined;
-    let rebuildNativeByteCode: (() => void) | undefined;
-    let persistedSolver: { integrate: (y: Float64Array, t0: number, tEnd: number, check?: () => void) => SolverResult; destroy?: () => void } | undefined = undefined;
-
-    let persistedSolverKey = '';
+    let rebuildNativeByteCode: (() => void) | undefined = undefined;
+    let persistedSolver: Awaited<ReturnType<typeof import('./ODESolver').createSolver>> | undefined = undefined;
 
 
     const applyParameterUpdates = (targetPhaseIdx: number): boolean => {
@@ -1260,7 +1265,7 @@ export async function simulate(
         if (persistedSolver) {
           try {
             persistedSolver.destroy?.();
-          } catch (e) {
+          } catch {
             /* ignore */
           }
           persistedSolver = undefined;
@@ -1710,8 +1715,9 @@ export async function simulate(
           try {
             const rxn = concreteReactions[rxnIdx];
             const currentObs = buildSsaObsRecord();
+            const rateExpr = rxn.rateExpression ?? '';
             const rate = evaluateFunctionalRate(
-              rxn.rateExpression!,
+              rateExpr,
               model.parameters || {},
               currentObs,
               model.functions,
@@ -1741,9 +1747,11 @@ export async function simulate(
               return a * state[rxnReactant0[rxnIdx]] * state[rxnReactant1[rxnIdx]] * state[rxnReactant2[rxnIdx]];
             } else {
               a *= state[rxnReactant0[rxnIdx]] * state[rxnReactant1[rxnIdx]] * state[rxnReactant2[rxnIdx]];
-              const rem = rxnReactantsRemaining[rxnIdx]!;
-              for (let j = 0; j < rem.length; j++) {
-                a *= state[rem[j]];
+              const rem = rxnReactantsRemaining[rxnIdx];
+              if (rem) {
+                for (let j = 0; j < rem.length; j++) {
+                  a *= state[rem[j]];
+                }
               }
               return a;
             }
@@ -1766,9 +1774,11 @@ export async function simulate(
           return kEff[rxnIdx] * state[rxnReactant0[rxnIdx]] * state[rxnReactant1[rxnIdx]] * state[rxnReactant2[rxnIdx]];
         } else {
           let a = kEff[rxnIdx] * state[rxnReactant0[rxnIdx]] * state[rxnReactant1[rxnIdx]] * state[rxnReactant2[rxnIdx]];
-          const rem = rxnReactantsRemaining[rxnIdx]!;
-          for (let j = 0; j < rem.length; j++) {
-            a *= state[rem[j]];
+          const rem = rxnReactantsRemaining[rxnIdx];
+          if (rem) {
+            for (let j = 0; j < rem.length; j++) {
+              a *= state[rem[j]];
+            }
           }
           return a;
         }
@@ -1883,7 +1893,7 @@ export async function simulate(
           }
         }
         let totalEvents = 0;
-        let nEventsThisPhase = 0;
+        let _nEventsThisPhase = 0;
         const maxEvents = options.maxEvents ?? 100_000_000;
 
 
@@ -1983,13 +1993,13 @@ export async function simulate(
 
           const firedRxn = concreteReactions[reactionIndex];
           totalEvents++;
-          nEventsThisPhase++;
+          _nEventsThisPhase++;
 
           // OPT 1/6: Record firing event into pre-allocated typed arrays
-          if (firingActive && logCount < maxFiringEvents) {
-            logTimes![logCount] = t;
-            logRxnIndices![logCount] = reactionIndex;
-            logPropensities![logCount] = propensities[reactionIndex];
+          if (firingActive && logTimes && logRxnIndices && logPropensities && logCount < maxFiringEvents) {
+            logTimes[logCount] = t;
+            logRxnIndices[logCount] = reactionIndex;
+            logPropensities[logCount] = propensities[reactionIndex];
             logCount++;
           }
 
@@ -2084,16 +2094,18 @@ export async function simulate(
               }
             }
             if (cc > 4) {
-              const remSp = changeSpeciesRemaining[reactionIndex]!;
-              const remDl = changeDeltaRemaining[reactionIndex]!;
-              for (let j = 0; j < remSp.length; j++) {
-                const sp = remSp[j];
-                const d = remDl[j];
-                state[sp] += d;
-                if (maintainObs) {
-                  const end = speciesObsOffsets[sp + 1];
-                  for (let k = speciesObsOffsets[sp]; k < end; k++) {
-                    ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d;
+              const remSp = changeSpeciesRemaining[reactionIndex];
+              const remDl = changeDeltaRemaining[reactionIndex];
+              if (remSp && remDl) {
+                for (let j = 0; j < remSp.length; j++) {
+                  const sp = remSp[j];
+                  const d = remDl[j];
+                  state[sp] += d;
+                  if (maintainObs) {
+                    const end = speciesObsOffsets[sp + 1];
+                    for (let k = speciesObsOffsets[sp]; k < end; k++) {
+                      ssaObsValues[speciesObsIdx[k]] += speciesObsCoeff[k] * d;
+                    }
                   }
                 }
               }
@@ -2241,7 +2253,7 @@ export async function simulate(
 
     // Debug: trace ODESolver loading
     if (VERBOSE_SIM_DEBUG) console.log('[Worker Debug] SimulationLoop: About to import ODESolver');
-    let createSolver: any;
+    let createSolver: typeof import('./ODESolver').createSolver;
     try {
       const mod = await import('./ODESolver');
       createSolver = mod.createSolver;
@@ -2251,7 +2263,6 @@ export async function simulate(
       throw err;
     }
 
-    let derivatives: (y: Float64Array, dydt: Float64Array) => void;
     let refreshRateContextParameters: (() => void) | undefined = undefined;
 
 
@@ -2445,7 +2456,8 @@ export async function simulate(
               } catch (e: unknown) {
                 if (strictFunctionalRates) {
                   throw new Error(
-                    `[Worker] Functional rate evaluation for '${rxn.rateExpression}' failed: ${e instanceof Error ? e.message : String(e)}`
+                    `[Worker] Functional rate evaluation for '${rxn.rateExpression}' failed: ${e instanceof Error ? e.message : String(e)}`,
+                    { cause: e }
                   );
                 }
                 console.error(`[Worker] Functional rate evaluation for '${rxn.rateExpression}' failed:`, e instanceof Error ? e.message : String(e));
@@ -2511,8 +2523,9 @@ export async function simulate(
 
           // Return the JIT-compiled function but wrapped to handle speciesVolumes
           if (VERBOSE_SIM_DEBUG) console.log(`[Worker] JIT compiler active for ${concreteReactions.length} reactions.`);
+          const jitFn = compiledMassActionJit;
           return (yIn: Float64Array, dydt: Float64Array) => {
-            compiledMassActionJit!.evaluate(0, yIn, dydt, solverVolumes);
+            jitFn.evaluate(0, yIn, dydt, solverVolumes);
           };
 
         } catch (e) {
@@ -2590,9 +2603,9 @@ export async function simulate(
               for (let j = rStart; j < rEnd; j++) {
                 multiplicative *= (yIn[sparseFlatReactantIdx[j]] / vAnchor);
               }
-            } else {
+            } else if (sparseFlatReactantScale) {
               for (let j = rStart; j < rEnd; j++) {
-                multiplicative *= (yIn[sparseFlatReactantIdx[j]] * sparseFlatReactantScale![j]);
+                multiplicative *= (yIn[sparseFlatReactantIdx[j]] * sparseFlatReactantScale[j]);
               }
             }
 
@@ -2707,9 +2720,9 @@ export async function simulate(
             for (let j = rStart; j < rEnd; j++) {
               multiplicative *= (yIn[flatReactantIdx[j]] / vAnchor);
             }
-          } else {
+          } else if (flatReactantScale) {
             for (let j = rStart; j < rEnd; j++) {
-              multiplicative *= (yIn[flatReactantIdx[j]] * flatReactantScale![j]);
+              multiplicative *= (yIn[flatReactantIdx[j]] * flatReactantScale[j]);
             }
           }
 
@@ -2732,11 +2745,11 @@ export async function simulate(
                 dydt[idx] -= velocity;
               }
             }
-          } else {
+          } else if (denseInvSpeciesVolumes) {
             for (let j = rStart; j < rEnd; j++) {
               const idx = flatReactantIdx[j];
               if (!isConstant[idx]) {
-                dydt[idx] -= velocity * denseInvSpeciesVolumes![idx];
+                dydt[idx] -= velocity * denseInvSpeciesVolumes[idx];
               }
             }
           }
@@ -2752,11 +2765,11 @@ export async function simulate(
                 dydt[idx] += velocity * flatProductStoich[j];
               }
             }
-          } else {
+          } else if (denseInvSpeciesVolumes) {
             for (let j = pStart; j < pEnd; j++) {
               const idx = flatProductIdx[j];
               if (!isConstant[idx]) {
-                dydt[idx] += velocity * flatProductStoich[j] * denseInvSpeciesVolumes![idx];
+                dydt[idx] += velocity * flatProductStoich[j] * denseInvSpeciesVolumes[idx];
               }
             }
           }
@@ -2764,7 +2777,7 @@ export async function simulate(
       };
     };
 
-    derivatives = buildDerivativesFunction();
+    const derivatives = buildDerivativesFunction();
 
     // Expose the exact RHS the simulator integrates (test/introspection hook).
     if (options.captureOdeSystem) {
@@ -2802,8 +2815,8 @@ export async function simulate(
 
     // Default to explicit CVODE for deterministic BNG2 parity.
     // Use adaptive auto-tuning only when caller explicitly requests solver='auto'.
-    const requestedSolverType: string = options.solver ?? 'cvode';
-    let solverType: string = requestedSolverType;
+    const requestedSolverType: SolverOptions['solver'] = options.solver ?? 'cvode';
+    let solverType: SolverOptions['solver'] = requestedSolverType;
     const allMassAction = functionalRateCount === 0;
 
     // Stiffness Analysis
@@ -2856,7 +2869,7 @@ export async function simulate(
     const jacobianLikelySparse =
       numSpecies > 0 && couplingUpperBound < JAC_DENSE_FRACTION_MAX * numSpecies * numSpecies;
     // Large + genuinely sparse => KLU sparse; otherwise dense analytical.
-    const autoSolver =
+    const autoSolver: SolverOptions['solver'] =
       (numSpecies >= SPARSE_MIN_SPECIES && jacobianLikelySparse) ? 'cvode_sparse' : 'cvode_jac';
 
     if (solverType === 'auto') {
@@ -2869,7 +2882,7 @@ export async function simulate(
       } else {
         solverType = autoJacEligible ? autoSolver : 'cvode';
       }
-    } else if (solverType === 'auto_detect') {
+    } else if ((solverType as string) === 'auto_detect') {
       // Runtime stiffness detection: probe the system at t=0 and select solver accordingly.
       // The createSolver factory handles the 'auto_detect' case via CompositeAutoSolver,
       // but here we can also do a quick static pre-selection based on the stiffness profile
@@ -2882,7 +2895,7 @@ export async function simulate(
         }
       }
       // Leave solverType as 'auto_detect' — createSolver will handle it
-    } else if (solverType === 'cvode') {
+    } else if ((solverType as string) === 'cvode') {
       if (usePresetCvodeTuning && stiffConfig.useSparse) {
         solverType = 'cvode_sparse';
       } else if (usePresetCvodeTuning && stiffConfig.useAnalyticalJacobian && allMassAction) {
@@ -2897,7 +2910,7 @@ export async function simulate(
     const userAtol = options.atol ?? model.simulationOptions?.atol ?? BNG2_DEFAULT_ATOL;
     const userRtol = options.rtol ?? model.simulationOptions?.rtol ?? BNG2_DEFAULT_RTOL;
 
-    const solverOptions: any = {
+    const solverOptions: SolverOptions = {
       _debug_v2: true, // Unique marker
       _debug_stab: options.stabLimDet,
       atol: userAtol,
@@ -3345,13 +3358,8 @@ export async function simulate(
     const denseOutputEnabled = !!options.denseOutput;
     const denseOutputBuffer = denseOutputEnabled ? new DenseOutputBuffer() : undefined;
 
-    // Persisted CVODE solver for continue=>1 multi-phase continuity.
-    // BNG2 keeps the same CVODE instance running (preserving BDF step-size history) across
-    // phases with continue=>1. We replicate this by NOT destroying the solver at phase end
-    // when the next phase also uses continue=>1 with the same solver configuration.
-    // The CVODESolver.ensureInitialized() reuse path triggers when t0 === currentT.
     persistedSolver = undefined;
-    persistedSolverKey = '';
+    let persistedSolverKey = '';
 
     // Do not clear the JIT cache here so that structural compiled functions can be reused across simulations
 
@@ -3543,7 +3551,7 @@ export async function simulate(
 
       const phaseSolverOptions = { ...solverOptions, atol: phaseAtol, rtol: phaseRtol, solver: solverType };
 
-      let currentSolverType = solverType;
+      let currentSolverType: SolverOptions['solver'] = solverType;
       // Upgrade logic: prefer analytical dense over sparse-finite-differences for small networks
       if (phase.sparse === true) {
         if (numSpecies <= 500 && phaseSolverOptions.jacobian) {
@@ -3562,7 +3570,7 @@ export async function simulate(
       let phaseExpandState: ((y_r: Float64Array) => Float64Array) | undefined;
       let phaseReductionKey = 'full';
 
-      if (conservationTemplate && currentSolverType !== 'sparse' && currentSolverType !== 'sparse_implicit') {
+      if (conservationTemplate && (currentSolverType as string) !== 'sparse' && (currentSolverType as string) !== 'sparse_implicit') {
         const conservation = getPhaseConservationAnalysis();
         if (conservation && conservation.laws.length > 0 && conservation.independentSpecies.length > 0 && conservation.independentSpecies.length < numSpecies) {
           const reducedSystem = createReducedSystem(conservation, numSpecies);
@@ -3607,8 +3615,8 @@ export async function simulate(
       const canReuseCvode = isContinue && persistedSolver !== undefined && thisSolverKey === persistedSolverKey;
 
       let solver;
-      if (canReuseCvode) {
-        solver = persistedSolver!;
+      if (canReuseCvode && persistedSolver) {
+        solver = persistedSolver;
       } else {
         // Dispose any stale persisted solver before creating a new one.
         const staleSolver = persistedSolver as { destroy?: () => void } | undefined;
@@ -3758,14 +3766,14 @@ export async function simulate(
             }
           }
 
-          if (steadyStateEnabled) {
-            derivatives(y, steadyStateDerivs!);
+          if (steadyStateEnabled && steadyStateDerivs) {
+            derivatives(y, steadyStateDerivs);
             // BNG2 uses: dx = NORM(derivs, n_species) / n_species
             // where NORM = sqrt(sum of squares), i.e., L2 norm
             let sumSq = 0;
-            const numSpecies = steadyStateDerivs!.length;
+            const numSpecies = steadyStateDerivs.length;
             for (let k = 0; k < numSpecies; k++) {
-              sumSq += steadyStateDerivs![k] * steadyStateDerivs![k];
+              sumSq += steadyStateDerivs[k] * steadyStateDerivs[k];
             }
             const dx = Math.sqrt(sumSq) / numSpecies;
 
@@ -3827,7 +3835,7 @@ export async function simulate(
         const shouldPersist = !solverError && nextUsesContinue && !nextHasParamChange
           && nextAtol === phaseAtol && nextRtol === phaseRtol && nextSolverType === currentSolverType;
         if (shouldPersist) {
-          persistedSolver = solver as typeof persistedSolver;
+          persistedSolver = solver;
           persistedSolverKey = thisSolverKey;
         } else {
           (solver as { destroy?: () => void })?.destroy?.();
