@@ -20,7 +20,7 @@ const splitLine = (line: string): string[] => {
  * - Scans comment lines (starting with `#`) to locate headers. Prioritizes comment lines containing "time".
  * - If no comment header is found but numeric data exists, generates default header names (`['time', 'O1', 'O2', ...]`).
  * - Supports tab (`\t`), comma (`,`), or whitespace delimitation.
- * - Parses data rows using a zero-allocation index scanning loop for optimal performance on large trajectory outputs.
+ * - Parses data rows with an index-scanning loop that avoids allocating a split-token array for each row.
  * - Converts non-finite numeric tokens to `0`.
  *
  * @invariant Must remain free of browser-specific APIs (`browser-API-free`).
