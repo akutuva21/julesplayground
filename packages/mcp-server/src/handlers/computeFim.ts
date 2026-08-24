@@ -1,3 +1,4 @@
+/** @unwired */
 import { computeFIM, computeCollinearity, simulate, loadEvaluator } from '@bngplayground/engine';
 import type { ToolArgs, ToolResult } from '../types/index.js';
 import { computeFimArgsSchema } from '../schemas/index.js';

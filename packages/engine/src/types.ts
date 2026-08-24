@@ -363,11 +363,6 @@ export interface SharedSimulationOutputDescriptor {
     completionBuffer: SharedArrayBuffer;
 }
 
-export interface ExtendedError extends Error {
-    stack?: string;
-    cause?: unknown;
-}
-
 export type WorkerRequest =
     | { id: number; type: 'parse'; payload: string }
     | { id: number; type: 'simulate'; payload: { model: BNGLModel; options: SimulationOptions } }

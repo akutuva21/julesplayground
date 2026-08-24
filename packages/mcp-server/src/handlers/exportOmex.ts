@@ -1,3 +1,4 @@
+/** @unwired */
 import { generateOMEX } from '@bngplayground/engine';
 import type { ToolArgs, ToolResult } from '../types/index.js';
 import { exportOmexArgsSchema } from '../schemas/index.js';
