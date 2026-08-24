@@ -1,4 +1,3 @@
-/** @unwired */
 import { SBMLWriter, generateExpandedNetwork } from '@bngplayground/engine';
 import type { ToolArgs, ToolResult } from '../types/index.js';
 import { exportSbmlArgsSchema } from '../schemas/index.js';
