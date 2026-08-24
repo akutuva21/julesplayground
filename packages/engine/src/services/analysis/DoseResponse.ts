@@ -214,12 +214,12 @@ function resolveObservable(
   species: BNGLSpecies[],
 ): ObservableMapping | null {
   // 1. Check model.concreteObservables (if pre-computed during network generation)
-  const concreteObs = (model as any).concreteObservables;
+  const concreteObs = model.concreteObservables;
   if (Array.isArray(concreteObs)) {
     for (let i = 0; i < concreteObs.length; i++) {
       const co = concreteObs[i];
       if (co && co.name === obsName) {
-        const indices = co.indices ?? co.speciesIndices;
+        const indices = co.indices;
         if (Array.isArray(indices) && Array.isArray(co.coefficients)) {
           return {
             speciesIndices: indices,
@@ -547,7 +547,6 @@ export async function computeDoseResponse(
     ...model,
     reactions: reactions ?? model.reactions ?? [],
     species: species ?? model.species ?? [],
-    ...((model as any).concreteObservables ? { concreteObservables: (model as any).concreteObservables } : {}),
   };
 
   const n = species.length;
