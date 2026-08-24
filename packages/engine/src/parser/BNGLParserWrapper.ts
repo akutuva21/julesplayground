@@ -708,7 +708,7 @@ export function validateModelSemantics(model: BNGLModel): ParseError[] {
     const line = sp.line ?? 0;
     const column = sp.column ?? 0;
     try {
-      const graph = BNGLParser.parseSpeciesGraph(sp.name, false);
+      const graph = BNGLParser.parseSpeciesGraph(sp.name);
       for (const mol of graph.molecules) {
         const err = checkMoleculeComponents(mol as GraphMolecule, line, column, '');
         if (err) {
@@ -728,7 +728,7 @@ export function validateModelSemantics(model: BNGLModel): ParseError[] {
     const reactantMols: GraphMolecule[] = [];
     for (const rStr of rule.literalReactants || rule.reactants) {
       try {
-        const graph = BNGLParser.parseSpeciesGraph(rStr, false);
+        const graph = BNGLParser.parseSpeciesGraph(rStr);
         reactantMols.push(...(graph.molecules as GraphMolecule[]));
       } catch {
         /* ignore parse errors in rule reactants */
@@ -738,7 +738,7 @@ export function validateModelSemantics(model: BNGLModel): ParseError[] {
     const productMols: GraphMolecule[] = [];
     for (const pStr of rule.literalProducts || rule.products) {
       try {
-        const graph = BNGLParser.parseSpeciesGraph(pStr, false);
+        const graph = BNGLParser.parseSpeciesGraph(pStr);
         productMols.push(...(graph.molecules as GraphMolecule[]));
       } catch {
         /* ignore parse errors in rule products */
