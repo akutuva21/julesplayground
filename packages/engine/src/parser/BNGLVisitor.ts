@@ -70,6 +70,8 @@ const visitorDebugLog = (...args: unknown[]): void => {
 export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements BNGParserVisitor<unknown> {
   public hasCompartments: boolean = true;
   private moleculeTypesMap: Map<string, BNGLMoleculeType> = new Map();
+  private paramMap: Map<string, number> = new Map();
+  private static readonly EMPTY_MAP = new Map<string, number>();
 
   private getMoleculeType(name: string): BNGLMoleculeType | undefined {
     return this.moleculeTypesMap.get(name);
@@ -183,19 +185,20 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
   private resolveParameters(): void {
     const maxPasses = 10;
     const resolvedParams: Record<string, number> = {};
-    const paramMap = new Map<string, number>();
+    this.paramMap.clear();
 
     for (let pass = 0; pass < maxPasses; pass++) {
       let allResolved = true;
-      for (const [name, expr] of Object.entries(this.paramExpressions)) {
+      for (const name in this.paramExpressions) {
         if (name in resolvedParams) continue;
+        const expr = this.paramExpressions[name];
 
         // Evaluate using current resolved params
-        const val = CoreBNGLParser.evaluateExpression(expr, paramMap);
+        const val = CoreBNGLParser.evaluateExpression(expr, this.paramMap);
 
         if (!isNaN(val)) {
           resolvedParams[name] = val;
-          paramMap.set(name, val);
+          this.paramMap.set(name, val);
         } else {
           allResolved = false;
         }
@@ -211,9 +214,10 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
     // it shouldn't be in paramExpressions because SimulationLoop.ts uses that list
     // to "revert" parameter changes back to their original BNGL definitions.
     // This ensures that setParameter("K", 200) works for parameters defined as constants (e.g. "K 0.1").
-    for (const [name, expr] of Object.entries(this.paramExpressions)) {
+    for (const name in this.paramExpressions) {
+      const expr = this.paramExpressions[name];
       try {
-        if (!isNaN(CoreBNGLParser.evaluateExpression(expr, new Map()))) {
+        if (!isNaN(CoreBNGLParser.evaluateExpression(expr, BNGLVisitor.EMPTY_MAP))) {
           delete this.paramExpressions[name];
         }
       } catch {
@@ -227,6 +231,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
       console.warn(`[BNGLVisitor] Failed to resolve ${unresolved.length} parameters: ${unresolved.join(', ')}. Using default value 0 for these.`);
       for (const name of unresolved) {
         this.parameters[name] = 0;
+        this.paramMap.set(name, 0);
       }
     } else {
       // console.log(`[BNGLVisitor] All ${Object.keys(this.paramExpressions).length} parameters resolved successfully.`);
@@ -234,16 +239,19 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
   }
 
   private resolveSpeciesConcentrations(): void {
-    const paramMap = new Map(Object.entries(this.parameters));
-    const funcMap = new Map<string, { args: string[]; expr: string }>();
-    for (const f of this.functions) {
-      funcMap.set(f.name, { args: f.args, expr: f.expression });
+    let funcMap: Map<string, { args: string[]; expr: string }> | undefined = undefined;
+    if (this.functions.length > 0) {
+      funcMap = new Map();
+      for (let i = 0; i < this.functions.length; i++) {
+        const f = this.functions[i];
+        funcMap.set(f.name, { args: f.args, expr: f.expression });
+      }
     }
 
     for (let i = 0; i < this.species.length; i++) {
       const expr = this.speciesExpressions[i];
       if (expr) {
-        const val = CoreBNGLParser.evaluateExpression(expr, paramMap, undefined, funcMap);
+        const val = CoreBNGLParser.evaluateExpression(expr, this.paramMap, undefined, funcMap);
         if (!isNaN(val)) {
           this.species[i].initialConcentration = val;
         }
@@ -397,11 +405,13 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
         // Register the parameter as depending on the __FREE identifier
         this.paramExpressions[name] = value;
         this.parameters[name] = 0;
+        this.paramMap.set(name, 0);
 
         // Ensure the __FREE identifier itself is defined as a constant (defaulting to 0)
         // if it’s not already defined elsewhere in the model.
         if (!(value in this.parameters) && !this.paramExpressions[value]) {
           this.parameters[value] = 0;
+          this.paramMap.set(value, 0);
           // By NOT adding it to paramExpressions, it remains a constant 0.
         }
         return;
@@ -418,6 +428,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
         const freeParam = freeMatch[1];
         if (!(freeParam in this.parameters) && !this.paramExpressions[freeParam]) {
           this.parameters[freeParam] = 0;
+          this.paramMap.set(freeParam, 0);
         }
       }
 
@@ -425,6 +436,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
       this.paramExpressions[name] = value;
       // Initialize with 0
       this.parameters[name] = 0;
+      this.paramMap.set(name, 0);
 
     } catch (e: unknown) {
       console.error('Error in visitParameter_def:', (e as Error).message);
@@ -1079,8 +1091,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
       }
       // Evaluate as expression
       try {
-        const paramMap = new Map(Object.entries(this.parameters));
-        const result = CoreBNGLParser.evaluateExpression(val, paramMap);
+        const result = CoreBNGLParser.evaluateExpression(val, this.paramMap);
         return isNaN(result) ? defaultVal : result;
       } catch (e) {
         return num; // Fall back to simple parse
@@ -1262,8 +1273,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
         } else {
           // Try to evaluate as expression with current parameters
           try {
-            const paramsMap = new Map(Object.entries(this.parameters));
-            value = CoreBNGLParser.evaluateExpression(value, paramsMap);
+            value = CoreBNGLParser.evaluateExpression(value, this.paramMap);
           } catch (e) {
             // If evaluation fails, keep as string (might be parameter ref)
             console.warn(`[BNGLVisitor] Could not evaluate setConcentration expression: ${value}`);
@@ -1683,34 +1693,23 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
   private evaluateExpression(ctx: Parser.ExpressionContext): number {
     const text = ctx.text;
 
-    // Convert parameters record to Map
-    const paramMap = new Map<string, number>(Object.entries(this.parameters));
-
-    // Define Observables Map (if available in this context?)
-    // BNGLVisitor collects observables in this.observables [BNGLObservable[]]
-    // We can allow observable names as valid identifiers (value 1.0 or 0.0 for initial check)
-    // But for rate laws, we usually want to preserve structure?
-    // Wait, this method is used for evaluating CONSTANTS (like parameters).
-    // If we use it for rates, we might get numbers.
-    // But BNGLVisitor collects rate expressions as strings usually.
-    // It calls evaluateExpression ONLY for numeric arguments (like t_end, n_steps, parameter values).
-
-    // However, if a parameter depends on a function?
-    // e.g. begin parameters; k1 f(); end parameters;
-    // Then we need function support here too.
-
-    const funcMap = new Map<string, { args: string[], expr: string }>();
-    for (const f of this.functions) {
-      funcMap.set(f.name, { args: f.args, expr: f.expression });
+    let funcMap: Map<string, { args: string[]; expr: string }> | undefined = undefined;
+    if (this.functions.length > 0) {
+      funcMap = new Map();
+      for (let i = 0; i < this.functions.length; i++) {
+        const f = this.functions[i];
+        funcMap.set(f.name, { args: f.args, expr: f.expression });
+      }
     }
 
-    // Also add observables to map so they don't cause errors if referenced in params (though uncommon)
-    // If a parameter references an observable, it's usually invalid in BNG unless it's an expression parameter.
-    const obsMap = new Map<string, number>();
-    for (const obs of this.observables) {
-      obsMap.set(obs.name, 1.0);
+    let obsMap: Map<string, number> | undefined = undefined;
+    if (this.observables.length > 0) {
+      obsMap = new Map();
+      for (let i = 0; i < this.observables.length; i++) {
+        obsMap.set(this.observables[i].name, 1.0);
+      }
     }
 
-    return CoreBNGLParser.evaluateExpression(text, paramMap, obsMap, funcMap);
+    return CoreBNGLParser.evaluateExpression(text, this.paramMap, obsMap, funcMap);
   }
 }
