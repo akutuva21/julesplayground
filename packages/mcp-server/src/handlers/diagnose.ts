@@ -1,4 +1,3 @@
-/** @unwired */
 import { diagnoseModel } from '@bngplayground/engine';
 import { ToolArgs, ToolResult } from '../types/index.js';
 import { diagnoseArgsSchema } from '../schemas/index.js';

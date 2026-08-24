@@ -363,6 +363,11 @@ export interface SharedSimulationOutputDescriptor {
     completionBuffer: SharedArrayBuffer;
 }
 
+export interface ExtendedError extends Error {
+    stack?: string;
+    cause?: unknown;
+}
+
 export type WorkerRequest =
     | { id: number; type: 'parse'; payload: string }
     | { id: number; type: 'simulate'; payload: { model: BNGLModel; options: SimulationOptions } }
@@ -382,7 +387,7 @@ export type WorkerResponse =
     | { id: number; type: 'simulate_success'; payload: SimulationResults }
     | { id: number; type: 'simulate_shared_success'; payload: { slot: number } }
     | { id: number; type: 'cache_model_success'; payload: { modelId: number } }
-    | { id: -1; type: 'worker_internal_error'; payload: SerializedWorkerError }
+    | { id: number; type: 'worker_internal_error'; payload: SerializedWorkerError }
     | { id: number; type: 'cache_model_error'; payload: SerializedWorkerError }
     | { id: number; type: 'release_model_success'; payload: { modelId: number } }
     | { id: number; type: 'release_model_error'; payload: SerializedWorkerError }

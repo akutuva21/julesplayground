@@ -1,4 +1,3 @@
-/** @unwired */
 import { generateSedML } from '@bngplayground/engine';
 import type { ToolArgs, ToolResult } from '../types/index.js';
 import { exportSedmlArgsSchema } from '../schemas/index.js';

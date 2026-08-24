@@ -39,7 +39,7 @@ const isProfileRun = args.some((arg) => arg.includes('vitest.profile.config'));
 const configuredHardTimeout = Number(process.env.RUN_FULL_TESTS_HARD_TIMEOUT_MS);
 const HARD_TIMEOUT_MS = Number.isFinite(configuredHardTimeout) && configuredHardTimeout > 0
   ? configuredHardTimeout
-  : (isProfileRun ? 20 : 10) * 60 * 1000;
+  : (isProfileRun ? 20 : 5) * 60 * 1000;
 let killed = false;
 
 function hasCompletionSignal() {
