@@ -1,10 +1,11 @@
 import { profileLikelihood, simulate, loadEvaluator } from '@bngplayground/engine';
-import type { ToolArgs, ToolResult } from '../types/index.js';
+import type { ProfileLikelihoodResult } from '@bngplayground/engine';
+import type { ToolArgs, ToolResult, MCPErrorResult } from '../types/index.js';
 import { identifiabilityArgsSchema } from '../schemas/index.js';
 import { createToolResult, parseArgs, applyNetworkOptions, parseModelOrThrow, expandModel, buildSimulationOptions, withDataOnlySimulationOutput, cloneExpandedModel, updateMassActionRates } from '../services/engine.js';
 import { structureError } from '../services/errors.js';
 
-export async function handleIdentifiability(args: ToolArgs): Promise<ToolResult<any>> {
+export async function handleIdentifiability(args: ToolArgs): Promise<ToolResult<ProfileLikelihoodResult | MCPErrorResult>> {
     try {
         const parsedArgs = parseArgs('identifiability_analysis', identifiabilityArgsSchema, args);
 
@@ -50,12 +51,9 @@ export async function handleIdentifiability(args: ToolArgs): Promise<ToolResult<
         await loadEvaluator();
 
         const parameterNames = parsedArgs.parameters ?? modelParamKeys;
-        const parameters: Record<string, number> = {};
-        for (const name of parameterNames) {
-            parameters[name] = model.parameters[name];
-        }
+        const parameters: Record<string, number> = { ...model.parameters };
 
-        const experimentalData = parsedArgs.data.map((d: any) => ({
+        const experimentalData = parsedArgs.data.map((d) => ({
             time: d.time,
             values: d.observables,
         }));

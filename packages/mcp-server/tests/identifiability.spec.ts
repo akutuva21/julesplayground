@@ -75,14 +75,14 @@ describe('identifiability handler — edge cases & robustness', () => {
     // data is not an array
     const resultInvalidData = await handleIdentifiability({
       code: SIMPLE_MODEL,
-      data: 'invalid-data' as any,
+      data: 'invalid-data' as unknown as Array<{ time: number; observables: Record<string, number> }>,
     });
     const bodyData = JSON.parse(resultInvalidData.content[0].text);
     expect(bodyData.error).toMatch(/data/i);
 
     // code is wrong type
     const resultInvalidCode = await handleIdentifiability({
-      code: 12345 as any,
+      code: 12345 as unknown as string,
       data: SAMPLE_DATA,
     });
     const bodyCode = JSON.parse(resultInvalidCode.content[0].text);
