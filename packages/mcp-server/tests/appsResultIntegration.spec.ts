@@ -4,6 +4,7 @@ import { classifyResultPayload, getParameterScanHeatmap, getParameterScanRows } 
 import { handleParameterScan } from '../src/handlers/parameterScan.js';
 import { handleParseBngl } from '../src/handlers/parseBngl.js';
 import { handleValidateModel } from '../src/handlers/validateModel.js';
+import type { ParameterScanResult, ValidateModelResult } from '../src/types/index.js';
 
 const MODEL = `begin model
 begin parameters
@@ -31,14 +32,19 @@ end model`;
 describe('MCP App result integration', () => {
   it('recognizes the live parse_bngl payload as a model-structure result', async () => {
     const result = await handleParseBngl({ code: MODEL });
+    expect(result.isError).toBeUndefined();
     expect(classifyResultPayload(result.structuredContent)).toBe('model');
-    expect(result.structuredContent.model.reactionRules).toHaveLength(2);
+    if ('model' in result.structuredContent) {
+      expect(result.structuredContent.model.reactionRules).toHaveLength(2);
+    }
   });
 
   it('recognizes the live validation payload as a validation result', async () => {
     const result = await handleValidateModel({ code: MODEL, include_nfsim: true });
-    expect(classifyResultPayload(result.structuredContent)).toBe('validation');
-    expect(result.structuredContent.parseSuccess).toBe(true);
+    expect(result.isError).toBeUndefined();
+    const content = result.structuredContent as ValidateModelResult;
+    expect(classifyResultPayload(content)).toBe('validation');
+    expect(content.parseSuccess).toBe(true);
   });
 
   it('recognizes and charts the live parameter_scan payload', async () => {
@@ -52,8 +58,10 @@ describe('MCP App result integration', () => {
       n_steps: 2,
     });
 
-    expect(classifyResultPayload(result.structuredContent)).toBe('parameter-scan');
-    expect(getParameterScanRows(result.structuredContent)).toHaveLength(3);
+    expect(result.isError).toBeUndefined();
+    const content = result.structuredContent as ParameterScanResult;
+    expect(classifyResultPayload(content)).toBe('parameter-scan');
+    expect(getParameterScanRows(content)).toHaveLength(3);
   });
 
   it('preserves x/y coordinates for a live 2D parameter-scan heatmap', async () => {
@@ -71,8 +79,10 @@ describe('MCP App result integration', () => {
       n_steps: 2,
     });
 
-    expect(result.structuredContent.mode).toBe('2d');
-    const heatmap = getParameterScanHeatmap(result.structuredContent, 'Bound');
+    expect(result.isError).toBeUndefined();
+    const content = result.structuredContent as ParameterScanResult;
+    expect(content.mode).toBe('2d');
+    const heatmap = getParameterScanHeatmap(content, 'Bound');
     expect(heatmap).toHaveLength(6);
     expect(heatmap.map(({ x, y }) => [x, y])).toEqual([
       [0.005, 0.05],
