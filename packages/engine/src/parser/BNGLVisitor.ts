@@ -398,7 +398,6 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
         // Register the parameter as depending on the __FREE identifier
         this.paramExpressions[name] = value;
         this.parameters[name] = 0;
-        this.paramMap.set(name, 0);
 
         // Ensure the __FREE identifier itself is defined as a constant (defaulting to 0)
         // if it’s not already defined elsewhere in the model.
@@ -429,7 +428,6 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
       this.paramExpressions[name] = value;
       // Initialize with 0
       this.parameters[name] = 0;
-      this.paramMap.set(name, 0);
 
     } catch (e: unknown) {
       console.error('Error in visitParameter_def:', (e as Error).message);
@@ -1084,8 +1082,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
       }
       // Evaluate as expression
       try {
-        const paramMap = new Map(Object.entries(this.parameters));
-        const result = CoreBNGLParser.evaluateExpression(val, paramMap);
+        const result = CoreBNGLParser.evaluateExpression(val, this.paramMap);
         return isNaN(result) ? defaultVal : result;
       } catch (e) {
         return num; // Fall back to simple parse
