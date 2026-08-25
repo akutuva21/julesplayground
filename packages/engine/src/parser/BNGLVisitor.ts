@@ -185,6 +185,14 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
   private resolveParameters(): void {
     const maxPasses = 10;
     const resolvedParams: Record<string, number> = {};
+    const evalMap = new Map<string, number>();
+
+    // Seed evalMap with constants (parameters not defined by expressions)
+    for (const [k, v] of Object.entries(this.parameters)) {
+      if (!(k in this.paramExpressions)) {
+        evalMap.set(k, v);
+      }
+    }
 
     for (let pass = 0; pass < maxPasses; pass++) {
       let allResolved = true;
@@ -192,11 +200,11 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
         if (name in resolvedParams) continue;
 
         // Evaluate using current resolved params
-        const val = CoreBNGLParser.evaluateExpression(expr, this.paramMap);
+        const val = CoreBNGLParser.evaluateExpression(expr, evalMap);
 
         if (!isNaN(val)) {
           resolvedParams[name] = val;
-          this.paramMap.set(name, val);
+          evalMap.set(name, val);
         } else {
           allResolved = false;
         }
@@ -204,8 +212,11 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
       if (allResolved) break;
     }
 
-    // Assign resolved values to model
+    // Assign resolved values to model and this.paramMap
     Object.assign(this.parameters, resolvedParams);
+    for (const [k, v] of evalMap) {
+      this.paramMap.set(k, v);
+    }
 
     // PARITY FIX: Remove truly constant parameters from paramExpressions.
     // If a parameter doesn't depend on other parameters (evaluates with empty map),
