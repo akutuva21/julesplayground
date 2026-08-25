@@ -70,6 +70,8 @@ const visitorDebugLog = (...args: unknown[]): void => {
 export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements BNGParserVisitor<unknown> {
   public hasCompartments: boolean = true;
   private moleculeTypesMap: Map<string, BNGLMoleculeType> = new Map();
+  private paramMap: Map<string, number> = new Map();
+  private static readonly EMPTY_MAP = new Map<string, number>();
 
   private getMoleculeType(name: string): BNGLMoleculeType | undefined {
     return this.moleculeTypesMap.get(name);
@@ -183,7 +185,6 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
   private resolveParameters(): void {
     const maxPasses = 10;
     const resolvedParams: Record<string, number> = {};
-    const paramMap = new Map<string, number>();
 
     for (let pass = 0; pass < maxPasses; pass++) {
       let allResolved = true;
@@ -191,11 +192,11 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
         if (name in resolvedParams) continue;
 
         // Evaluate using current resolved params
-        const val = CoreBNGLParser.evaluateExpression(expr, paramMap);
+        const val = CoreBNGLParser.evaluateExpression(expr, this.paramMap);
 
         if (!isNaN(val)) {
           resolvedParams[name] = val;
-          paramMap.set(name, val);
+          this.paramMap.set(name, val);
         } else {
           allResolved = false;
         }
@@ -213,7 +214,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
     // This ensures that setParameter("K", 200) works for parameters defined as constants (e.g. "K 0.1").
     for (const [name, expr] of Object.entries(this.paramExpressions)) {
       try {
-        if (!isNaN(CoreBNGLParser.evaluateExpression(expr, new Map()))) {
+        if (!isNaN(CoreBNGLParser.evaluateExpression(expr, BNGLVisitor.EMPTY_MAP))) {
           delete this.paramExpressions[name];
         }
       } catch {
@@ -227,6 +228,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
       console.warn(`[BNGLVisitor] Failed to resolve ${unresolved.length} parameters: ${unresolved.join(', ')}. Using default value 0 for these.`);
       for (const name of unresolved) {
         this.parameters[name] = 0;
+        this.paramMap.set(name, 0);
       }
     } else {
       // console.log(`[BNGLVisitor] All ${Object.keys(this.paramExpressions).length} parameters resolved successfully.`);
@@ -234,7 +236,6 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
   }
 
   private resolveSpeciesConcentrations(): void {
-    const paramMap = new Map(Object.entries(this.parameters));
     const funcMap = new Map<string, { args: string[]; expr: string }>();
     for (const f of this.functions) {
       funcMap.set(f.name, { args: f.args, expr: f.expression });
@@ -243,7 +244,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
     for (let i = 0; i < this.species.length; i++) {
       const expr = this.speciesExpressions[i];
       if (expr) {
-        const val = CoreBNGLParser.evaluateExpression(expr, paramMap, undefined, funcMap);
+        const val = CoreBNGLParser.evaluateExpression(expr, this.paramMap, undefined, funcMap);
         if (!isNaN(val)) {
           this.species[i].initialConcentration = val;
         }
@@ -397,11 +398,13 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
         // Register the parameter as depending on the __FREE identifier
         this.paramExpressions[name] = value;
         this.parameters[name] = 0;
+        this.paramMap.set(name, 0);
 
         // Ensure the __FREE identifier itself is defined as a constant (defaulting to 0)
         // if it’s not already defined elsewhere in the model.
         if (!(value in this.parameters) && !this.paramExpressions[value]) {
           this.parameters[value] = 0;
+          this.paramMap.set(value, 0);
           // By NOT adding it to paramExpressions, it remains a constant 0.
         }
         return;
@@ -418,6 +421,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
         const freeParam = freeMatch[1];
         if (!(freeParam in this.parameters) && !this.paramExpressions[freeParam]) {
           this.parameters[freeParam] = 0;
+          this.paramMap.set(freeParam, 0);
         }
       }
 
@@ -425,6 +429,7 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
       this.paramExpressions[name] = value;
       // Initialize with 0
       this.parameters[name] = 0;
+      this.paramMap.set(name, 0);
 
     } catch (e: unknown) {
       console.error('Error in visitParameter_def:', (e as Error).message);
@@ -1610,9 +1615,9 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
 
       if (entry.compartment) {
         molStr += `@${entry.compartment}`;
-      } else if (this.hasCompartments) {
-        // Only run legacy check if we actually have compartments in the file
-        const rawPatternText = mp.text?.replace(/\s+/g, '') ?? '';
+      } else if (this.hasCompartments && mp.text && mp.text.includes('@')) {
+        // Only run legacy check if we actually have compartments in the file and pattern text contains @
+        const rawPatternText = mp.text.replace(/\s+/g, '');
         const legacyCompBeforeParen = rawPatternText.match(/^([A-Za-z_][A-Za-z0-9_]*)@([A-Za-z0-9_]+)\(([^()]*)\)$/);
         if (legacyCompBeforeParen && legacyCompBeforeParen[1] === name && !/@[A-Za-z0-9_]+$/.test(molStr)) {
           const comp = legacyCompBeforeParen[2];
@@ -1639,16 +1644,14 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
     // Fallback: recover compartment-before-parentheses syntax when parse-tree
     // compartment nodes are missing in some observable contexts.
     // Example: `B@EC()` should normalize to `B()@EC`.
-    if (this.hasCompartments && !prefix && !res.includes('@')) {
-      const rawSpeciesText = ctx.text?.replace(/\s+/g, '') ?? '';
-      if (rawSpeciesText.includes('@')) {
-        const normalizedRaw = rawSpeciesText.replace(
-          /([A-Za-z_][A-Za-z0-9_]*)@([A-Za-z0-9_]+)\(([^()]*)\)/g,
-          (_m, mol, comp, args) => `${mol}(${String(args ?? '')})@${comp}`
-        );
-        if (normalizedRaw.includes('@')) {
-          res = normalizedRaw;
-        }
+    if (this.hasCompartments && !prefix && !res.includes('@') && ctx.text && ctx.text.includes('@')) {
+      const rawSpeciesText = ctx.text.replace(/\s+/g, '');
+      const normalizedRaw = rawSpeciesText.replace(
+        /([A-Za-z_][A-Za-z0-9_]*)@([A-Za-z0-9_]+)\(([^()]*)\)/g,
+        (_m, mol, comp, args) => `${mol}(${String(args ?? '')})@${comp}`
+      );
+      if (normalizedRaw.includes('@')) {
+        res = normalizedRaw;
       }
     }
 
@@ -1683,8 +1686,8 @@ export class BNGLVisitor extends AbstractParseTreeVisitor<BNGLModel> implements 
   private evaluateExpression(ctx: Parser.ExpressionContext): number {
     const text = ctx.text;
 
-    // Convert parameters record to Map
-    const paramMap = new Map<string, number>(Object.entries(this.parameters));
+    // Use cached paramMap
+    const paramMap = this.paramMap;
 
     // Define Observables Map (if available in this context?)
     // BNGLVisitor collects observables in this.observables [BNGLObservable[]]

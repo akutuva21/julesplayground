@@ -241,6 +241,11 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
       // sorted state order to avoid double-counting.
       // Fallback (no molecule-type info or expansion failed): strip %n to ~? wildcard.
 
+      const BEGIN_MOL_TYPES_RE = /begin\s+molecule types/gi;
+      const END_MOL_TYPES_RE = /end\s+molecule types/gi;
+      const BEGIN_REACTION_RULES_RE = /begin\s+reaction rules/gi;
+      const END_REACTION_RULES_RE = /end\s+reaction rules/gi;
+
       function findNamedBlock(source: string, beginName: string, endName: string): {
         openStart: number;
         openEnd: number;
@@ -249,7 +254,11 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
         closeStart: number;
         closeEnd: number;
       } | null {
-        const beginRegex = new RegExp(`begin\\s+${beginName}`, 'gi');
+        const isMolTypes = beginName === 'molecule types';
+        const beginRegex = isMolTypes ? BEGIN_MOL_TYPES_RE : BEGIN_REACTION_RULES_RE;
+        const endRegex = isMolTypes ? END_MOL_TYPES_RE : END_REACTION_RULES_RE;
+
+        beginRegex.lastIndex = 0;
         const beginMatch = beginRegex.exec(source);
         if (!beginMatch) return null;
         const openStart = beginMatch.index;
@@ -258,7 +267,6 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
         const openEnd = openLineEnd >= 0 ? openLineEnd : source.length;
         const bodyStart = openEnd < source.length ? openEnd + 1 : openEnd;
 
-        const endRegex = new RegExp(`end\\s+${endName}`, 'gi');
         endRegex.lastIndex = bodyStart;
         const endMatch = endRegex.exec(source);
         if (!endMatch) return null;
@@ -325,12 +333,13 @@ export function parseBNGLWithANTLR(input: string): ParseResult {
         >();
 
         const reactants = lhsRaw.split('+').map((s) => s.trim());
+        MOL_PAT_RE.lastIndex = 0;
         for (let ri = 0; ri < reactants.length; ri++) {
           const reactant = reactants[ri];
           // iterate over molecule patterns
-          const molPatRe = new RegExp(MOL_PAT_RE.source, 'g');
+          MOL_PAT_RE.lastIndex = 0;
           let mm;
-          while ((mm = molPatRe.exec(reactant)) !== null) {
+          while ((mm = MOL_PAT_RE.exec(reactant)) !== null) {
             const molName = mm[1];
             for (const comp of mm[2].split(',')) {
               const ct = comp.trim();
@@ -708,7 +717,7 @@ export function validateModelSemantics(model: BNGLModel): ParseError[] {
     const line = sp.line ?? 0;
     const column = sp.column ?? 0;
     try {
-      const graph = BNGLParser.parseSpeciesGraph(sp.name);
+      const graph = BNGLParser.parseSpeciesGraph(sp.name, false);
       for (const mol of graph.molecules) {
         const err = checkMoleculeComponents(mol as GraphMolecule, line, column, '');
         if (err) {
@@ -728,7 +737,7 @@ export function validateModelSemantics(model: BNGLModel): ParseError[] {
     const reactantMols: GraphMolecule[] = [];
     for (const rStr of rule.literalReactants || rule.reactants) {
       try {
-        const graph = BNGLParser.parseSpeciesGraph(rStr);
+        const graph = BNGLParser.parseSpeciesGraph(rStr, false);
         reactantMols.push(...(graph.molecules as GraphMolecule[]));
       } catch {
         /* ignore parse errors in rule reactants */
@@ -738,7 +747,7 @@ export function validateModelSemantics(model: BNGLModel): ParseError[] {
     const productMols: GraphMolecule[] = [];
     for (const pStr of rule.literalProducts || rule.products) {
       try {
-        const graph = BNGLParser.parseSpeciesGraph(pStr);
+        const graph = BNGLParser.parseSpeciesGraph(pStr, false);
         productMols.push(...(graph.molecules as GraphMolecule[]));
       } catch {
         /* ignore parse errors in rule products */
