@@ -87,7 +87,12 @@ export function estimatePerturbationSimulations(
   const moleculeTypeLines = parseBlock(code, 'molecule types');
 
   let expectedSimulations = 1; // wild-type
-  if (uniquePerturbations.includes('rule_knockout')) {
+  // Pairwise screens first run every individual rule knockout to rank the
+  // candidate rules before applying the pairwise cap.
+  if (
+    uniquePerturbations.includes('rule_knockout') ||
+    uniquePerturbations.includes('pairwise_rules')
+  ) {
     expectedSimulations += ruleLines.length;
   }
   if (uniquePerturbations.includes('species_knockdown')) {
