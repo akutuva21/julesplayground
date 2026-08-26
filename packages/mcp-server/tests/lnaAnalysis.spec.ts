@@ -205,6 +205,26 @@ end model
         expect(body.error).toMatch(/has no reactions/i);
     });
 
+    it('rejects model with zero species', async () => {
+        const NO_SPECIES_MODEL = `begin model
+begin parameters
+end parameters
+begin molecule types
+end molecule types
+begin seed species
+end seed species
+begin reaction rules
+end reaction rules
+end model
+`;
+        const result = await handleLnaAnalysis({
+            code: NO_SPECIES_MODEL,
+            mode: 'steady_state',
+        });
+        const body = JSON.parse(result.content[0].text);
+        expect(body.error).toMatch(/has no species/i);
+    });
+
     it('handles missing optional fields by falling back to default values', async () => {
         const result = await handleLnaAnalysis({
             code: BIRTH_DEATH_MODEL,
