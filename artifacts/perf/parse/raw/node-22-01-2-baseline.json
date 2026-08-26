@@ -1,0 +1,164 @@
+[
+  {
+    "model": "chain_5 (baseline, unimolecular)",
+    "parseMs": 4.001306000000113,
+    "genMs": 3.8913930000003347,
+    "simMs": {
+      "ssa": 1.5989010000002963
+    },
+    "simStats": {
+      "ssa:t_end=1": {
+        "method": "ssa",
+        "tEnd": 1,
+        "medianMs": 1.5989010000002963,
+        "minMs": 1.5989010000002963,
+        "maxMs": 1.5989010000002963,
+        "samplesMs": [
+          1.5989010000002963
+        ],
+        "trajectoryHash": "6715bcce6aeb4b368ef084ce462963403bb1c6264952cdd105a79ca88f8689e8"
+      }
+    },
+    "species": 5,
+    "reactions": 4,
+    "heapDeltaMB": 0.45732879638671875,
+    "breakdown": {
+      "canonicalize": {
+        "ms": 0.0066960000003746245,
+        "calls": 5
+      },
+      "findAllMaps": {
+        "ms": 0.7431549999996605,
+        "calls": 4
+      },
+      "matchComponents": {
+        "ms": 0.006856999999854452,
+        "calls": 5
+      },
+      "applyTransformation": {
+        "ms": 0.3660790000008092,
+        "calls": 4
+      },
+      "isDuplicateReaction": {
+        "ms": 0,
+        "calls": 0
+      },
+      "degeneracy": {
+        "ms": 0,
+        "calls": 0
+      },
+      "speciesDedup": {
+        "ms": 0.21645599999919796,
+        "calls": 9
+      }
+    }
+  },
+  {
+    "model": "binding_AB (bimolecular)",
+    "parseMs": 7.208263999999872,
+    "genMs": 1.5203209999999672,
+    "simMs": {
+      "ssa": 1.3620330000003378
+    },
+    "simStats": {
+      "ssa:t_end=1": {
+        "method": "ssa",
+        "tEnd": 1,
+        "medianMs": 1.3620330000003378,
+        "minMs": 1.3620330000003378,
+        "maxMs": 1.3620330000003378,
+        "samplesMs": [
+          1.3620330000003378
+        ],
+        "trajectoryHash": "49372cd10fa64a99128ea74677bda6d972ed8b65f62f6cb984fdf00c75e4293d"
+      }
+    },
+    "species": 3,
+    "reactions": 2,
+    "heapDeltaMB": 0.23825836181640625,
+    "breakdown": {
+      "canonicalize": {
+        "ms": 0.0029869999998481944,
+        "calls": 3
+      },
+      "findAllMaps": {
+        "ms": 0.14532999999983076,
+        "calls": 5
+      },
+      "matchComponents": {
+        "ms": 0.006980999999996129,
+        "calls": 6
+      },
+      "applyTransformation": {
+        "ms": 0.11586400000032882,
+        "calls": 2
+      },
+      "isDuplicateReaction": {
+        "ms": 0,
+        "calls": 0
+      },
+      "degeneracy": {
+        "ms": 0,
+        "calls": 0
+      },
+      "speciesDedup": {
+        "ms": 0.02038500000116983,
+        "calls": 6
+      }
+    }
+  },
+  {
+    "model": "multisite_5 (2^5 species, combinatorial)",
+    "parseMs": 6.969351000000188,
+    "genMs": 23.082146000000193,
+    "simMs": {
+      "ssa": 15.121474000000035
+    },
+    "simStats": {
+      "ssa:t_end=1": {
+        "method": "ssa",
+        "tEnd": 1,
+        "medianMs": 15.121474000000035,
+        "minMs": 15.121474000000035,
+        "maxMs": 15.121474000000035,
+        "samplesMs": [
+          15.121474000000035
+        ],
+        "trajectoryHash": "ea7b702ac44ac0a40058a898afa7ad4992124f473b8fb15985278cccbb118b4e"
+      }
+    },
+    "species": 32,
+    "reactions": 160,
+    "heapDeltaMB": 8.118949890136719,
+    "breakdown": {
+      "canonicalize": {
+        "ms": 0.5427020000001903,
+        "calls": 32
+      },
+      "findAllMaps": {
+        "ms": 6.273270000001048,
+        "calls": 160
+      },
+      "matchComponents": {
+        "ms": 1.6299270000031356,
+        "calls": 176
+      },
+      "applyTransformation": {
+        "ms": 1.7767700000013065,
+        "calls": 160
+      },
+      "isDuplicateReaction": {
+        "ms": 0,
+        "calls": 0
+      },
+      "degeneracy": {
+        "ms": 0,
+        "calls": 0
+      },
+      "speciesDedup": {
+        "ms": 1.6144819999999527,
+        "calls": 161
+      }
+    }
+  }
+]
