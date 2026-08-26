@@ -218,9 +218,19 @@ export function generateModel(rng: SeededRandom): { bngl: string; hasCompartment
   }
   bnglParts.push('end observables');
 
-  // 6. Functions Block (math operations + observables)
+  // 6. Functions Block (math operations + observables + conditionals)
   bnglParts.push('begin functions');
-  bnglParts.push('  f_rate() k1 * (1 + abs(sin(A_tot / 100)))');
+  const mathChoice = rng.nextInt(0, 2);
+  if (mathChoice === 0) {
+    bnglParts.push('  f_rate() k1 * (1 + abs(sin(A_tot / 100)))');
+    bnglParts.push('  f_math() min(max(exp(-k1), 0.1), 5.0)');
+  } else if (mathChoice === 1) {
+    bnglParts.push('  f_rate() k1 * sqrt(1 + A_tot)');
+    bnglParts.push('  f_math() max(ln(1 + B_tot), 0.01)');
+  } else {
+    bnglParts.push('  f_rate() k1 * (1 + cos(A_tot / 50))');
+    bnglParts.push('  f_math() min(exp(k2), 2.5)');
+  }
   bnglParts.push('  f_bind() k_bind * sqrt(1 + B_tot)');
   bnglParts.push('end functions');
 
@@ -231,13 +241,27 @@ export function generateModel(rng: SeededRandom): { bngl: string; hasCompartment
   bnglParts.push('  A(s~1) -> A(s~2) f_rate()');
   // Reversible binding with expression rate
   bnglParts.push('  A(b) + B(a) <-> A(b!1).B(a!1) k_bind, k_unbind');
-  // Phosphorylation state change
-  bnglParts.push('  A(p~0) -> A(p~1) k2');
+  // Phosphorylation state change using math function
+  bnglParts.push('  A(p~0) -> A(p~1) f_math()');
+
+  // Compartment transport rules (if in compartment mode 2)
+  if (compartmentMode === 2) {
+    bnglParts.push('  B(loc~cyt)@CP -> B(loc~cyt)@EC k1');
+  }
+
   // Synthesis / degradation
   bnglParts.push('  C(d) -> 0 kdeg');
   bnglParts.push('  0 -> C(d) ksynth');
-  // Rule modifier (unbracketed modifier following rate law)
-  bnglParts.push('  D() -> 0 kdeg DeleteMolecules');
+
+  // Bond wildcards and modifiers
+  if (rng.next() > 0.5) {
+    bnglParts.push('  A(b!+) -> A(b) k1');
+  } else {
+    bnglParts.push('  A(b!?) -> A(b) k1');
+  }
+
+  const modifierChoice = rng.choose(['DeleteMolecules', 'MatchOnce']);
+  bnglParts.push(`  D() -> 0 kdeg ${modifierChoice}`);
   bnglParts.push('end reaction rules');
 
   return { bngl: bnglParts.join('\n'), hasCompartments };
