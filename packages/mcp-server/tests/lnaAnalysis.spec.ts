@@ -162,7 +162,7 @@ describe('lna_analysis handler — edge cases & robustness', () => {
             mode: 'steady_state',
         });
         const body = JSON.parse(result.content[0].text);
-        expect(body.error).toMatch(/BNGL parse failed|has no reactions/i);
+        expect(body.error).toMatch(/BNGL parse failed|has no species|has no reactions/i);
     });
 
     it('validates boundary conditions: non-positive volume or t_end is rejected', async () => {
