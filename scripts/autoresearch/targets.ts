@@ -38,8 +38,8 @@ function forcedTarget(campaign: 'mcp' | 'performance', baseDir: string): Campaig
     target_id: targetId,
     objective: process.env.AUTORESEARCH_FORCE_OBJECTIVE?.trim() || `Investigate the explicitly requested ${campaign} target ${targetId}.`,
     fitness_command: campaign === 'mcp'
-      ? 'node --import tsx scripts/autoresearch/evaluators/mcp/registry.ts --metric contrastive-description-coverage'
-      : 'node --import tsx scripts/autoresearch/evaluators/performance/profile.ts',
+      ? { args: ['--import', 'tsx', 'scripts/autoresearch/evaluators/mcp/registry.ts', '--metric', 'contrastive-description-coverage'] }
+      : { args: ['--import', 'tsx', 'scripts/autoresearch/evaluators/performance/profile.ts'] },
     editable_paths: campaign === 'mcp'
       ? ['packages/mcp-server/src/']
       : ['packages/engine/src/'],
@@ -65,7 +65,7 @@ export async function selectMcpTarget(baseDir: string): Promise<CampaignTarget |
       status: 'TARGET_FOUND',
       target_id: 'mcp-stable-registry-count',
       objective: `Restore the stable MCP profile to exactly ${expectedStableCount} registered names without changing tool behavior or adding aliases.`,
-      fitness_command: 'node --import tsx scripts/autoresearch/evaluators/mcp/registry.ts --metric stable-tool-count',
+      fitness_command: { args: ['--import', 'tsx', 'scripts/autoresearch/evaluators/mcp/registry.ts', '--metric', 'stable-tool-count'] },
       editable_paths: ['packages/mcp-server/src/toolRegistry.ts'],
       locked_paths: MCP_LOCKED_PATHS,
       baseline_metrics: { stable_tool_count: definitions.length, expected_stable_count: expectedStableCount },
@@ -82,7 +82,7 @@ export async function selectMcpTarget(baseDir: string): Promise<CampaignTarget |
       status: 'TARGET_FOUND',
       target_id: `mcp-contrastive-description-${shortId(missingContrast[0].name)}`,
       objective: `Add a concise, accurate contrastive routing description for ${missingContrast[0].name} so an assistant can distinguish it from neighboring tools. Preserve its scientific meaning and all existing schema/handler behavior.`,
-      fitness_command: 'node --import tsx scripts/autoresearch/evaluators/mcp/registry.ts --metric contrastive-description-coverage',
+      fitness_command: { args: ['--import', 'tsx', 'scripts/autoresearch/evaluators/mcp/registry.ts', '--metric', 'contrastive-description-coverage'] },
       editable_paths: ['packages/mcp-server/src/toolRegistry.ts'],
       locked_paths: MCP_LOCKED_PATHS,
       baseline_metrics: {
@@ -101,7 +101,7 @@ export async function selectMcpTarget(baseDir: string): Promise<CampaignTarget |
       status: 'TARGET_FOUND',
       target_id: 'mcp-stable-registry-integrity',
       objective: 'Restore the central stable tool registry invariant without weakening schemas, descriptions, or handler routing.',
-      fitness_command: 'node --import tsx scripts/autoresearch/evaluators/mcp/registry.ts --metric registry-integrity',
+      fitness_command: { args: ['--import', 'tsx', 'scripts/autoresearch/evaluators/mcp/registry.ts', '--metric', 'registry-integrity'] },
       editable_paths: ['packages/mcp-server/src/toolRegistry.ts'],
       locked_paths: MCP_LOCKED_PATHS,
       baseline_metrics: { registry_integrity: 0 },
@@ -169,7 +169,9 @@ export async function selectPerformanceTarget(baseDir: string): Promise<Campaign
     status: 'TARGET_FOUND',
     target_id: `performance-${dominant.name}`,
     objective: `Improve the measured ${dominant.name} bottleneck from the reviewed profile while preserving species/reaction counts, deterministic trajectory hashes, and scientific outputs. Do not target parser speed.`,
-    fitness_command: `node --import tsx scripts/autoresearch/evaluators/performance/profile.ts --report ${report.path} --metric ${dominant.name}`,
+    fitness_command: {
+      args: ['--import', 'tsx', 'scripts/autoresearch/evaluators/performance/profile.ts', '--report', report.path, '--metric', dominant.name],
+    },
     editable_paths: editablePaths,
     locked_paths: PERFORMANCE_LOCKED_PATHS,
     baseline_metrics: { bottleneck: dominant.name, value_ms: dominant.value, report: report.path },

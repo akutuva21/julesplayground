@@ -41,7 +41,7 @@ export function buildCandidatePrompt(
     '',
     'IMMUTABLE FITNESS:',
     `- ${target.fitness.primary_name} (${target.fitness.higher_is_better ? 'higher' : 'lower'} is better)`,
-    `- Run: ${target.fitness_command}`,
+    `- Run: ${['node', ...target.fitness_command.args].map((part) => JSON.stringify(part)).join(' ')}`,
     '- Preserve all semantic, scientific, and protocol guards reported by the evaluator.',
     '',
     'EDITABLE SCOPE:',

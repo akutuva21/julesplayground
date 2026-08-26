@@ -3,9 +3,9 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
-import { candidateResultSchema, type CampaignTarget, type CandidateResult } from './schemas.js';
+import { campaignTargetSchema, candidateResultSchema, type CampaignTarget, type CandidateResult } from './schemas.js';
 import { globalLockedPaths } from './prompt.js';
-import { runGit, runShell, shortId, writeJson } from './utils.js';
+import { runGit, runProcess, shortId, writeJson } from './utils.js';
 
 type CommandResult = {
   ok: boolean;
@@ -43,16 +43,16 @@ function isSafeRelativePath(path: string): boolean {
   return !normalized.startsWith('/') && !normalized.split('/').includes('..');
 }
 
-async function runCommand(command: string, cwd: string, logPath: string, env: NodeJS.ProcessEnv = {}): Promise<CommandResult> {
+type ProcessCommand = { args: readonly string[]; executable: string };
+
+async function executeCommand(command: ProcessCommand, cwd: string, env: NodeJS.ProcessEnv = {}): Promise<CommandResult> {
   try {
-    const result = await runShell(command, cwd, env);
-    await writeFile(logPath, `${result.stdout}${result.stderr ? `\n[stderr]\n${result.stderr}` : ''}`, 'utf8');
+    const result = await runProcess(command.executable, command.args, cwd, env);
     return { ok: true, stdout: result.stdout, stderr: result.stderr };
   } catch (error) {
     const commandError = error as Error & { stdout?: string; stderr?: string; code?: number | string };
     const stdout = commandError.stdout ?? '';
     const stderr = commandError.stderr ?? '';
-    await writeFile(logPath, `${stdout}${stderr ? `\n[stderr]\n${stderr}` : ''}`, 'utf8');
     return {
       ok: false,
       stdout,
@@ -60,6 +60,31 @@ async function runCommand(command: string, cwd: string, logPath: string, env: No
       error: `${commandError.message}${commandError.code === undefined ? '' : ` (code ${commandError.code})`}`,
     };
   }
+}
+
+function commandOutput(result: CommandResult): string {
+  return `${result.stdout}${result.stderr ? `\n[stderr]\n${result.stderr}` : ''}`;
+}
+
+async function runCommand(command: ProcessCommand, cwd: string, logPath: string, env: NodeJS.ProcessEnv = {}): Promise<CommandResult> {
+  const result = await executeCommand(command, cwd, env);
+  await writeFile(logPath, commandOutput(result), 'utf8');
+  return result;
+}
+
+async function runCommands(commands: ProcessCommand[], cwd: string, logPath: string, env: NodeJS.ProcessEnv = {}): Promise<CommandResult> {
+  const results: CommandResult[] = [];
+  for (const command of commands) {
+    const result = await executeCommand(command, cwd, env);
+    results.push(result);
+    if (!result.ok) break;
+  }
+  const stdout = results.map((result) => result.stdout).join('\n');
+  const stderr = results.map((result) => result.stderr).filter(Boolean).join('\n');
+  const failed = results.find((result) => !result.ok);
+  const combined = { ok: failed === undefined, stdout, stderr, ...(failed?.error ? { error: failed.error } : {}) };
+  await writeFile(logPath, commandOutput(combined), 'utf8');
+  return combined;
 }
 
 function lastJsonLine(output: string): Record<string, unknown> | undefined {
@@ -136,12 +161,12 @@ export async function evaluateCandidate(options: EvaluateOptions): Promise<Candi
     await runGit(options.repositoryRoot, ['worktree', 'add', '--detach', worktree, options.baseSha]);
     await ensureNodeModulesLink(options.repositoryRoot, worktree);
 
-    const check = await runCommand(`git apply --check ${JSON.stringify(options.patchPath)}`, worktree, join(options.outputDirectory, 'patch-check.log'));
+    const check = await runCommand({ executable: 'git', args: ['apply', '--check', options.patchPath] }, worktree, join(options.outputDirectory, 'patch-check.log'));
     if (!check.ok) {
       result = baseResult(options, 'PATCH_REJECTED', [`git apply --check failed: ${check.error ?? check.stderr}`], [], guards, patchSha256);
       return result;
     }
-    const apply = await runCommand(`git apply ${JSON.stringify(options.patchPath)}`, worktree, join(options.outputDirectory, 'patch-apply.log'));
+    const apply = await runCommand({ executable: 'git', args: ['apply', options.patchPath] }, worktree, join(options.outputDirectory, 'patch-apply.log'));
     if (!apply.ok) {
       result = baseResult(options, 'PATCH_REJECTED', [`git apply failed: ${apply.error ?? apply.stderr}`], [], guards, patchSha256);
       return result;
@@ -165,28 +190,31 @@ export async function evaluateCandidate(options: EvaluateOptions): Promise<Candi
     }
     guards.locked_paths_clean = true;
 
-    const typecheck = await runCommand('npm run type-check', worktree, join(options.outputDirectory, 'typecheck.log'), { AUTORESEARCH_BASE_SHA: options.baseSha });
+    const typecheck = await runCommand({ executable: 'npm', args: ['run', 'type-check'] }, worktree, join(options.outputDirectory, 'typecheck.log'), { AUTORESEARCH_BASE_SHA: options.baseSha });
     guards.typecheck = typecheck.ok;
     if (!typecheck.ok) {
       result = baseResult(options, 'TEST_FAILED', [`type-check failed: ${typecheck.error ?? typecheck.stderr}`], files, guards, patchSha256);
       return result;
     }
 
-    const tests = await runCommand('npm run test:fast && npm run test --workspace @bngplayground/mcp-server', worktree, join(options.outputDirectory, 'tests.log'), { AUTORESEARCH_BASE_SHA: options.baseSha });
+    const tests = await runCommands([
+      { executable: 'npm', args: ['run', 'test:fast'] },
+      { executable: 'npm', args: ['run', 'test', '--workspace', '@bngplayground/mcp-server'] },
+    ], worktree, join(options.outputDirectory, 'tests.log'), { AUTORESEARCH_BASE_SHA: options.baseSha });
     guards.tests = tests.ok;
     if (!tests.ok) {
       result = baseResult(options, 'TEST_FAILED', [`tests failed: ${tests.error ?? tests.stderr}`], files, guards, patchSha256);
       return result;
     }
 
-    const scientific = await runCommand('npm run test:full:safe', worktree, join(options.outputDirectory, 'scientific-suite.log'), { AUTORESEARCH_BASE_SHA: options.baseSha });
+    const scientific = await runCommand({ executable: 'npm', args: ['run', 'test:full:safe'] }, worktree, join(options.outputDirectory, 'scientific-suite.log'), { AUTORESEARCH_BASE_SHA: options.baseSha });
     guards.scientific_suite = scientific.ok;
     if (!scientific.ok) {
       result = baseResult(options, 'TEST_FAILED', [`scientific suite failed: ${scientific.error ?? scientific.stderr}`], files, guards, patchSha256);
       return result;
     }
 
-    const fitness = await runCommand(options.target.fitness_command, worktree, join(options.outputDirectory, 'fitness.log'), { AUTORESEARCH_BASE_SHA: options.baseSha });
+    const fitness = await runCommand({ executable: 'node', args: options.target.fitness_command.args }, worktree, join(options.outputDirectory, 'fitness.log'), { AUTORESEARCH_BASE_SHA: options.baseSha });
     if (!fitness.ok) {
       result = baseResult(options, 'EVALUATION_ERROR', [`fitness evaluator failed: ${fitness.error ?? fitness.stderr}`], files, guards, patchSha256);
       return result;
@@ -232,7 +260,7 @@ if (process.argv[1]?.endsWith('evaluate.ts')) {
   if (!patchPath || !targetPath || !baseSha || !outputDirectory) {
     throw new Error('Usage: evaluate.ts --patch <path> --target <path> --base-sha <sha> --output <directory>');
   }
-  const target = JSON.parse(await readFile(resolve(targetPath), 'utf8')) as CampaignTarget;
+  const target = campaignTargetSchema.parse(JSON.parse(await readFile(resolve(targetPath), 'utf8')));
   const result = await evaluateCandidate({
     repositoryRoot: process.cwd(),
     patchPath: resolve(patchPath),

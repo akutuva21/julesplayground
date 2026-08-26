@@ -103,9 +103,9 @@ const server = http.createServer(async (nodeRequest, nodeResponse) => {
       body,
     });
     await writeResponse(nodeResponse, await handler.fetch(request));
-  } catch (error) {
+  } catch {
     if (!nodeResponse.headersSent) nodeResponse.writeHead(500, { 'content-type': 'text/plain' });
-    nodeResponse.end(error instanceof Error ? error.message : String(error));
+    nodeResponse.end('Internal server error');
   }
 });
 

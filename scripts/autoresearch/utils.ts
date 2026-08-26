@@ -5,6 +5,20 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 
+export async function runProcess(
+  executable: string,
+  args: readonly string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv = {},
+) {
+  return execFileAsync(executable, [...args], {
+    cwd,
+    env: { ...process.env, ...env },
+    shell: false,
+    maxBuffer: 32 * 1024 * 1024,
+  });
+}
+
 export async function runGit(repositoryRoot: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync('git', ['-C', repositoryRoot, ...args], {
     maxBuffer: 16 * 1024 * 1024,
@@ -17,14 +31,6 @@ export function runGitSync(repositoryRoot: string, args: string[]): string {
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
   }).trim();
-}
-
-export async function runShell(command: string, cwd: string, env: NodeJS.ProcessEnv = {}) {
-  return execFileAsync('/bin/sh', ['-c', command], {
-    cwd,
-    env: { ...process.env, ...env },
-    maxBuffer: 32 * 1024 * 1024,
-  });
 }
 
 export async function writeJson(path: string, value: unknown): Promise<void> {

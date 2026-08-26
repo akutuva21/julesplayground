@@ -16,8 +16,17 @@ import type {
 const dynamicFetch: typeof fetch = (...args) => globalThis.fetch(...args);
 
 function baseFromManifestUrl(url: string): string | null {
-  return /\/manifest\.json(?:[?#].*)?$/i.test(url)
-    ? url.replace(/\/manifest\.json(?:[?#].*)?$/i, '')
+  const queryIndex = url.indexOf('?');
+  const hashIndex = url.indexOf('#');
+  const suffixIndex = queryIndex === -1
+    ? hashIndex
+    : hashIndex === -1
+      ? queryIndex
+      : Math.min(queryIndex, hashIndex);
+  const path = suffixIndex === -1 ? url : url.slice(0, suffixIndex);
+  const manifestSuffix = '/manifest.json';
+  return path.toLowerCase().endsWith(manifestSuffix)
+    ? path.slice(0, -manifestSuffix.length)
     : null;
 }
 

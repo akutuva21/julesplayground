@@ -20,12 +20,17 @@ export const fitnessDefinitionSchema = z.object({
   higher_is_better: z.boolean(),
 });
 
+export const fitnessCommandSchema = z.object({
+  args: z.array(z.string()).min(1),
+});
+export type FitnessCommand = z.infer<typeof fitnessCommandSchema>;
+
 export const campaignTargetSchema = z.object({
   campaign: campaignSchema,
   status: z.literal('TARGET_FOUND'),
   target_id: z.string(),
   objective: z.string(),
-  fitness_command: z.string(),
+  fitness_command: fitnessCommandSchema,
   editable_paths: z.array(z.string()).min(1),
   locked_paths: z.array(z.string()),
   baseline_metrics: z.record(z.string(), z.unknown()),
