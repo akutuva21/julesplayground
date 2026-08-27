@@ -63,7 +63,7 @@ export async function handlePerturbationScreen(args: ToolArgs): Promise<ToolResu
         // Pre-estimate the number of simulations to prevent excessive resource utilization / timeout
         const expectedSimulations = estimatePerturbationSimulations(
             parsedArgs.code,
-            uniquePerturbations as any,
+            uniquePerturbations,
             parsedArgs.max_pairwise,
         );
 
@@ -78,7 +78,7 @@ export async function handlePerturbationScreen(args: ToolArgs): Promise<ToolResu
             t_end: parsedArgs.t_end,
             n_steps: parsedArgs.n_steps,
             observables: uniqueObservables,
-            perturbations: uniquePerturbations as any,
+            perturbations: uniquePerturbations,
             knockdownFraction: parsedArgs.knockdown_fraction,
             metric: parsedArgs.metric,
             maxPairwise: parsedArgs.max_pairwise,
