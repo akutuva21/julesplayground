@@ -26,7 +26,7 @@ import { structureError } from '../services/errors.js';
  * to edit raw source (commenting out lines in `begin reaction rules`, etc.) —
  * it cannot operate on an already-expanded model.
  */
-export async function handlePerturbationScreen(args: ToolArgs): Promise<ToolResult<any>> {
+export async function handlePerturbationScreen(args: ToolArgs): Promise<ToolResult<unknown>> {
     try {
         const parsedArgs = parseArgs('perturbation_screen', perturbationScreenArgsSchema, args);
 
@@ -95,7 +95,7 @@ export async function handlePerturbationScreen(args: ToolArgs): Promise<ToolResu
                     n_steps,
                     strictFunctionalRates: true,
                     ...(parsedArgs.solver ? { solver: parsedArgs.solver } : {}),
-                } as any, { checkCancelled: () => {}, postMessage: () => {} });
+                }, { checkCancelled: () => {}, postMessage: () => {} });
             },
         });
 
