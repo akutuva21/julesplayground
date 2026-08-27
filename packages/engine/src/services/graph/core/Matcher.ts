@@ -743,7 +743,7 @@ class VF2State {
   private frontierBits: Uint8Array;
   private frontierSize: number;
   private componentOrders: number[][];
-  private scratchAssignment: Int32Array;
+  scratchAssignment: Int32Array;
   private scratchIterationCount: { value: number };
   private mcvCandidateCache: Map<number, number[]>;
   private orderScratch: number[];
