@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SparseODESolver, type StepResult } from '../src/services/analysis/SparseODESolver';
-import type { Rxn } from '../src/services/graph/core/Rxn';
+import { Rxn } from '../src/services/graph/core/Rxn';
 import type { ConservationAnalysis, createReducedSystem } from '../src/services/analysis/ConservationLaws';
 import type { CSRMatrix, ILU0Factors, ILU0SymbolicCache } from '../src/services/analysis/SparseLUSolver';
 import type { SparseJacobianInfo } from '../src/services/analysis/SparseJacobian';
@@ -43,9 +43,7 @@ describe('SparseODESolver', () => {
       dy[0] = -k * y[0];
     };
 
-    const rxns: Rxn[] = [
-      { reactants: [0], products: [], rate: k, degeneracy: 1, statFactor: 1 } as unknown as Rxn
-    ];
+    const rxns: Rxn[] = [new Rxn([0], [], k)];
 
     const solver = new SparseODESolver(
       1, rxns, deriv, new Float64Array([10.0]), ['A'],
@@ -79,9 +77,7 @@ describe('SparseODESolver', () => {
         g[0] = y[0] - 5.0; // Trigger when y[0] crosses 5
      };
 
-     const rxns: Rxn[] = [
-       { reactants: [0], products: [1], rate: 1, degeneracy: 1, statFactor: 1 } as unknown as Rxn
-     ];
+     const rxns: Rxn[] = [new Rxn([0], [1], 1)];
 
      const solver = new SparseODESolver(
        2, rxns, deriv, new Float64Array([10.0, 0.0]), ['A', 'B'],
@@ -139,9 +135,7 @@ describe('SparseODESolver', () => {
       dy[0] = -10000000 * y[0]; // Very stiff
     };
 
-    const rxns: Rxn[] = [
-      { reactants: [0], products: [], rate: 10000000, degeneracy: 1, statFactor: 1 } as unknown as Rxn
-    ];
+    const rxns: Rxn[] = [new Rxn([0], [], 10000000)];
 
     const solver = new SparseODESolver(
       1, rxns, deriv, new Float64Array([10.0]), ['A'],
@@ -159,9 +153,7 @@ describe('SparseODESolver', () => {
       dy[0] = -0.5 * y[0];
     };
 
-    const rxns: Rxn[] = [
-      { reactants: [0], products: [], rate: 0.5, degeneracy: 1, statFactor: 1 } as unknown as Rxn
-    ];
+    const rxns: Rxn[] = [new Rxn([0], [], 0.5)];
 
     const solver = new SparseODESolver(
       1, rxns, deriv, new Float64Array([10.0]), ['A'],
@@ -180,9 +172,7 @@ describe('SparseODESolver', () => {
        dy[0] = -y[0];
      };
 
-     const rxns: Rxn[] = [
-       { reactants: [0], products: [], rate: 1, degeneracy: 1, statFactor: 1 } as unknown as Rxn
-     ];
+     const rxns: Rxn[] = [new Rxn([0], [], 1)];
 
      const solver = new SparseODESolver(
        1, rxns, deriv, new Float64Array([10.0]), ['A'],
@@ -239,9 +229,7 @@ describe('SparseODESolver', () => {
     // A -> B, k=1
     const k = 1.0;
 
-    const rxns: Rxn[] = [
-       { reactants: [0], products: [1], rate: k, degeneracy: 1, statFactor: 1 } as unknown as Rxn
-    ];
+    const rxns: Rxn[] = [new Rxn([0], [1], k)];
 
     const cl: ConservationAnalysis = {
       laws: [],
