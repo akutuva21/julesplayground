@@ -41,8 +41,8 @@ let firstMapCacheStrictSB = new WeakMap<SpeciesGraph, WeakMap<SpeciesGraph, Matc
 let firstMapCacheRelaxedNoSB = new WeakMap<SpeciesGraph, WeakMap<SpeciesGraph, MatchMap | null>>();
 let firstMapCacheRelaxedSB = new WeakMap<SpeciesGraph, WeakMap<SpeciesGraph, MatchMap | null>>();
 
-const molTypeCountsListCache = new WeakMap<SpeciesGraph, Array<[string, number]>>();
-const typeBondsListCache = new WeakMap<SpeciesGraph, Array<[string, number]>>();
+let molTypeCountsListCache = new WeakMap<SpeciesGraph, Array<[string, number]>>();
+let typeBondsListCache = new WeakMap<SpeciesGraph, Array<[string, number]>>();
 
 function getSelectedCache(allowExtra: boolean, sb: boolean) {
   if (allowExtra) {
@@ -72,6 +72,8 @@ export function clearMatchCache() {
   firstMapCacheStrictSB = new WeakMap();
   firstMapCacheRelaxedNoSB = new WeakMap();
   firstMapCacheRelaxedSB = new WeakMap();
+  molTypeCountsListCache = new WeakMap();
+  typeBondsListCache = new WeakMap();
 }
 
 /**
