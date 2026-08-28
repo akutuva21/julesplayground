@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -12,6 +12,7 @@ import { GraphCanonicalizer } from '../packages/engine/src/services/graph/core/C
 import type { BNGLModel } from '../types';
 import { hasBNG2, resolveBNG2Paths } from '../tools/bng2-paths';
 import { collectBnglFiles, resolveRuleHubRoot } from './helpers/rulehub';
+import { selectPrimaryGdat } from './helpers/bng2OutputSelection';
 
 const paths = resolveBNG2Paths();
 
@@ -171,7 +172,12 @@ function _runBNG2(bnglPath: string): GdatData | null {
     const gdatFiles = readdirSync(tempDir).filter(f => f.endsWith('.gdat'));
     if (gdatFiles.length === 0) return null;
 
-    const gdatContent = readFileSync(join(tempDir, gdatFiles[0]), 'utf-8');
+    const selectedFile = selectPrimaryGdat(gdatFiles, modelName);
+    if (!selectedFile) {
+      console.warn(`BNG2 produced ambiguous GDAT outputs for ${modelName}: ${gdatFiles.join(', ')}`);
+      return null;
+    }
+    const gdatContent = readFileSync(join(tempDir, selectedFile), 'utf-8');
     return parseGdat(gdatContent);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
@@ -202,16 +208,10 @@ function runBNG2Content(bnglFileName: string, bnglContent: string): GdatData | n
     const gdatFiles = readdirSync(tempDir).filter(f => f.endsWith('.gdat'));
     if (gdatFiles.length === 0) return null;
 
-    // Pick the largest GDAT file, as it likely contains the main simulation results.
-    // For models like An_2009, An_2009.gdat (kinetics) is much larger than An_2009_equil.gdat.
-    let selectedFile = gdatFiles[0];
-    let maxSizeBytes = 0;
-    for (const f of gdatFiles) {
-      const stats = statSync(join(tempDir, f));
-      if (stats.size > maxSizeBytes) {
-        maxSizeBytes = stats.size;
-        selectedFile = f;
-      }
+    const selectedFile = selectPrimaryGdat(gdatFiles, bnglFileName);
+    if (!selectedFile) {
+      console.warn(`BNG2 produced ambiguous GDAT outputs for ${bnglFileName}: ${gdatFiles.join(', ')}`);
+      return null;
     }
     const gdatContent = readFileSync(join(tempDir, selectedFile), 'utf-8');
     return parseGdat(gdatContent);
@@ -220,42 +220,24 @@ function runBNG2Content(bnglFileName: string, bnglContent: string): GdatData | n
   }
 }
 
-function shouldForceDefaultOdeSimulation(bnglContent: string): boolean {
-  // Requested fallback: if BNGL has no simulate blocks or requests NFsim,
-  // force a deterministic ODE simulate window for GDAT comparison.
-  // Default: t=1..100 with 100 steps.
+function hasNfSimAction(bnglContent: string): boolean {
+  // This suite compares the browser's deterministic simulator with BNG2 ODE
+  // output. Never rewrite an NFsim action into ODE: that would make a passing
+  // comparison evidence for the wrong simulation method.
   const actionBlock = bnglContent.replace(/#[^\n]*/g, '');
   const simulateRegex = /simulate[_a-z]*\s*\(\s*\{([^}]*)\}\s*\)/gi;
   const simulateMatches = Array.from(actionBlock.matchAll(simulateRegex));
 
-  if (simulateMatches.length === 0) return true;
-
-  let hasOde = false;
-  let hasNf = false;
   for (const m of simulateMatches) {
     const params = m[1] ?? '';
     const methodMatch = params.match(/method\s*=>?\s*"?([^,}\s"]+)"?/i);
     const method = (methodMatch?.[1] ?? '').toLowerCase();
-    if (method === 'ode' || method === '') {
-      hasOde = true;
-    }
     if (method === 'nf' || method === 'nfsim' || method === 'network_free') {
-      hasNf = true;
+      return true;
     }
   }
 
-  return hasNf && !hasOde;
-}
-
-function withDefaultOdeSimulateBlock(bnglContent: string): string {
-  // Best-effort: strip existing simulate calls (to avoid multiple GDATs)
-  // and append our standard ODE simulate call.
-  const withoutSimulate = bnglContent.replace(
-    /^[ \t]*simulate[_a-z]*\s*\(\s*\{[^}]*\}\s*\)\s*;?\s*$/gim,
-    ''
-  );
-
-  return `${withoutSimulate.trimEnd()}\n\n# Injected by tests/bng2-comparison.spec.ts for deterministic comparison\nsimulate({method=>\"ode\", t_start=>1, t_end=>100, n_steps=>100})\n`;
+  return false;
 }
 
 // ============================================================================
@@ -1356,27 +1338,6 @@ interface SimulationParams {
 }
 
 function extractSimParams(bnglContent: string): SimulationParams {
-  if (shouldForceDefaultOdeSimulation(bnglContent)) {
-    const phases: SimulationPhase[] = [
-      {
-        t_start: 1,
-        t_end: 100,
-        n_steps: 100,
-        steady_state: false,
-        continue_from_previous: false,
-        setConcentrations: [],
-      },
-    ];
-
-    return {
-      phases,
-      t_end: 100,
-      n_steps: 100,
-      steady_state: false,
-      isMultiPhase: false,
-    };
-  }
-
   const phases: SimulationPhase[] = [];
 
   // Extract action block (everything after "end model" or after observables)
@@ -1837,9 +1798,12 @@ describeFn('Web Simulator vs BNG2.pl GDAT Comparison', () => {
         return;
       }
 
-      const forceDefaultOde = shouldForceDefaultOdeSimulation(bnglContent);
-      const comparisonBngl = forceDefaultOde ? withDefaultOdeSimulateBlock(bnglContent) : bnglContent;
-      const params = extractSimParams(comparisonBngl);
+      if (hasNfSimAction(bnglContent)) {
+        console.warn(`  ⚠️ Skipping NFsim action: this suite only compares method-faithful ODE output`);
+        return;
+      }
+
+      const params = extractSimParams(bnglContent);
       console.log(`  Parameters: t_end=${params.t_end}, n_steps=${params.n_steps}${params.isMultiPhase ? ` (${params.phases.length} phases)` : ''}`);
 
       // Run BNG2.pl
@@ -1847,7 +1811,7 @@ describeFn('Web Simulator vs BNG2.pl GDAT Comparison', () => {
       let bng2Result: GdatData | null = null;
 
       const bng2Start = Date.now();
-      bng2Result = runBNG2Content(basename(bnglPath), comparisonBngl);
+      bng2Result = runBNG2Content(basename(bnglPath), bnglContent);
       const bng2Time = Date.now() - bng2Start;
 
       if (!bng2Result) {
@@ -1857,7 +1821,7 @@ describeFn('Web Simulator vs BNG2.pl GDAT Comparison', () => {
       console.log(`  ✓ BNG2.pl completed in ${(bng2Time / 1000).toFixed(2)}s`);
 
       // Parse and run web simulator
-      const model = parseBNGL(comparisonBngl, { modelName });
+      const model = parseBNGL(bnglContent, { modelName });
 
       try {
         const webResult = await runWebSimulator(model, params, modelName);
@@ -1882,4 +1846,3 @@ describeFn('Web Simulator vs BNG2.pl GDAT Comparison', () => {
     }, testTimeoutMs);
   }
 });
-
