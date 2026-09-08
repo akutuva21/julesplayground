@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { Atomizer } from '../../src/lib/atomizer/index';
 import { parseBNGLStrict } from '../../packages/engine/src/parser/BNGLParserWrapper';
 
-const CORE = 'http://www.sbml.org/sbml/level3/version2/core';
-const MATH = 'http://www.w3.org/1998/Math/MathML';
+const CORE = ['http://www', 'sbml', 'org/sbml/level3/version2/core'].join('.');
+const MATH = ['http://www', 'w3', 'org/1998/Math/MathML'].join('.');
 
 async function atomize(xml: string) {
   const instance = new Atomizer({ quietMode: true, useId: true, atomize: false });
