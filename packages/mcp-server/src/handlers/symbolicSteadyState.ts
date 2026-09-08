@@ -18,8 +18,8 @@ export async function handleSymbolicSteadyState(
 
     // Check feasibility
     const nSpecies = speciesNames.length;
-    if (nSpecies > 15) {
-      const errorMsg = `System has ${nSpecies} species. Symbolic solution is only feasible for ≤15 species.`;
+    if (nSpecies > 3) {
+      const errorMsg = `System has ${nSpecies} species. Symbolic solution is only feasible for ≤3 species.`;
       const errRes: MCPErrorResult = {
         code: 'SYMBOLIC_SYSTEM_TOO_LARGE',
         error: errorMsg,
