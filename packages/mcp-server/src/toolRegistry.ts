@@ -145,7 +145,7 @@ export const toolDefinitions: BngToolDefinition[] = [
   }),
   define({
     name: 'simulate', title: 'Simulate BNGL model',
-    description: 'Run an ODE, SSA, or NFsim simulation and return trajectories or observables. Validate first for normal workflows; use temporal_analysis for event/phase summaries and parameter_scan for a finite parameter grid.',
+    description: 'Run an ODE, SSA, or NFsim simulation and return trajectories or observables. Use when raw time-series trajectories or observables are needed; do not use for event/phase summaries (temporal_analysis) or finite parameter sweeps (parameter_scan).',
     inputSchema: simulateArgsSchema, handler: handlerOf(handleSimulate), category: 'core', appResourceUri: SIMULATION_APP_URI,
   }),
   define({
