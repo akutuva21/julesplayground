@@ -1473,18 +1473,6 @@ export async function simulate(
       // Neumaier-compensated accumulation of the total it can be far less frequent.
       const SSA_RECALC_INTERVAL = 1000;
 
-      // Linear cumulative-sum selection: smallest i with prefixSum(0..i) >= target.
-      const selectLinear = (target: number): number => {
-        const p = propensities;
-        const n = numReactions;
-        let sum = 0;
-        for (let i = 0; i < n; i++) {
-          sum += p[i];
-          if (target <= sum) return i;
-        }
-        return n - 1;
-      };
-
       // === OPT 1: ZERO-ALLOCATION TYPED ARRAY FIRING LOG ===
       const shouldRecordFirings = !!(options as typeof options & { recordFirings?: boolean }).recordFirings;
       const maxFiringEvents = ((options as typeof options & { maxFiringEvents?: number }).maxFiringEvents) ?? 100000;
