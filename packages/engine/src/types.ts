@@ -172,6 +172,8 @@ export interface ConcreteObservable {
 
 export interface BNGLModel {
     name?: string;
+    /** Increment when mutating a cached model in place; new model objects invalidate automatically. */
+    cacheRevision?: number;
     concreteObservables?: ConcreteObservable[];
     parameters: Record<string, number>;
     moleculeTypes: BNGLMoleculeType[];
@@ -270,6 +272,17 @@ export interface SimulationResults {
     denseOutput?: import('./services/simulation/DenseOutput').DenseOutputBuffer;
 }
 
+/** Transferable wire representation for ordinary time-course rows. */
+export interface CompactSimulationResult {
+    transport: 'float64-matrix';
+    headers: string[];
+    rowCount: number;
+    columnCount: number;
+    values: ArrayBuffer;
+    dataBySuffixKey?: string;
+    metadata: Omit<SimulationResults, 'data' | 'dataBySuffix'>;
+}
+
 export interface SSAInfluenceData {
     ruleNames: string[];
     din_hits: number[];
@@ -349,8 +362,9 @@ export interface SimulationOptions {
     memoryLimit?: number;
     verbose?: boolean;
     includeInfluence?: boolean;
+    /** Include species trajectories; defaults to false to keep standard results compact. */
     includeSpeciesData?: boolean;
-    /** Include expanded reaction/species metadata in results (default: true). */
+    /** Include expanded species/reactions; defaults to false and can be requested from a prepared worker model. */
     includeExpandedNetwork?: boolean;
     maxEvents?: number;
     /** Record individual reaction firing events for information-theoretic analysis */
@@ -407,6 +421,7 @@ export type WorkerRequest =
     | { id: number; type: 'simulate'; payload: { model: BNGLModel; options: SimulationOptions } }
     | { id: number; type: 'cache_model'; payload: { model: BNGLModel } }
     | { id: number; type: 'release_model'; payload: { modelId: number } }
+    | { id: number; type: 'get_prepared_network'; payload: { modelId: number; parameterOverrides?: Record<string, number> } }
     | { id: number; type: 'simulate'; payload: { modelId: number; parameterOverrides?: Record<string, number>; options: SimulationOptions; sharedOutput?: SharedSimulationOutputDescriptor } }
     | { id: number; type: 'generate_network'; payload: { model: BNGLModel; options?: NetworkGeneratorOptions } }
     | { id: number; type: 'atomize'; payload: string }
@@ -418,13 +433,15 @@ export type WorkerResponse =
     | { id: number; type: 'parse_error'; payload: SerializedWorkerError }
     | { id: number; type: 'atomize_success'; payload: AtomizerResult }
     | { id: number; type: 'atomize_error'; payload: SerializedWorkerError }
-    | { id: number; type: 'simulate_success'; payload: SimulationResults }
+    | { id: number; type: 'simulate_success'; payload: SimulationResults | CompactSimulationResult }
     | { id: number; type: 'simulate_shared_success'; payload: { slot: number } }
     | { id: number; type: 'cache_model_success'; payload: { modelId: number } }
     | { id: number; type: 'worker_internal_error'; payload: SerializedWorkerError }
     | { id: number; type: 'cache_model_error'; payload: SerializedWorkerError }
     | { id: number; type: 'release_model_success'; payload: { modelId: number } }
     | { id: number; type: 'release_model_error'; payload: SerializedWorkerError }
+    | { id: number; type: 'get_prepared_network_success'; payload: BNGLModel }
+    | { id: number; type: 'get_prepared_network_error'; payload: SerializedWorkerError }
     | { id: number; type: 'simulate_error'; payload: SerializedWorkerError }
     | { id: number; type: 'generate_network_success'; payload: BNGLModel }
     | { id: number; type: 'generate_network_error'; payload: SerializedWorkerError }

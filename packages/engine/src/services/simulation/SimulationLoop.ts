@@ -924,8 +924,8 @@ export async function simulate(
 
     const dataBySuffix: Record<string, Record<string, number>[]> = Object.create(null) as Record<string, Record<string, number>[]>;
     const speciesDataBySuffix: Record<string, Record<string, number>[]> = Object.create(null) as Record<string, Record<string, number>[]>;
-    const includeSpeciesData = options.includeSpeciesData ?? true;
-    const includeExpandedNetwork = options.includeExpandedNetwork ?? true;
+    const includeSpeciesData = options.includeSpeciesData ?? false;
+    const includeExpandedNetwork = options.includeExpandedNetwork ?? false;
 
     const normalizeSuffixKey = (suffix?: unknown): string => {
       const raw = typeof suffix === 'string' ? suffix : (suffix == null ? '' : String(suffix));
@@ -1172,7 +1172,11 @@ export async function simulate(
 
     let compiledMassActionJit: JITCompiledFunction | undefined;
     let rebuildNativeByteCode: (() => void) | undefined;
-    let persistedSolver: { integrate: (y: Float64Array, t0: number, tEnd: number, check?: () => void) => SolverResult; destroy?: () => void } | undefined = undefined;
+    let persistedSolver: {
+      integrate: (y: Float64Array, t0: number, tEnd: number, check?: () => void) => SolverResult;
+      destroy?: () => void;
+      updateRateConstants?: (rates: Float64Array) => boolean;
+    } | undefined = undefined;
 
     let persistedSolverKey = '';
 
@@ -1248,6 +1252,7 @@ export async function simulate(
       if (parametersUpdated) {
         compiledMassActionJit?.updateParameters?.(model.parameters);
         const context = model.parameters || {};
+        let massActionRatesChanged = false;
         for (let i = 0; i < concreteReactions.length; i++) {
           const rxn = concreteReactions[i];
           // Only re-evaluate if it's a mass-action rate (static string) that might be a parameter
@@ -1258,6 +1263,7 @@ export async function simulate(
               if (!isNaN(newK) && isFinite(newK) && Math.abs(newK - oldK) > 1e-15) {
 
                 rxn.rateConstant = newK;
+                massActionRatesChanged = true;
               }
             } catch (e: unknown) {
               if (strictFunctionalRates) throw e;
@@ -1266,11 +1272,19 @@ export async function simulate(
           }
         }
         clearAllEvaluatorCaches();
-        rebuildNativeByteCode?.();
         refreshRateContextParameters?.();
 
-        // Destroy persisted solver on parameter updates to force recreation with new rates/bytecode
-        if (persistedSolver) {
+        // A continued native CVODE solve can update the loaded mass-action
+        // network in place. Functional rate bytecode still needs the ordinary
+        // rebuild path below.
+        const nativeRatesUpdated = massActionRatesChanged
+          && concreteReactions.every((reaction) => !reaction.isFunctionalRate)
+          && persistedSolver?.updateRateConstants?.(Float64Array.from(concreteReactions, (reaction) => reaction.rateConstant)) === true;
+        if (!nativeRatesUpdated) rebuildNativeByteCode?.();
+
+        // Keep the native network alive only when its complete mass-action rate
+        // vector was updated successfully; every other edit requires rebuild.
+        if (persistedSolver && !nativeRatesUpdated) {
           try {
             persistedSolver.destroy?.();
           } catch (e) {
@@ -2253,9 +2267,11 @@ export async function simulate(
         headers,
         data: dataBySuffix[defaultSuffix] || [],
         dataBySuffix,
-        speciesHeaders: includeSpeciesData ? speciesHeaders : undefined,
-        speciesData: includeSpeciesData ? speciesDataBySuffix[defaultSuffix] || [] : undefined,
-        speciesDataBySuffix: includeSpeciesData ? speciesDataBySuffix : undefined,
+        ...(includeSpeciesData ? {
+          speciesHeaders,
+          speciesData: speciesDataBySuffix[defaultSuffix] || [],
+          speciesDataBySuffix,
+        } : {}),
         ...(includeExpandedNetwork ? {
           expandedReactions: cloneReactionsForResult(model.reactions),
           expandedSpecies: model.species,
@@ -3327,9 +3343,11 @@ export async function simulate(
             headers,
             data: dataBySuffix[defaultWgpuSuffix] || [],
             dataBySuffix,
-            speciesHeaders: includeSpeciesData ? speciesHeaders : undefined,
-            speciesData: includeSpeciesData ? speciesDataBySuffix[defaultWgpuSuffix] || [] : undefined,
-            speciesDataBySuffix: includeSpeciesData ? speciesDataBySuffix : undefined,
+            ...(includeSpeciesData ? {
+              speciesHeaders,
+              speciesData: speciesDataBySuffix[defaultWgpuSuffix] || [],
+              speciesDataBySuffix,
+            } : {}),
             ...(includeExpandedNetwork ? {
               expandedReactions: cloneReactionsForResult(model.reactions),
               expandedSpecies: model.species,
@@ -3917,9 +3935,11 @@ export async function simulate(
       headers,
       data: dataBySuffix[defaultOdeSuffix] || [],
       dataBySuffix,
-      speciesHeaders: includeSpeciesData ? speciesHeaders : undefined,
-      speciesData: includeSpeciesData ? speciesDataBySuffix[defaultOdeSuffix] || [] : undefined,
-      speciesDataBySuffix: includeSpeciesData ? speciesDataBySuffix : undefined,
+      ...(includeSpeciesData ? {
+        speciesHeaders,
+        speciesData: speciesDataBySuffix[defaultOdeSuffix] || [],
+        speciesDataBySuffix,
+      } : {}),
       ...(includeExpandedNetwork ? {
         expandedReactions: cloneReactionsForResult(model.reactions),
         expandedSpecies: model.species,

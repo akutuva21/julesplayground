@@ -552,17 +552,21 @@ export class CVODESolver {
     return true;
   }
 
-  updateRateConstants(newRates: Float64Array): void {
+  updateRateConstants(newRates: Float64Array): boolean {
     const m = CVODESolver.module;
-    if (!m || !this.networkHandle) return;
+    if (!m || !this.networkHandle) return false;
     const updateRateConstants = m._cvode_update_rate_constants ?? m._update_rate_constants;
-    if (!updateRateConstants) return;
+    if (!updateRateConstants) return false;
 
     const ptr = m._malloc(newRates.length * 8);
-    if (!ptr) return;
-    m.HEAPF64.set(newRates, ptr >> 3);
-    updateRateConstants(this.networkHandle, ptr, newRates.length);
-    m._free(ptr);
+    if (!ptr) return false;
+    try {
+      m.HEAPF64.set(newRates, ptr >> 3);
+      updateRateConstants(this.networkHandle, ptr, newRates.length);
+      return true;
+    } finally {
+      m._free(ptr);
+    }
   }
 
   private ensureInitialized(y0: Float64Array, t0: number): { success: true } | { success: false; errorMessage: string } {
@@ -595,6 +599,18 @@ export class CVODESolver {
         // If state differs, reinitialize from provided y0/t0.
         const yTol = 1e-14 * Math.max(1, maxAbsY);
         if (maxAbsDelta <= yTol) {
+          return { success: true as const };
+        }
+      }
+
+      // Keep the loaded native network and solver allocation when only the
+      // initial state/time changed. The WASM wrapper copies y0 before CVodeReInit.
+      if (this.yPtr && m._reinit_solver) {
+        m.HEAPF64.set(y0, this.yPtr >> 3);
+        const status = m._reinit_solver(this.solverMem, t0, this.yPtr);
+        if (status >= 0) {
+          this.currentT = t0;
+          this.yOut?.set(y0);
           return { success: true as const };
         }
       }
