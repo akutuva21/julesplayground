@@ -764,6 +764,26 @@ describe('bnglWorker cached network expansion', () => {
     expect((vi.mocked(engine.simulate).mock.calls[2][1] as any).parameters.k).toBe(1);
   });
 
+  it('warms and reuses a baseline topology when the first cached run has rate overrides', async () => {
+    const engine = await import('@bngplayground/engine');
+    await sendAndWait(70, 'cache_model', { model: sourceModel() }, 'cache_model_success');
+    await sendAndWait(71, 'simulate', {
+      modelId: 1,
+      parameterOverrides: { k: 2 },
+      options: { method: 'ssa', t_end: 1, n_steps: 1 },
+    }, 'simulate_success');
+    await sendAndWait(72, 'simulate', {
+      modelId: 1,
+      parameterOverrides: { k: 3 },
+      options: { method: 'ssa', t_end: 1, n_steps: 1 },
+    }, 'simulate_success');
+
+    expect(engine.generateExpandedNetwork).toHaveBeenCalledTimes(1);
+    expect((vi.mocked(engine.generateExpandedNetwork).mock.calls[0][0] as any).parameters.k).toBe(1);
+    expect((vi.mocked(engine.simulate).mock.calls[0][1] as any).parameters.k).toBe(2);
+    expect((vi.mocked(engine.simulate).mock.calls[1][1] as any).parameters.k).toBe(3);
+  });
+
   it('refreshes seed amounts on the cached network without regeneration', async () => {
     const engine = await import('@bngplayground/engine');
     vi.mocked(engine.BNGLParser.evaluateExpression).mockImplementation((expr: string, params: Map<string, number>) => {

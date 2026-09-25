@@ -605,11 +605,12 @@ if (typeof ctx.addEventListener === 'function') {
           // Pure NFsim keeps compact source. Other methods reuse worker-owned
           // topology when overrides do not change volume scaling. Seed amounts
           // are refreshed on the cached network and do not change topology.
+          const canReuseCachedTopology = !hasParameterOverrides || (
+            !!parameterOverrides && canReuseExpandedNetworkForOverrides(cachedSourceModel ?? model, parameterOverrides)
+          );
           if (cachedModelId !== undefined && cachedSourceModel && (!isNF || hasMixedMethods)) {
             const expanded = touchExpandedCachedModel(cachedModelId);
-            const reusable = expanded && (!hasParameterOverrides || (
-              !!parameterOverrides && canReuseExpandedNetworkForOverrides(cachedSourceModel, parameterOverrides)
-            ));
+            const reusable = expanded && canReuseCachedTopology;
             if (expanded && reusable) {
               model = hasParameterOverrides
                 ? applyParameterOverrides(expanded, parameterOverrides!)
@@ -638,23 +639,34 @@ if (typeof ctx.addEventListener === 'function') {
               // CRITICAL: We MUST load the evaluator - the fallback returns zeros for all expressions
               await loadEvaluator();
 
-              model = await generateExpandedNetworkService(
-                model,
+              // When a worker first sees a safe numerical override, expand
+              // the original source once, cache that baseline topology, then
+              // apply the override. Otherwise every sweep point would expand
+              // independently because the first request arrived with edits.
+              const cacheBaselineTopology = cachedModelId !== undefined
+                && cachedSourceModel !== undefined
+                && canReuseCachedTopology;
+              const expansionInput: BNGLModel = cacheBaselineTopology && cachedSourceModel
+                ? cachedSourceModel
+                : model;
+              const expandedModel = await generateExpandedNetworkService(
+                expansionInput,
                 () => ensureNotCancelled(id),
                 (p) => safePostMessage({ id, type: 'generate_network_progress', payload: p })
               );
               // Cache the baseline expansion. Later rate and seed amount changes
               // are applied to this worker-owned network; compartment changes
               // still require a fresh expansion for updated volume scaling.
-              if (
-                cachedModelId !== undefined &&
-                cachedSourceModel !== undefined &&
-                !hasParameterOverrides &&
-                (model.reactions?.length ?? 0) > 0 &&
-                cachedModels.get(cachedModelId) === cachedSourceModel
-              ) {
-                cacheExpandedModel(cachedModelId, model);
+              if (cacheBaselineTopology
+                && cachedModelId !== undefined
+                && cachedSourceModel !== undefined
+                && (expandedModel.reactions?.length ?? 0) > 0
+                && cachedModels.get(cachedModelId) === cachedSourceModel) {
+                cacheExpandedModel(cachedModelId, expandedModel);
               }
+              model = hasParameterOverrides && cacheBaselineTopology
+                ? applyParameterOverrides(expandedModel, parameterOverrides!)
+                : expandedModel;
               workerVerboseLog(
                 `[Worker] Network auto-generation complete: ${model.species.length} species, ${model.reactions?.length ?? 0} reactions`
               );

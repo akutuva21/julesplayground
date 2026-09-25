@@ -101,12 +101,18 @@ try {
       if (item.method === 'ode') {
         kinetic = await measure(() => bnglService.simulateCached(prepared.result, { k: 1.5 }, options));
         const networkProgressAfterKinetic = window.__preparedBenchmarkMetrics.generatedNetworkProgress;
+        const parseResponsesAfterKinetic = window.__preparedBenchmarkMetrics.responseTypes.parse_success ?? 0;
         seed = await measure(() => bnglService.simulateCached(prepared.result, { A0: 120 }, options));
+        const networkProgressAfterSeed = window.__preparedBenchmarkMetrics.generatedNetworkProgress;
+        const parseResponsesAfterSeed = window.__preparedBenchmarkMetrics.responseTypes.parse_success ?? 0;
         network = await measure(() => bnglService.getPreparedNetwork(undefined, undefined, model));
         rich = await measure(() => bnglService.simulateCached(prepared.result, undefined, {
           ...options, includeSpeciesData: true, includeExpandedNetwork: false,
         }));
         kinetic.networkGenerationProgressDelta = networkProgressAfterKinetic - networkProgressAfterFirst;
+        kinetic.parseResponseDelta = parseResponsesAfterKinetic - (metricsBefore.responseTypes.parse_success ?? 0);
+        seed.networkGenerationProgressDelta = networkProgressAfterSeed - networkProgressAfterKinetic;
+        seed.parseResponseDelta = parseResponsesAfterSeed - parseResponsesAfterKinetic;
         network.jsonBytes = new TextEncoder().encode(JSON.stringify(network.result)).byteLength;
         rich.hasSpeciesData = Array.isArray(rich.result.speciesData) || Array.isArray(rich.result.species_data);
       }
@@ -122,7 +128,11 @@ try {
         networkGenerationProgressDelta: window.__preparedBenchmarkMetrics.generatedNetworkProgress - metricsBefore.generatedNetworkProgress,
         workerPoolCostBound: estimateSimulationWorkerCount(model, 8),
         kineticRerun: kinetic && { ms: kinetic.ms, networkGenerationProgressDelta: kinetic.networkGenerationProgressDelta },
-        seedRerunMs: seed?.ms,
+        seedRerun: seed && {
+          ms: seed.ms,
+          networkGenerationProgressDelta: seed.networkGenerationProgressDelta,
+          parseResponseDelta: seed.parseResponseDelta,
+        },
         preparedNetworkRetrievalMs: network?.ms,
         preparedNetworkBytes: network?.jsonBytes,
         richRerun: rich && { ms: rich.ms, hasSpeciesData: rich.hasSpeciesData },
@@ -130,16 +140,32 @@ try {
       await bnglService.releaseModel(prepared.result).catch(() => {});
     }
 
-    const pool = new BnglWorkerPool(8);
     const model = await bnglService.parse(inputModels[0].code);
-    const workersBeforeSweep = window.__preparedBenchmarkMetrics.workersCreated;
-    const sweep = await measure(() => pool.runParameterSweep(model, [{ k: 0.9 }, { k: 1.1 }, { k: 1.2 }, { k: 1.3 }], lean));
-    const sweepWorkerCount = window.__preparedBenchmarkMetrics.workersCreated - workersBeforeSweep;
-    pool.terminate();
+    const sweepOverrides = Array.from({ length: 8 }, (_, index) => ({ k: 0.7 + index * 0.1 }));
+    const parameterSweeps = [];
+    for (const workerLimit of [1, 2, 4, 8]) {
+      const pool = new BnglWorkerPool(workerLimit);
+      const metricsBefore = window.__preparedBenchmarkMetrics;
+      const workersBeforeSweep = metricsBefore.workersCreated;
+      const progressBeforeSweep = metricsBefore.generatedNetworkProgress;
+      const heapBeforeSweep = performance.memory?.usedJSHeapSize ?? null;
+      const sweep = await measure(() => pool.runParameterSweep(model, sweepOverrides, lean));
+      const heapAfterSweep = performance.memory?.usedJSHeapSize ?? null;
+      parameterSweeps.push({
+        workerLimit,
+        ms: sweep.ms,
+        runs: sweep.result.length,
+        workersCreated: window.__preparedBenchmarkMetrics.workersCreated - workersBeforeSweep,
+        networkGenerationProgressDelta: window.__preparedBenchmarkMetrics.generatedNetworkProgress - progressBeforeSweep,
+        mainThreadHeapBeforeBytes: heapBeforeSweep,
+        mainThreadHeapAfterBytes: heapAfterSweep,
+      });
+      pool.terminate();
+    }
     bnglService.terminate();
     return {
       cases,
-      parameterSweep: { ms: sweep.ms, runs: sweep.result.length, workersCreated: sweepWorkerCount },
+      parameterSweeps,
       transport: {
         workerCount: window.__preparedBenchmarkMetrics.workersCreated,
         mainToWorkerApproxBytes: window.__preparedBenchmarkMetrics.sentBytes,
