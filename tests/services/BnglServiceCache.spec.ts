@@ -67,6 +67,7 @@ describe('BnglService model cache', () => {
 
     await bnglService.simulate(model, options);
     model.parameters.k = 2;
+    model.cacheRevision = 1;
     await bnglService.simulate(model, options);
 
     expect(FakeWorker.messages.filter((message) => message.type === 'cache_model')).toHaveLength(2);
@@ -80,6 +81,7 @@ describe('BnglService model cache', () => {
 
     await bnglService.simulate(model, options);
     model.observables.push({ type: 'Molecules', name: 'A_total', pattern: 'A()' });
+    model.cacheRevision = 1;
     await bnglService.simulate(model, options);
 
     expect(FakeWorker.messages.filter((message) => message.type === 'cache_model')).toHaveLength(2);

@@ -20,37 +20,13 @@ import { BNGLParser } from '@bngplayground/engine';
 import { validateBNGLModel, validationWarningsToMarkers } from './services/modelValidation';
 import { lintBNGL, lintDiagnosticsToMarkers } from './services/bnglLinter';
 import { getSharedModelFromUrl, clearModelFromUrl } from './src/utils/shareUrl';
-import { resolveAutoMethod, getSimulationOptionsFromParsedModel } from '@bngplayground/engine';
+import { resolveAutoMethod, getSimulationOptionsFromParsedModel, reevaluateParameterExpressions, reevaluateSeedSpecies } from '@bngplayground/engine';
 import { parseParametersFromCode, isNumericLiteral, stripParametersBlock } from '@bngplayground/engine';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
 const normalizeCode = (value: string) => value.replace(/\r\n/g, '\n').trim();
 const SBML_IMPORT_TIMEOUT_MS = 45_000;
 const INITIAL_BNGL_CODE = '';
-
-const shouldGenerateNetworkForSimulation = (
-  model: BNGLModel,
-  method: 'ode' | 'ssa' | 'pla' | 'psa' | 'nf' | 'nfsim'
-) => {
-  if (method === 'nf' || method === 'nfsim') return false;
-  if ((model.reactions?.length ?? 0) > 0) return false;
-  return (model.reactionRules?.length ?? 0) > 0;
-};
-
-const getNetworkGenerationOptions = (model: BNGLModel) => ({
-  maxSpecies: model.networkOptions?.maxSpecies ?? 2000,
-  maxReactions: model.networkOptions?.maxReactions ?? 5000,
-  maxIterations: model.networkOptions?.maxIter ?? 1000,
-  maxAgg: model.networkOptions?.maxAgg ?? 500,
-  ...(model.networkOptions?.maxStoich !== undefined ? { maxStoich: model.networkOptions.maxStoich as any } : {}),
-});
-
-const mergeExpandedNetworkIntoModel = (model: BNGLModel, expanded: BNGLModel): BNGLModel => ({
-  ...model,
-  ...(expanded.reactions ? { reactions: expanded.reactions } : {}),
-  ...(expanded.species ? { species: expanded.species } : {}),
-  ...((expanded as any).concreteObservables ? { concreteObservables: (expanded as any).concreteObservables } : {}),
-});
 
 const findExampleById = (id?: string | null) => {
   if (!id) return undefined;
@@ -350,18 +326,7 @@ function App() {
     setSimOptions(options);
     setIsSimulating(true);
     try {
-      let simulationModel = targetModel;
-
-      if (shouldGenerateNetworkForSimulation(targetModel, effectiveMethod)) {
-        setGenerationProgress('Generating network...');
-        const expandedModel = await bnglService.generateNetwork(targetModel, getNetworkGenerationOptions(targetModel), {
-          signal: controller.signal,
-          description: `Network generation (${effectiveMethod})`,
-        });
-        simulationModel = mergeExpandedNetworkIntoModel(targetModel, expandedModel);
-      }
-
-      const simResults = await bnglService.simulate(simulationModel, options, {
+      const simResults = await bnglService.simulate(targetModel, options, {
         signal: controller.signal,
         description: `Simulation (${effectiveMethod})`,
       });
@@ -418,43 +383,19 @@ function App() {
         if (!isNaN(val)) baseParams[k] = val;
       }
 
-      // Re-resolve paramExpressions (if present) iteratively like parser does
-      const paramExprs = (currentModel as any).paramExpressions || {};
-      const resolved: Record<string, number> = { ...baseParams };
-      const maxPasses = 10;
-      for (let pass = 0; pass < maxPasses; pass++) {
-        let changed = false;
-        for (const [name, expr] of Object.entries(paramExprs)) {
-          if (resolved[name] !== undefined) continue;
-          try {
-            const paramMap = new Map(Object.entries(resolved));
-            const val = (BNGLParser as any).evaluateExpression(expr, paramMap);
-            if (!isNaN(val)) {
-              resolved[name] = val;
-              changed = true;
-            }
-          } catch {
-            // ignore failures until later passes
-          }
-        }
-        if (!changed) break;
+      const directOverrides: Record<string, number> = {};
+      for (const [name, expression] of changes) {
+        const parsed = Number(expression);
+        if (Number.isFinite(parsed)) directOverrides[name] = parsed;
       }
-
-      // Assign resolved params back to model.parameters
-      currentModel.parameters = { ...currentModel.parameters, ...resolved };
-
-      // Evaluate species initialExpression if present
-      const funcMap = new Map((currentModel.functions || []).map(f => [f.name, { args: f.args, expr: f.expression } as any]));
-      for (const sp of currentModel.species) {
-        if (sp.initialExpression) {
-          try {
-            const val = (BNGLParser as any).evaluateExpression(sp.initialExpression, new Map(Object.entries(currentModel.parameters)), new Set(), funcMap);
-            if (!isNaN(val)) sp.initialConcentration = val;
-          } catch {
-            // ignore expression eval errors
-          }
-        }
+      reevaluateParameterExpressions(currentModel, directOverrides);
+      const originalSeeds = new Map<string, string>();
+      for (const species of currentModel.species ?? []) {
+        if (species.initialExpression) originalSeeds.set(species.name, species.initialExpression);
       }
+      reevaluateSeedSpecies(currentModel, originalSeeds);
+
+      currentModel.cacheRevision = (currentModel.cacheRevision ?? 0) + 1;
 
       // Update state to reflect parameter-only changes; do not reparse or simulate
       // A new identity prevents the worker cache from reusing the pre-edit model.
@@ -474,7 +415,7 @@ function App() {
 
       // If we already have simulation results and options, re-solve without re-parsing (debounced upstream)
       if (results && simOptionsRef.current) {
-        void runSimulationForParameterUpdate(updatedModel, simOptionsRef.current);
+        void runSimulationForParameterUpdate(updatedModel, simOptionsRef.current, changes);
       }
     } catch (e) {
       console.warn('Parameter patch failed:', e);
@@ -482,7 +423,7 @@ function App() {
     }
   }
 
-  const runSimulationForParameterUpdate = async (updatedModel: BNGLModel, options: SimulationOptions) => {
+  const runSimulationForParameterUpdate = async (updatedModel: BNGLModel, options: SimulationOptions, changes: Map<string, string>) => {
     if (simulateAbortRef.current) {
       simulateAbortRef.current.abort('Parameter update replaced.');
     }
@@ -492,18 +433,12 @@ function App() {
     setStatus({ type: 'info', message: 'Updating simulation for parameter change...' });
     try {
       const effectiveMethod = resolveAutoMethod(updatedModel, options.method);
-      let simulationModel = updatedModel;
-
-      if (shouldGenerateNetworkForSimulation(updatedModel, effectiveMethod)) {
-        setGenerationProgress('Generating network...');
-        const expandedModel = await bnglService.generateNetwork(updatedModel, getNetworkGenerationOptions(updatedModel), {
-          signal: controller.signal,
-          description: `Network generation (${effectiveMethod}, parameter update)`,
-        });
-        simulationModel = mergeExpandedNetworkIntoModel(updatedModel, expandedModel);
+      const overrides: Record<string, number> = {};
+      for (const name of changes.keys()) {
+        const value = updatedModel.parameters[name];
+        if (Number.isFinite(value)) overrides[name] = value;
       }
-
-      const simResults = await bnglService.simulate(simulationModel, options, {
+      const simResults = await bnglService.simulatePreparedWithOverrides(overrides, options, {
         signal: controller.signal,
         description: 'Simulation (parameter update)',
       });

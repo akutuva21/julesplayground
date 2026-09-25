@@ -7,6 +7,7 @@
 
 import { BNGLModel, SharedSimulationOutputDescriptor, SimulationOptions, SimulationResults, WorkerRequest, WorkerResponse } from '../types';
 import { toError } from './workerErrorUtils';
+import { materializeSimulationResult, type SimulationResultPayload } from './workerResultTransport';
 
 export interface SharedEnsembleResultsHandle {
     kind: 'shared';
@@ -149,9 +150,9 @@ export class BnglWorkerPool {
     private workerResponseHandlers = new Map<Worker, (event: MessageEvent<WorkerResponse>) => void>();
 
     constructor(poolSize?: number) {
-        // Default to hardware concurrency - 1 (leave one for UI)
+        // Cap the default: each worker can retain an expanded network and WASM state.
         const hardwareConcurrency = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency || 4) : 4;
-        this.poolSize = poolSize ?? Math.max(1, hardwareConcurrency - 1);
+        this.poolSize = poolSize ?? Math.max(1, Math.min(hardwareConcurrency - 1, 8));
     }
 
     private registerPendingRequest(worker: Worker, req: PendingPoolRequest) {
@@ -232,7 +233,8 @@ export class BnglWorkerPool {
         errorType: WorkerResponse['type'],
         defaultErrorMessage: string,
         mapPayload: (payload: unknown) => T,
-        errorLogLabel?: string
+        errorLogLabel?: string,
+        signal?: AbortSignal,
     ): Promise<T> {
         return new Promise((resolve, reject) => {
             const requests = this.pendingWorkerRequests.get(worker);
@@ -246,6 +248,24 @@ export class BnglWorkerPool {
                 messageId = generateSecureMessageId();
             }
 
+            const cleanupAbort = () => signal?.removeEventListener('abort', abortHandler!);
+            const abortHandler = () => {
+                this.removePendingRequest(worker, messageId);
+                cleanupAbort();
+                try {
+                    worker.postMessage({
+                        id: generateSecureMessageId(),
+                        type: 'cancel',
+                        payload: { targetId: messageId },
+                    });
+                } catch { /* worker may already be terminating */ }
+                reject(new DOMException(signal?.reason ?? 'The operation was aborted.', 'AbortError'));
+            };
+            if (signal?.aborted) {
+                reject(new DOMException(signal.reason ?? 'The operation was aborted.', 'AbortError'));
+                return;
+            }
+
             const req: PendingPoolRequest = {
                 messageId,
                 successType,
@@ -253,20 +273,26 @@ export class BnglWorkerPool {
                 defaultErrorMessage,
                 errorLogLabel,
                 resolvePayload: (payload) => {
+                    cleanupAbort();
                     try {
                         resolve(mapPayload(payload));
                     } catch (error) {
                         reject(error instanceof Error ? error : new Error(String(error)));
                     }
                 },
-                reject
+                reject: (error) => {
+                    cleanupAbort();
+                    reject(error);
+                }
             };
             this.registerPendingRequest(worker, req);
+            signal?.addEventListener('abort', abortHandler, { once: true });
 
             try {
                 worker.postMessage(createRequest(messageId));
             } catch (error) {
                 this.removePendingRequest(worker, messageId);
+                cleanupAbort();
                 reject(error instanceof Error ? error : new Error(String(error)));
             }
         });
@@ -321,7 +347,7 @@ export class BnglWorkerPool {
             'simulate_success',
             'simulate_error',
             'Simulation failed',
-            (payload) => payload as SimulationResults,
+            (payload) => materializeSimulationResult(payload as SimulationResultPayload),
             'simulate_error'
         );
     }
@@ -442,6 +468,55 @@ export class BnglWorkerPool {
         }
     }
 
+    /** Run parameter perturbations across a bounded set of prepared workers. */
+    async runParameterSweep(
+        model: BNGLModel,
+        overrides: Array<Record<string, number>>,
+        options: SimulationOptions,
+        signal?: AbortSignal,
+        onProgress?: (completed: number) => void,
+    ): Promise<SimulationResults[]> {
+        if (overrides.length === 0) return [];
+        if (!this.isInitialized) await this.initialize();
+        const workerCount = Math.min(this.workers.length, overrides.length);
+        const workers = this.workers.slice(0, workerCount);
+        const preparation = await Promise.allSettled(workers.map((worker) => this.prepareModelOnWorker(worker, model)));
+        const failedPreparation = preparation.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+        if (failedPreparation) {
+            await Promise.all(preparation.map((result, index) => result.status === 'fulfilled'
+                ? this.releaseModelOnWorker(workers[index], result.value).catch(() => undefined)
+                : Promise.resolve()));
+            throw failedPreparation.reason;
+        }
+
+        const modelIds = preparation.map((result) => (result as PromiseFulfilledResult<number>).value);
+        const results = new Array<SimulationResults>(overrides.length);
+        let nextIndex = 0;
+        let completed = 0;
+        try {
+            const settled = await Promise.allSettled(workers.map(async (worker, workerIndex) => {
+                while (nextIndex < overrides.length) {
+                    const jobIndex = nextIndex++;
+                    results[jobIndex] = await this.simulateCachedOnWorker(
+                        worker,
+                        modelIds[workerIndex],
+                        options,
+                        overrides[jobIndex],
+                        signal,
+                    );
+                    onProgress?.(++completed);
+                }
+            }));
+            const failure = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+            if (failure) throw failure.reason;
+            return results;
+        } finally {
+            await Promise.all(workers.map((worker, index) =>
+                this.releaseModelOnWorker(worker, modelIds[index]).catch(() => undefined),
+            ));
+        }
+    }
+
     private async runBoundedEnsembleTasks(
         count: number,
         initialWaveCount: number,
@@ -480,15 +555,22 @@ export class BnglWorkerPool {
         );
     }
 
-    private simulateCachedOnWorker(worker: Worker, modelId: number, options: SimulationOptions): Promise<SimulationResults> {
+    private simulateCachedOnWorker(
+        worker: Worker,
+        modelId: number,
+        options: SimulationOptions,
+        parameterOverrides?: Record<string, number>,
+        signal?: AbortSignal,
+    ): Promise<SimulationResults> {
         return this.requestOnWorker(
             worker,
-            (messageId) => ({ id: messageId, type: 'simulate', payload: { modelId, options } }),
+            (messageId) => ({ id: messageId, type: 'simulate', payload: { modelId, parameterOverrides, options } }),
             'simulate_success',
             'simulate_error',
             'Simulation failed',
-            (payload) => payload as SimulationResults,
-            'simulate_error'
+            (payload) => materializeSimulationResult(payload as SimulationResultPayload),
+            'simulate_error',
+            signal,
         );
     }
 

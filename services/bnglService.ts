@@ -26,6 +26,7 @@ type PendingRequest = {
 const DEFAULT_TIMEOUT_MS = 300_000;
 
 import { toError } from './workerErrorUtils';
+import { materializeSimulationResult, type SimulationResultPayload } from './workerResultTransport';
 
 class BnglService {
   private worker!: Worker;
@@ -35,7 +36,7 @@ class BnglService {
   private terminated = false;
   private lastCachedModelId?: number;
   private lastCachedModel?: BNGLModel;
-  private lastCachedModelSignature?: string;
+  private lastCachedModelRevision?: number;
   private lastCachedModelPromise?: Promise<number>;
   private modelCacheRequestId = 0;
   private progressListeners = new Set<(payload: any) => void>();
@@ -357,10 +358,9 @@ class BnglService {
    * for each simulation run. Returns a numeric modelId that can be used with simulateCached.
    */
   public prepareModel(model: BNGLModel, requestOptions?: RequestOptions): Promise<number> {
-    const signature = this.getModelCacheSignature(model);
     if (
       this.lastCachedModel === model
-      && this.lastCachedModelSignature === signature
+      && this.lastCachedModelRevision === model.cacheRevision
       && this.lastCachedModelPromise
     ) {
       return this.lastCachedModelPromise;
@@ -370,7 +370,7 @@ class BnglService {
     const previousId = this.lastCachedModelId;
     const cacheRequestId = ++this.modelCacheRequestId;
     this.lastCachedModel = model;
-    this.lastCachedModelSignature = signature;
+    this.lastCachedModelRevision = model.cacheRevision;
 
     const cachePromise = (async () => {
       let modelIdToRelease = previousId;
@@ -417,10 +417,25 @@ class BnglService {
    * to the worker (much smaller payload), so repeated runs are cheaper on the main thread.
    */
   public simulateCached(modelId: number, parameterOverrides: Record<string, number> | undefined, options: SimulationOptions, requestOptions?: RequestOptions): Promise<SimulationResults> {
-    return this.postMessage<SimulationResults>('simulate', { modelId, parameterOverrides, options }, {
+    return this.postMessage<SimulationResultPayload>('simulate', { modelId, parameterOverrides, options }, {
       ...requestOptions,
       description: requestOptions?.description ?? `Simulation (${options.method}) (cached)`,
-    });
+    }).then(materializeSimulationResult);
+  }
+
+  /** Re-run the last prepared source model with numeric parameter overrides. */
+  public simulatePreparedWithOverrides(
+    parameterOverrides: Record<string, number>,
+    options: SimulationOptions,
+    requestOptions?: RequestOptions,
+  ): Promise<SimulationResults> {
+    const prepared = this.lastCachedModelPromise;
+    if (!prepared) {
+      return Promise.reject(new Error('No prepared model is available for parameter update'));
+    }
+    return prepared.then((modelId) =>
+      this.simulateCached(modelId, parameterOverrides, options, requestOptions),
+    );
   }
 
   /**
@@ -437,16 +452,8 @@ class BnglService {
     this.modelCacheRequestId++;
     this.lastCachedModelId = undefined;
     this.lastCachedModel = undefined;
-    this.lastCachedModelSignature = undefined;
+    this.lastCachedModelRevision = undefined;
     this.lastCachedModelPromise = undefined;
-  }
-
-  private getModelCacheSignature(model: BNGLModel): string {
-    const signature = JSON.stringify(model);
-    if (signature === undefined) {
-      throw new Error('Unable to serialize model for worker cache validation');
-    }
-    return signature;
   }
 
   /**

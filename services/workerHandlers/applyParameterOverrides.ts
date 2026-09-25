@@ -23,7 +23,7 @@
  */
 
 import type { BNGLModel } from '../../types';
-import { BNGLParser } from '@bngplayground/engine';
+import { BNGLParser, reevaluateParameterExpressions } from '@bngplayground/engine';
 
 /** Whole-token check: does `expr` reference any of the given identifier names? */
 export function expressionReferencesAny(expr: string, names: Set<string>): boolean {
@@ -36,6 +36,51 @@ export function expressionReferencesAny(expr: string, names: Set<string>): boole
   return false;
 }
 
+/** True when changed parameters can alter seed state or compartment volume baked at expansion. */
+export function canReuseExpandedNetworkForOverrides(
+  model: BNGLModel,
+  overrides: Record<string, number>,
+): boolean {
+  const affected = new Set(Object.keys(overrides));
+  const parameterExpressions = model.paramExpressions ?? {};
+  for (let pass = 0; pass <= Object.keys(parameterExpressions).length; pass++) {
+    let changed = false;
+    for (const [name, expression] of Object.entries(parameterExpressions)) {
+      if (!affected.has(name) && expressionReferencesAny(expression, affected)) {
+        affected.add(name);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+
+  const functions = new Map((model.functions ?? []).map((fn) => [fn.name, fn.expression]));
+  const seedUsesAffectedParameter = (expression: string, visited = new Set<string>()): boolean => {
+    if (expressionReferencesAny(expression, affected)) return true;
+    for (const name of expression.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []) {
+      const body = functions.get(name);
+      if (body && !visited.has(name)) {
+        visited.add(name);
+        if (seedUsesAffectedParameter(body, visited)) return true;
+      }
+    }
+    return false;
+  };
+  if ((model.species ?? []).some((species) =>
+    typeof species.initialExpression === 'string' && seedUsesAffectedParameter(species.initialExpression))) {
+    return false;
+  }
+
+  // Compartment volume/scaling expressions affect numerical preparation and
+  // remain on the conservative expansion path until those values are refreshed.
+  for (const [name, expression] of Object.entries(parameterExpressions)) {
+    if (name.startsWith('__compartment_') && affected.has(name)) return false;
+    if (name.startsWith('__compartment_') && expressionReferencesAny(expression, affected)) return false;
+  }
+  if ([...affected].some((name) => name.startsWith('__compartment_'))) return false;
+  return true;
+}
+
 export function applyParameterOverrides(
   cached: BNGLModel,
   overrides: Record<string, number>,
@@ -44,7 +89,9 @@ export function applyParameterOverrides(
     return cached;
   }
 
-  const mergedParams = { ...(cached.parameters || {}), ...overrides };
+  const updatedModel = { ...cached, parameters: { ...(cached.parameters || {}) } };
+  reevaluateParameterExpressions(updatedModel, overrides);
+  const mergedParams = updatedModel.parameters;
   const overriddenNames = new Set(Object.keys(overrides));
   const origParamMap = new Map<string, number>(Object.entries(cached.parameters || {}));
   const mergedParamMap = new Map<string, number>(Object.entries(mergedParams));
@@ -81,12 +128,17 @@ export function applyParameterOverrides(
   });
 
   const reactions = (cached.reactions || []).map((r) => {
-    const rateConst = mergedParams[r.rate] ?? Number.parseFloat(r.rate);
-    return { ...r, rateConstant: rateConst };
+    if (r.isFunctionalRate) return r;
+    try {
+      const rateConst = BNGLParser.evaluateExpression(r.rate, mergedParamMap, new Set(), funcMap);
+      return Number.isFinite(rateConst) ? { ...r, rateConstant: rateConst } : r;
+    } catch {
+      return r;
+    }
   });
 
   return {
-    ...cached,
+    ...updatedModel,
     parameters: mergedParams,
     species,
     reactions,

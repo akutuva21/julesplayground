@@ -19,6 +19,7 @@ import type { BNGLModel } from '../types';
  */
 export function reevaluateSeedSpecies(model: BNGLModel, seedExpressions: Map<string, string>): void {
   const paramMap = new Map<string, number>(Object.entries(model.parameters ?? {}));
+  if (!paramMap.has('Na')) paramMap.set('Na', 1);
   const functionMap = new Map<string, { args: string[]; expr: string }>(
     (model.functions ?? []).map((fn) => [fn.name, { args: fn.args ?? [], expr: fn.expression ?? '' }]),
   );
@@ -33,9 +34,55 @@ export function reevaluateSeedSpecies(model: BNGLModel, seedExpressions: Map<str
     if (!expr) continue;
     const evaluated = BNGLParser.evaluateExpression(expr, paramMap, undefined, functionMap);
     if (Number.isFinite(evaluated)) {
-      species.initialConcentration = evaluated;
+      const compartment = species.name.match(/^@([^:]+)::?/)?.[1] ?? species.name.match(/@([^@:\s]+)$/)?.[1];
+      const volume = compartment ? Number(paramMap.get(`__compartment_${compartment}__`)) : 1;
+      const hasAmountFactor = /\bNa\b/.test(expr) || /\bquantity_to_number_factor\b/.test(expr);
+      const compact = expr.replace(/\s+/g, '');
+      const volumeKey = compartment ? `__compartment_${compartment}__` : '';
+      const alreadyDividedByVolume = volumeKey !== '' && compact.includes(`/${volumeKey}`);
+      const includesVolume = volumeKey !== '' && compact.includes(volumeKey);
+      const normalized = Number.isFinite(volume) && volume > 0 && Math.abs(volume - 1) >= 1e-12
+        && hasAmountFactor && includesVolume && !alreadyDividedByVolume
+        ? evaluated / volume
+        : evaluated;
+      if (Number.isFinite(normalized)) species.initialConcentration = normalized;
     }
   }
+}
+
+/** Re-evaluate dependent model parameters after applying parameter overrides. */
+export function reevaluateParameterExpressions(
+  model: BNGLModel,
+  overrides: Record<string, number>,
+): void {
+  const parameters = { ...(model.parameters ?? {}), ...overrides };
+  const fixedNames = new Set(Object.keys(overrides));
+  const expressions = model.paramExpressions ?? {};
+  const paramMap = new Map<string, number>(Object.entries(parameters));
+  if (!paramMap.has('Na')) paramMap.set('Na', 1);
+  const functionMap = new Map<string, { args: string[]; expr: string }>(
+    (model.functions ?? []).map((fn) => [fn.name, { args: fn.args ?? [], expr: fn.expression ?? '' }]),
+  );
+
+  for (let pass = 0; pass <= Object.keys(expressions).length; pass++) {
+    let changed = false;
+    for (const [name, expression] of Object.entries(expressions)) {
+      if (fixedNames.has(name)) continue;
+      try {
+        const value = BNGLParser.evaluateExpression(expression, paramMap, undefined, functionMap);
+        if (Number.isFinite(value) && paramMap.get(name) !== value) {
+          paramMap.set(name, value);
+          changed = true;
+        }
+      } catch {
+        // Keep last resolved value while trying dependencies on the next pass.
+      }
+    }
+    if (!changed) break;
+  }
+
+  if (model.parameters?.Na === undefined) paramMap.delete('Na');
+  model.parameters = Object.fromEntries(paramMap);
 }
 
 function unwrapOuterParens(expr: string): string {

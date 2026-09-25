@@ -13,7 +13,10 @@ vi.mock('@bngplayground/engine', () => {
     getCacheSizes: vi.fn(),
     loadEvaluator: vi.fn(),
     parseBNGLWithANTLR: vi.fn(),
-    BNGLParser: { evaluateExpression: vi.fn() },
+    BNGLParser: { evaluateExpression: vi.fn((expr: string, params: Map<string, number>) => params.get(expr) ?? Number(expr)) },
+    reevaluateParameterExpressions: vi.fn((model: any, overrides: Record<string, number>) => {
+      Object.assign(model.parameters, overrides);
+    }),
     CVODESolver: { cvodeModuleFactory: vi.fn() }
   };
 });
@@ -640,7 +643,7 @@ describe('bnglWorker cached network expansion', () => {
   const sendAndWait = async (id: number, type: string, payload: unknown, terminalType: string) => {
     await messageListener({ origin: '', data: { id, type, payload } });
     await vi.waitFor(() => {
-      expect(mockPostMessage).toHaveBeenCalledWith(expect.objectContaining({ id, type: terminalType }));
+      expect(mockPostMessage.mock.calls.some(([message]: any[]) => message?.id === id && message?.type === terminalType)).toBe(true);
     });
   };
 
@@ -688,15 +691,15 @@ describe('bnglWorker cached network expansion', () => {
     expect((vi.mocked(engine.simulate).mock.calls[1][1] as any).reactions).toHaveLength(1);
   });
 
-  it('regenerates override variants without poisoning the cached baseline', async () => {
+  it('reuses the cached topology for rate overrides without poisoning the baseline', async () => {
     const engine = await import('@bngplayground/engine');
     await sendAndWait(10, 'cache_model', { model: sourceModel() }, 'cache_model_success');
     await sendAndWait(11, 'simulate', { modelId: 1, options: { method: 'ssa', t_end: 1, n_steps: 1 } }, 'simulate_success');
     await sendAndWait(12, 'simulate', { modelId: 1, parameterOverrides: { k: 2 }, options: { method: 'ssa', t_end: 1, n_steps: 1 } }, 'simulate_success');
     await sendAndWait(13, 'simulate', { modelId: 1, options: { method: 'ssa', t_end: 1, n_steps: 1 } }, 'simulate_success');
 
-    expect(engine.generateExpandedNetwork).toHaveBeenCalledTimes(2);
-    expect((vi.mocked(engine.generateExpandedNetwork).mock.calls[1][0] as any).parameters.k).toBe(2);
+    expect(engine.generateExpandedNetwork).toHaveBeenCalledTimes(1);
+    expect((vi.mocked(engine.simulate).mock.calls[1][1] as any).parameters.k).toBe(2);
     expect((vi.mocked(engine.simulate).mock.calls[2][1] as any).parameters.k).toBe(1);
   });
 

@@ -172,6 +172,8 @@ export interface ConcreteObservable {
 
 export interface BNGLModel {
     name?: string;
+    /** Increment when mutating a cached model in place; new model objects invalidate automatically. */
+    cacheRevision?: number;
     concreteObservables?: ConcreteObservable[];
     parameters: Record<string, number>;
     moleculeTypes: BNGLMoleculeType[];
@@ -268,6 +270,16 @@ export interface SimulationResults {
     firingLog?: ReactionFiringEvent[];
     /** Dense output buffer for continuous interpolation (only populated when denseOutput=true and method='ode') */
     denseOutput?: import('./services/simulation/DenseOutput').DenseOutputBuffer;
+}
+
+/** Transferable wire representation for ordinary time-course rows. */
+export interface CompactSimulationResult {
+    transport: 'float64-matrix';
+    headers: string[];
+    rowCount: number;
+    columnCount: number;
+    values: ArrayBuffer;
+    metadata: Omit<SimulationResults, 'data'>;
 }
 
 export interface SSAInfluenceData {
@@ -418,7 +430,7 @@ export type WorkerResponse =
     | { id: number; type: 'parse_error'; payload: SerializedWorkerError }
     | { id: number; type: 'atomize_success'; payload: AtomizerResult }
     | { id: number; type: 'atomize_error'; payload: SerializedWorkerError }
-    | { id: number; type: 'simulate_success'; payload: SimulationResults }
+    | { id: number; type: 'simulate_success'; payload: SimulationResults | CompactSimulationResult }
     | { id: number; type: 'simulate_shared_success'; payload: { slot: number } }
     | { id: number; type: 'cache_model_success'; payload: { modelId: number } }
     | { id: number; type: 'worker_internal_error'; payload: SerializedWorkerError }

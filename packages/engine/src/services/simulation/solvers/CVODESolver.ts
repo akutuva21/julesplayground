@@ -599,6 +599,18 @@ export class CVODESolver {
         }
       }
 
+      // Keep the loaded native network and solver allocation when only the
+      // initial state/time changed. The WASM wrapper copies y0 before CVodeReInit.
+      if (this.yPtr && m._reinit_solver) {
+        m.HEAPF64.set(y0, this.yPtr >> 3);
+        const status = m._reinit_solver(this.solverMem, t0, this.yPtr);
+        if (status >= 0) {
+          this.currentT = t0;
+          this.yOut?.set(y0);
+          return { success: true as const };
+        }
+      }
+
       // Not continuing cleanly: reset the solver.
       this.destroy();
     }
