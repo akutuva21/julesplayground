@@ -865,7 +865,7 @@ if (typeof ctx.addEventListener === 'function') {
           ? request.parameterOverrides as Record<string, number>
           : undefined;
         const canReuse = !overrides || Object.keys(overrides).length === 0 || canReuseExpandedNetworkForOverrides(source, overrides);
-        let expanded = canReuse ? touchExpandedCachedModel(request.modelId) : undefined;
+        const expanded = canReuse ? touchExpandedCachedModel(request.modelId) : undefined;
         let prepared = expanded
           ? (overrides && Object.keys(overrides).length > 0 ? applyParameterOverrides(expanded, overrides) : expanded)
           : (overrides && Object.keys(overrides).length > 0 ? applyParameterOverrides(source, overrides) : source);
