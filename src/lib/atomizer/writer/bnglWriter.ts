@@ -3628,7 +3628,7 @@ export function processReactionRate(
     new Map<string, number>(
       Array.from(parameterDict.entries()).map(([k, v]) => [k, Number(v)])
     );
-  let convertedRate = bnglFunctionFn(
+  const convertedRate = bnglFunctionFn(
     rate,
     rxnId,
     rxn.reactants.map(r => r.species),
