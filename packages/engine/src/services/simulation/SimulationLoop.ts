@@ -90,6 +90,11 @@ function removeTrailingParenthesizedSuffix(value: string): string {
   return value.slice(0, groupStart);
 }
 
+function removeAtSuffix(value: string): string {
+  const suffixStart = value.indexOf('@');
+  return suffixStart < 0 ? value : value.slice(0, suffixStart);
+}
+
 function rateRuleStateNameFromPattern(value: string): string | undefined {
   const normalized = removeTrailingParenthesizedSuffix(value.trim().replace(/^@[A-Za-z0-9_]+::/, ''));
   const prefix = 'M___rate_rule_state__';
@@ -1385,14 +1390,13 @@ export async function simulate(
       if (directObservable?.indices[0] !== undefined) {
         return { index: directObservable.indices[0], valueType: declaredType || 'amount' };
       }
-      const targetBase = target.replace(/^M_/, '').replace(/@.*$/, '');
+      const targetBase = removeAtSuffix(target.replace(/^M_/, ''));
       const candidates = model.species
         .map((species, index) => ({ species, index }))
         .filter(({ species }) => {
-          const base = removeParenthesizedSegments(species.name
+          const base = removeParenthesizedSegments(removeAtSuffix(species.name
             .replace(/^@[A-Za-z0-9_]+::/, '')
-            .replace(/^M_/, '')
-            .replace(/@.*$/, ''));
+            .replace(/^M_/, '')));
           return base === targetBase;
         });
       if (candidates.length !== 1) return undefined;
