@@ -127,7 +127,11 @@ try {
         firstRunLean: !('expandedReactions' in first.result) && !('speciesData' in first.result),
         networkGenerationProgressDelta: window.__preparedBenchmarkMetrics.generatedNetworkProgress - metricsBefore.generatedNetworkProgress,
         workerPoolCostBound: estimateSimulationWorkerCount(model, 8),
-        kineticRerun: kinetic && { ms: kinetic.ms, networkGenerationProgressDelta: kinetic.networkGenerationProgressDelta },
+        kineticRerun: kinetic && {
+          ms: kinetic.ms,
+          parseResponseDelta: kinetic.parseResponseDelta,
+          networkGenerationProgressDelta: kinetic.networkGenerationProgressDelta,
+        },
         seedRerun: seed && {
           ms: seed.ms,
           networkGenerationProgressDelta: seed.networkGenerationProgressDelta,
