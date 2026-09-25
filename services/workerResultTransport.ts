@@ -3,7 +3,13 @@ import type { CompactSimulationResult, SimulationResults } from '../types';
 export type SimulationResultPayload = SimulationResults | CompactSimulationResult;
 
 export function toCompactSimulationResult(results: SimulationResults): CompactSimulationResult | null {
-  if (results.data.length === 0 || results.headers.length === 0 || results.dataBySuffix) return null;
+  if (results.data.length === 0 || results.headers.length === 0) return null;
+  let dataBySuffixKey: string | undefined;
+  if (results.dataBySuffix) {
+    const suffixes = Object.entries(results.dataBySuffix);
+    if (suffixes.length !== 1 || suffixes[0][1] !== results.data) return null;
+    dataBySuffixKey = suffixes[0][0];
+  }
   const columnCount = results.headers.length;
   const values = new Float64Array(results.data.length * columnCount);
   let offset = 0;
@@ -13,13 +19,14 @@ export function toCompactSimulationResult(results: SimulationResults): CompactSi
       values[offset++] = typeof value === 'number' ? value : Number(value ?? Number.NaN);
     }
   }
-  const { data: _data, ...metadata } = results;
+  const { data: _data, dataBySuffix: _suffixData, ...metadata } = results;
   return {
     transport: 'float64-matrix',
     headers: results.headers,
     rowCount: results.data.length,
     columnCount,
     values: values.buffer,
+    dataBySuffixKey,
     metadata,
   };
 }
@@ -40,5 +47,10 @@ export function materializeSimulationResult(payload: SimulationResultPayload): S
     }
     data[rowIndex] = row;
   }
-  return { ...payload.metadata, headers: payload.headers, data };
+  return {
+    ...payload.metadata,
+    headers: payload.headers,
+    data,
+    ...(payload.dataBySuffixKey ? { dataBySuffix: { [payload.dataBySuffixKey]: data } } : {}),
+  };
 }

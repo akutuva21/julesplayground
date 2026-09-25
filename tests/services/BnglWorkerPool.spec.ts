@@ -5,12 +5,19 @@ import {
     getSharedEnsembleFeatureVector,
     isSharedEnsembleResultsHandle,
     materializeSharedSimulationResult,
+    estimateSimulationWorkerCount,
     writeSimulationResultsToShared,
 } from '../../services/BnglWorkerPool';
 import { mergeSimulationOptionsWithModelActionDefaults } from '../../services/bnglWorker';
 import { SimulationResults } from '../../types';
 
 describe('BnglWorkerPool shared ensemble helpers', () => {
+    it('caps parallel model copies as estimated retained model cost grows', () => {
+        expect(estimateSimulationWorkerCount({ species: [], reactions: [], reactionRules: [] } as any, 16)).toBe(8);
+        expect(estimateSimulationWorkerCount({ species: [], reactions: new Array(40_000), reactionRules: [] } as any, 16)).toBe(4);
+        expect(estimateSimulationWorkerCount({ species: [], reactions: [], reactionRules: new Array(300) } as any, 16)).toBe(1);
+    });
+
     it('writes and materializes shared ensemble runs without copying per-read', () => {
         const shared = createSharedEnsembleResults(2, ['time', 'A', 'B'], 2);
 

@@ -20,7 +20,7 @@ import { BNGLParser } from '@bngplayground/engine';
 import { validateBNGLModel, validationWarningsToMarkers } from './services/modelValidation';
 import { lintBNGL, lintDiagnosticsToMarkers } from './services/bnglLinter';
 import { getSharedModelFromUrl, clearModelFromUrl } from './src/utils/shareUrl';
-import { resolveAutoMethod, getSimulationOptionsFromParsedModel, reevaluateParameterExpressions, reevaluateSeedSpecies } from '@bngplayground/engine';
+import { resolveAutoMethod, getSimulationOptionsFromParsedModel, updatePreparedModel } from '@bngplayground/engine';
 import { parseParametersFromCode, isNumericLiteral, stripParametersBlock } from '@bngplayground/engine';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
@@ -128,6 +128,7 @@ function App() {
   const simulateAbortRef = useRef<AbortController | null>(null);
   const simOptionsRef = useRef<SimulationOptions | null>(null);
   const simulationWarningRef = useRef<string | null>(null);
+  const preparedParameterOverridesRef = useRef<Record<string, number>>({});
 
   // Editor resizing support
   const [lastResized, setLastResized] = useState<number>(Date.now());
@@ -212,6 +213,7 @@ function App() {
   const handleParse = useCallback(async (codeOverride?: any): Promise<BNGLModel | null> => {
     setResults(null);
     setCompletedModelSource(null);
+    preparedParameterOverridesRef.current = {};
     if (parseAbortRef.current) {
       parseAbortRef.current.abort('Parse request replaced.');
     }
@@ -323,13 +325,19 @@ function App() {
     // Resolve effective method (e.g. handle 'default' -> 'nf' if model has simulate_nf)
     const effectiveMethod = resolveAutoMethod(targetModel, options.method);
     setCurrentMethod(effectiveMethod);
-    setSimOptions(options);
+    const runOptions: SimulationOptions = {
+      ...options,
+      includeSpeciesData: options.includeSpeciesData ?? false,
+      includeExpandedNetwork: options.includeExpandedNetwork ?? false,
+    };
+    setSimOptions(runOptions);
     setIsSimulating(true);
     try {
-      const simResults = await bnglService.simulate(targetModel, options, {
+      const simResults = await bnglService.simulate(targetModel, runOptions, {
         signal: controller.signal,
         description: `Simulation (${effectiveMethod})`,
       });
+      preparedParameterOverridesRef.current = {};
       setResults(simResults);
       setCompletedModelSource(executionModelSource || null);
       const simulationWarning = simulationWarningRef.current;
@@ -376,25 +384,19 @@ function App() {
   async function applyParameterPatch(changes: Map<string, string>, currentModel: BNGLModel | null) {
     if (!currentModel) return;
     try {
-      // Merge changes; treat changed numeric values as base values
-      const baseParams: Record<string, number> = { ...currentModel.parameters };
-      for (const [k, v] of changes) {
-        const val = parseFloat(v);
-        if (!isNaN(val)) baseParams[k] = val;
-      }
-
       const directOverrides: Record<string, number> = {};
       for (const [name, expression] of changes) {
         const parsed = Number(expression);
         if (Number.isFinite(parsed)) directOverrides[name] = parsed;
       }
-      reevaluateParameterExpressions(currentModel, directOverrides);
       const originalSeeds = new Map<string, string>();
       for (const species of currentModel.species ?? []) {
         if (species.initialExpression) originalSeeds.set(species.name, species.initialExpression);
       }
-      reevaluateSeedSpecies(currentModel, originalSeeds);
-
+      updatePreparedModel(currentModel, directOverrides, { mutate: true, seedExpressions: originalSeeds });
+      if (results && simOptionsRef.current) {
+        Object.assign(preparedParameterOverridesRef.current, directOverrides);
+      }
       currentModel.cacheRevision = (currentModel.cacheRevision ?? 0) + 1;
 
       // Update state to reflect parameter-only changes; do not reparse or simulate
@@ -433,11 +435,7 @@ function App() {
     setStatus({ type: 'info', message: 'Updating simulation for parameter change...' });
     try {
       const effectiveMethod = resolveAutoMethod(updatedModel, options.method);
-      const overrides: Record<string, number> = {};
-      for (const name of changes.keys()) {
-        const value = updatedModel.parameters[name];
-        if (Number.isFinite(value)) overrides[name] = value;
-      }
+      const overrides = { ...preparedParameterOverridesRef.current };
       const simResults = await bnglService.simulatePreparedWithOverrides(overrides, options, {
         signal: controller.signal,
         description: 'Simulation (parameter update)',
@@ -458,6 +456,43 @@ function App() {
       setIsSimulating(false);
     }
   };
+
+  const loadPreparedNetwork = useCallback(async () => {
+    if (!model) throw new Error('No model is available for network retrieval');
+    const network = await bnglService.getPreparedNetwork(preparedParameterOverridesRef.current, {
+      description: 'Load expanded network for analysis',
+    });
+    setResults((current) => current ? {
+      ...current,
+      expandedReactions: network.reactions ?? [],
+      expandedSpecies: network.species ?? [],
+    } : current);
+  }, [model]);
+
+  const loadSpeciesTrajectory = useCallback(async () => {
+    if (!model) throw new Error('No model is available for species-level simulation data');
+    if (!results) throw new Error('No completed simulation results are available');
+    const options = simOptionsRef.current;
+    if (!options) throw new Error('No completed simulation settings are available');
+    const speciesResults = await bnglService.simulatePreparedWithOverrides(
+      { ...preparedParameterOverridesRef.current },
+      { ...options, includeSpeciesData: true, includeExpandedNetwork: false },
+      { description: 'Load species trajectories for analysis' },
+    );
+    const hydratedResults = {
+      ...results,
+      speciesHeaders: speciesResults.speciesHeaders,
+      speciesData: speciesResults.speciesData,
+      speciesDataBySuffix: speciesResults.speciesDataBySuffix,
+    };
+    setResults((current) => current ? {
+      ...current,
+      speciesHeaders: speciesResults.speciesHeaders,
+      speciesData: speciesResults.speciesData,
+      speciesDataBySuffix: speciesResults.speciesDataBySuffix,
+    } : current);
+    return hydratedResults;
+  }, [model, results]);
 
   const handleCancelSimulation = useCallback(() => {
     if (simulateAbortRef.current) {
@@ -865,7 +900,9 @@ function App() {
     }
     setStatus({ type: 'info', message: 'Generating NET file...' });
     try {
-      const generatedModel = await bnglService.generateNetwork(model);
+      const generatedModel = await bnglService.getPreparedNetwork(preparedParameterOverridesRef.current, {
+        description: 'Retrieve prepared network for NET export',
+      }, model);
       const netString = await exportToNet(generatedModel);
       const blob = new Blob([netString], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
@@ -889,7 +926,9 @@ function App() {
     setStatus({ type: 'info', message: 'Generating ODE (.ode) file...' });
     try {
       const { exportModelToODE } = await import('./services/exportODE');
-      const generatedModel = await bnglService.generateNetwork(model);
+      const generatedModel = await bnglService.getPreparedNetwork(preparedParameterOverridesRef.current, {
+        description: 'Retrieve prepared network for ODE export',
+      }, model);
       const odeString = await exportModelToODE(generatedModel, loadedModelName?.replace(/\s+/g, '_') || 'model');
       const blob = new Blob([odeString], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
@@ -1138,6 +1177,8 @@ function App() {
                   bnglCode={code}
                   modelSource={completedModelSource}
                   simulationOptions={simOptions}
+                  onRequestPreparedNetwork={loadPreparedNetwork}
+                  onRequestSpeciesData={loadSpeciesTrajectory}
                   onLoadModel={(modelCode, name, id) => {
                     setLoadedModelId(id);
                     setLoadedModelName(name);

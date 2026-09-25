@@ -552,17 +552,21 @@ export class CVODESolver {
     return true;
   }
 
-  updateRateConstants(newRates: Float64Array): void {
+  updateRateConstants(newRates: Float64Array): boolean {
     const m = CVODESolver.module;
-    if (!m || !this.networkHandle) return;
+    if (!m || !this.networkHandle) return false;
     const updateRateConstants = m._cvode_update_rate_constants ?? m._update_rate_constants;
-    if (!updateRateConstants) return;
+    if (!updateRateConstants) return false;
 
     const ptr = m._malloc(newRates.length * 8);
-    if (!ptr) return;
-    m.HEAPF64.set(newRates, ptr >> 3);
-    updateRateConstants(this.networkHandle, ptr, newRates.length);
-    m._free(ptr);
+    if (!ptr) return false;
+    try {
+      m.HEAPF64.set(newRates, ptr >> 3);
+      updateRateConstants(this.networkHandle, ptr, newRates.length);
+      return true;
+    } finally {
+      m._free(ptr);
+    }
   }
 
   private ensureInitialized(y0: Float64Array, t0: number): { success: true } | { success: false; errorMessage: string } {

@@ -279,7 +279,8 @@ export interface CompactSimulationResult {
     rowCount: number;
     columnCount: number;
     values: ArrayBuffer;
-    metadata: Omit<SimulationResults, 'data'>;
+    dataBySuffixKey?: string;
+    metadata: Omit<SimulationResults, 'data' | 'dataBySuffix'>;
 }
 
 export interface SSAInfluenceData {
@@ -361,8 +362,9 @@ export interface SimulationOptions {
     memoryLimit?: number;
     verbose?: boolean;
     includeInfluence?: boolean;
+    /** Include species trajectories; defaults to false to keep standard results compact. */
     includeSpeciesData?: boolean;
-    /** Include expanded reaction/species metadata in results (default: true). */
+    /** Include expanded species/reactions; defaults to false and can be requested from a prepared worker model. */
     includeExpandedNetwork?: boolean;
     maxEvents?: number;
     /** Record individual reaction firing events for information-theoretic analysis */
@@ -419,6 +421,7 @@ export type WorkerRequest =
     | { id: number; type: 'simulate'; payload: { model: BNGLModel; options: SimulationOptions } }
     | { id: number; type: 'cache_model'; payload: { model: BNGLModel } }
     | { id: number; type: 'release_model'; payload: { modelId: number } }
+    | { id: number; type: 'get_prepared_network'; payload: { modelId: number; parameterOverrides?: Record<string, number> } }
     | { id: number; type: 'simulate'; payload: { modelId: number; parameterOverrides?: Record<string, number>; options: SimulationOptions; sharedOutput?: SharedSimulationOutputDescriptor } }
     | { id: number; type: 'generate_network'; payload: { model: BNGLModel; options?: NetworkGeneratorOptions } }
     | { id: number; type: 'atomize'; payload: string }
@@ -437,6 +440,8 @@ export type WorkerResponse =
     | { id: number; type: 'cache_model_error'; payload: SerializedWorkerError }
     | { id: number; type: 'release_model_success'; payload: { modelId: number } }
     | { id: number; type: 'release_model_error'; payload: SerializedWorkerError }
+    | { id: number; type: 'get_prepared_network_success'; payload: BNGLModel }
+    | { id: number; type: 'get_prepared_network_error'; payload: SerializedWorkerError }
     | { id: number; type: 'simulate_error'; payload: SerializedWorkerError }
     | { id: number; type: 'generate_network_success'; payload: BNGLModel }
     | { id: number; type: 'generate_network_error'; payload: SerializedWorkerError }

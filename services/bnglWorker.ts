@@ -174,8 +174,8 @@ const workerVerboseLog = (...args: any[]) => {
   console.log(...args);
 };
 const cachedModels = new Map<number, BNGLModel>();
-// Generated networks are cached separately so parameter-overridden simulations can
-// still start from the original rule model when rates or seed expressions change.
+// Generated networks are cached separately so parameter variants can reuse the
+// original rule model when topology or compartment scaling needs regeneration.
 const expandedCachedModels = new Map<number, BNGLModel>();
 let nextModelId = 1;
 // Keep more compact source models than expanded networks: generated networks can
@@ -603,7 +603,8 @@ if (typeof ctx.addEventListener === 'function') {
             phases.some(p => p.method !== phases[0].method);
 
           // Pure NFsim keeps compact source. Other methods reuse worker-owned
-          // topology when overrides do not change seed state or volume scaling.
+          // topology when overrides do not change volume scaling. Seed amounts
+          // are refreshed on the cached network and do not change topology.
           if (cachedModelId !== undefined && cachedSourceModel && (!isNF || hasMixedMethods)) {
             const expanded = touchExpandedCachedModel(cachedModelId);
             const reusable = expanded && (!hasParameterOverrides || (
@@ -642,9 +643,9 @@ if (typeof ctx.addEventListener === 'function') {
                 () => ensureNotCancelled(id),
                 (p) => safePostMessage({ id, type: 'generate_network_progress', payload: p })
               );
-              // Reuse only the unmodified base network. Parameter-dependent local
-              // functions, Arrhenius rates, and seed expressions are baked during
-              // expansion, so override variants must continue to regenerate.
+              // Cache the baseline expansion. Later rate and seed amount changes
+              // are applied to this worker-owned network; compartment changes
+              // still require a fresh expansion for updated volume scaling.
               if (
                 cachedModelId !== undefined &&
                 cachedSourceModel !== undefined &&
@@ -846,6 +847,40 @@ if (typeof ctx.addEventListener === 'function') {
         console.error('[Worker] Release model error for job', id, error);
         const response: WorkerResponse = { id, type: 'release_model_error', payload: serializeError(error) };
         safePostMessage(response);
+      } finally {
+        markJobComplete(id);
+      }
+      return;
+    }
+
+    if (type === 'get_prepared_network') {
+      registerJob(id);
+      try {
+        const request = payload as { modelId?: unknown; parameterOverrides?: unknown };
+        if (typeof request?.modelId !== 'number') throw new Error('get_prepared_network payload missing modelId');
+        const source = cachedModels.get(request.modelId);
+        if (!source) throw new Error('Cached model not found in worker');
+        touchCachedModel(request.modelId);
+        const overrides = isRecord(request.parameterOverrides)
+          ? request.parameterOverrides as Record<string, number>
+          : undefined;
+        const canReuse = !overrides || Object.keys(overrides).length === 0 || canReuseExpandedNetworkForOverrides(source, overrides);
+        let expanded = canReuse ? touchExpandedCachedModel(request.modelId) : undefined;
+        let prepared = expanded
+          ? (overrides && Object.keys(overrides).length > 0 ? applyParameterOverrides(expanded, overrides) : expanded)
+          : (overrides && Object.keys(overrides).length > 0 ? applyParameterOverrides(source, overrides) : source);
+        if ((prepared.reactionRules?.length ?? 0) > 0 && (prepared.reactions?.length ?? 0) === 0) {
+          await loadEvaluator();
+          prepared = await generateExpandedNetworkService(
+            prepared,
+            () => ensureNotCancelled(id),
+            (progress) => safePostMessage({ id, type: 'generate_network_progress', payload: progress }),
+          );
+          if (canReuse && (prepared.reactions?.length ?? 0) > 0) cacheExpandedModel(request.modelId, prepared);
+        }
+        safePostMessage({ id, type: 'get_prepared_network_success', payload: prepared } satisfies WorkerResponse);
+      } catch (error) {
+        safePostMessage({ id, type: 'get_prepared_network_error', payload: serializeError(error) } satisfies WorkerResponse);
       } finally {
         markJobComplete(id);
       }

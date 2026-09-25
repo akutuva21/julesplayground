@@ -101,18 +101,18 @@ describe('expanded-network dependency safety', () => {
     expect(canReuseExpandedNetworkForOverrides(makeModel(), { ka: 2 })).toBe(true);
   });
 
-  it('rejects direct and transitive seed dependencies', () => {
+  it('reuses topology for direct and transitive seed amount dependencies', () => {
     const model = makeModel();
     model.parameters.dose = 10;
     model.paramExpressions = { A0: 'dose * 2' };
-    expect(canReuseExpandedNetworkForOverrides(model, { dose: 20 })).toBe(false);
+    expect(canReuseExpandedNetworkForOverrides(model, { dose: 20 })).toBe(true);
   });
 
-  it('rejects seed dependencies through custom functions', () => {
+  it('reuses topology for seed dependencies through custom functions', () => {
     const model = makeModel();
     model.functions = [{ name: 'seedAmount', args: [], expression: 'A0 * 2' } as any];
     model.species[0].initialExpression = 'seedAmount()';
-    expect(canReuseExpandedNetworkForOverrides(model, { A0: 150 })).toBe(false);
+    expect(canReuseExpandedNetworkForOverrides(model, { A0: 150 })).toBe(true);
   });
 });
 

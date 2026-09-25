@@ -1,7 +1,6 @@
 import { simulate } from '../simulation/SimulationLoop';
 import { loadEvaluator } from '../simulation/ExpressionEvaluator';
-import { reevaluateParameterExpressions, reevaluateSeedSpecies } from '../../utils/paramUtils';
-import { updateMassActionRates } from './DoseResponse';
+import { forkPreparedModel, updatePreparedModel } from '../../utils/preparedModel';
 import { BNGLModel, SimulationOptions } from '../../types';
 
 export interface ParameterScanOptions {
@@ -155,11 +154,9 @@ export async function runParameterScan(
       observables[observable.name] = [];
     });
 
-    const runModel = structuredClone(expandedModel);
+    const runModel = forkPreparedModel(expandedModel);
     for (const value of xValues) {
-      reevaluateParameterExpressions(runModel, { [options.parameter]: value });
-      reevaluateSeedSpecies(runModel, seedExpressions);
-      updateMassActionRates(runModel);
+      updatePreparedModel(runModel, { [options.parameter]: value }, { mutate: true, seedExpressions });
       const result = await simulate(0, runModel, leanSimulationOptions, {
         checkCancelled: () => { },
         postMessage: () => { },
@@ -185,15 +182,13 @@ export async function runParameterScan(
     observables[observable.name] = yValues.map(() => new Array(xValues.length).fill(0));
   });
 
-  const runModel = structuredClone(expandedModel);
+  const runModel = forkPreparedModel(expandedModel);
   for (let yIndex = 0; yIndex < yValues.length; yIndex += 1) {
     for (let xIndex = 0; xIndex < xValues.length; xIndex += 1) {
-      reevaluateParameterExpressions(runModel, {
+      updatePreparedModel(runModel, {
         [options.parameter]: xValues[xIndex],
         [options.parameter2]: yValues[yIndex],
-      });
-      reevaluateSeedSpecies(runModel, seedExpressions);
-      updateMassActionRates(runModel);
+      }, { mutate: true, seedExpressions });
       const result = await simulate(0, runModel, leanSimulationOptions, {
         checkCancelled: () => { },
         postMessage: () => { },

@@ -23,4 +23,17 @@ describe('worker result matrix transport', () => {
     };
     expect(toCompactSimulationResult(source)).toBeNull();
   });
+
+  it('reconstructs a single default suffix without cloning duplicate object rows', () => {
+    const rows = [{ time: 0, A: 2 }, { time: 1, A: 3 }];
+    const source: SimulationResults = {
+      headers: ['time', 'A'],
+      data: rows,
+      dataBySuffix: { __default__: rows },
+    };
+    const compact = toCompactSimulationResult(source);
+    expect(compact?.dataBySuffixKey).toBe('__default__');
+    const materialized = materializeSimulationResult(compact!);
+    expect(materialized.dataBySuffix?.__default__).toBe(materialized.data);
+  });
 });

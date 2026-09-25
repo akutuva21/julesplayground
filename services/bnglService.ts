@@ -127,7 +127,7 @@ class BnglService {
       this.promises.delete(id);
       pending.cleanup();
 
-      if (type === 'parse_success' || type === 'simulate_success' || type === 'generate_network_success' || type === 'atomize_success' || type === 'analyse_network_success') {
+      if (type === 'parse_success' || type === 'simulate_success' || type === 'generate_network_success' || type === 'atomize_success' || type === 'analyse_network_success' || type === 'get_prepared_network_success') {
         pending.resolve(payload);
         return;
       }
@@ -137,13 +137,14 @@ class BnglService {
         return;
       }
 
-      if (type === 'parse_error' || type === 'simulate_error' || type === 'cache_model_error' || type === 'release_model_error' || type === 'generate_network_error' || type === 'atomize_error' || type === 'analyse_network_error') {
+      if (type === 'parse_error' || type === 'simulate_error' || type === 'cache_model_error' || type === 'release_model_error' || type === 'get_prepared_network_error' || type === 'generate_network_error' || type === 'atomize_error' || type === 'analyse_network_error') {
         const errType = type === 'parse_error' ? 'parse'
           : type === 'simulate_error' ? 'simulate'
           : type === 'atomize_error' ? 'atomize'
           : type === 'generate_network_error' ? 'generate_network'
           : type === 'analyse_network_error' ? 'analyse_network'
           : type === 'release_model_error' ? 'release_model'
+          : type === 'get_prepared_network_error' ? 'get_prepared_network'
           : 'cache_model';
         const err = toError(errType, payload);
         pending.reject(err);
@@ -285,6 +286,8 @@ class BnglService {
         request = { id, type, payload: payload as any };
       } else if (type === 'cache_model') {
         request = { id, type, payload: payload as { model: BNGLModel } };
+      } else if (type === 'get_prepared_network') {
+        request = { id, type, payload: payload as { modelId: number; parameterOverrides?: Record<string, number> } };
       } else {
         request = { id, type, payload } as WorkerRequest;
       }
@@ -428,14 +431,36 @@ class BnglService {
     parameterOverrides: Record<string, number>,
     options: SimulationOptions,
     requestOptions?: RequestOptions,
+    sourceModel?: BNGLModel,
   ): Promise<SimulationResults> {
-    const prepared = this.lastCachedModelPromise;
+    const prepared = this.resolvePreparedModel(sourceModel, requestOptions);
     if (!prepared) {
       return Promise.reject(new Error('No prepared model is available for parameter update'));
     }
     return prepared.then((modelId) =>
       this.simulateCached(modelId, parameterOverrides, options, requestOptions),
     );
+  }
+
+  /** Fetch expanded topology only when a network view, flux view, or export needs it. */
+  public async getPreparedNetwork(
+    parameterOverrides?: Record<string, number>,
+    requestOptions?: RequestOptions,
+    sourceModel?: BNGLModel,
+  ): Promise<BNGLModel> {
+    const prepared = this.resolvePreparedModel(sourceModel, requestOptions);
+    if (!prepared) throw new Error('No prepared model is available for network retrieval');
+    const modelId = await prepared;
+    return this.postMessage<BNGLModel>('get_prepared_network', { modelId, parameterOverrides }, {
+      ...requestOptions,
+      description: requestOptions?.description ?? 'Retrieve prepared network',
+    });
+  }
+
+  private resolvePreparedModel(model?: BNGLModel, requestOptions?: RequestOptions): Promise<number> | undefined {
+    if (model && this.lastCachedModel !== model) return this.prepareModel(model, requestOptions);
+    if (this.lastCachedModelPromise) return this.lastCachedModelPromise;
+    return model ? this.prepareModel(model, requestOptions) : undefined;
   }
 
   /**

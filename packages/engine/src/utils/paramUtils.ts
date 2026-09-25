@@ -2,6 +2,28 @@ import { collapseWhitespace } from './stringUtils';
 import { stripInlineComment } from './stringUtils';
 import { BNGLParser } from '../services/graph/core/BNGLParser';
 import type { BNGLModel } from '../types';
+import { evaluateFunctionalRate } from '../services/simulation/ExpressionEvaluator';
+
+/** Evaluate model expressions with the same custom-function path used by simulation rates. */
+export function evaluateParameterExpression(
+  expression: string,
+  parameters: Map<string, number>,
+  functions: BNGLModel['functions'] = [],
+): number {
+  const customFunctionIsUsed = (functions ?? []).some((fn) =>
+    new RegExp(`\\b${fn.name}\\s*\\(`).test(expression),
+  );
+  if (customFunctionIsUsed) {
+    try {
+      return evaluateFunctionalRate(expression, Object.fromEntries(parameters), {}, functions, undefined, undefined, true);
+    } catch {
+      // Preserve parser fallback behavior for disabled or malformed custom functions.
+    }
+  }
+  return BNGLParser.evaluateExpression(expression, parameters, undefined, new Map(
+    (functions ?? []).map((fn) => [fn.name, { args: fn.args ?? [], expr: fn.expression ?? '' }]),
+  ));
+}
 
 /**
  * Re-evaluates seed species' initial concentrations based on their initial expressions
@@ -20,9 +42,6 @@ import type { BNGLModel } from '../types';
 export function reevaluateSeedSpecies(model: BNGLModel, seedExpressions: Map<string, string>): void {
   const paramMap = new Map<string, number>(Object.entries(model.parameters ?? {}));
   if (!paramMap.has('Na')) paramMap.set('Na', 1);
-  const functionMap = new Map<string, { args: string[]; expr: string }>(
-    (model.functions ?? []).map((fn) => [fn.name, { args: fn.args ?? [], expr: fn.expression ?? '' }]),
-  );
 
   for (const species of model.species ?? []) {
     const fallbackExpression = seedExpressions.get(species.name);
@@ -32,7 +51,7 @@ export function reevaluateSeedSpecies(model: BNGLModel, seedExpressions: Map<str
         ? fallbackExpression.trim()
         : '';
     if (!expr) continue;
-    const evaluated = BNGLParser.evaluateExpression(expr, paramMap, undefined, functionMap);
+    const evaluated = evaluateParameterExpression(expr, paramMap, model.functions);
     if (Number.isFinite(evaluated)) {
       const compartment = species.name.match(/^@([^:]+)::?/)?.[1] ?? species.name.match(/@([^@:\s]+)$/)?.[1];
       const volume = compartment ? Number(paramMap.get(`__compartment_${compartment}__`)) : 1;
@@ -60,16 +79,13 @@ export function reevaluateParameterExpressions(
   const expressions = model.paramExpressions ?? {};
   const paramMap = new Map<string, number>(Object.entries(parameters));
   if (!paramMap.has('Na')) paramMap.set('Na', 1);
-  const functionMap = new Map<string, { args: string[]; expr: string }>(
-    (model.functions ?? []).map((fn) => [fn.name, { args: fn.args ?? [], expr: fn.expression ?? '' }]),
-  );
 
   for (let pass = 0; pass <= Object.keys(expressions).length; pass++) {
     let changed = false;
     for (const [name, expression] of Object.entries(expressions)) {
       if (fixedNames.has(name)) continue;
       try {
-        const value = BNGLParser.evaluateExpression(expression, paramMap, undefined, functionMap);
+        const value = evaluateParameterExpression(expression, paramMap, model.functions);
         if (Number.isFinite(value) && paramMap.get(name) !== value) {
           paramMap.set(name, value);
           changed = true;

@@ -32,6 +32,22 @@ export const canUseSharedArrayBuffer = (): boolean => {
 };
 
 /**
+ * Conservative retained-model memory proxy used before the network is expanded.
+ * Concrete species/reactions are weighted by their approximate object footprint;
+ * each rule receives a larger allowance because it can expand combinatorially.
+ */
+export const estimateSimulationWorkerCount = (model: BNGLModel, maxWorkers: number): number => {
+    const estimatedBytes = (model.species?.length ?? 0) * 192
+        + (model.reactions?.length ?? 0) * 256
+        + (model.reactionRules?.length ?? 0) * 2 * 1024 * 1024;
+    const memoryBound = estimatedBytes < 4 * 1024 * 1024 ? 8
+        : estimatedBytes < 16 * 1024 * 1024 ? 4
+        : estimatedBytes < 64 * 1024 * 1024 ? 2
+        : 1;
+    return Math.max(1, Math.min(maxWorkers, memoryBound));
+};
+
+/**
  * Uses cryptographically secure random number generator to prevent predictability
  * in inter-process communication IDs.
  */
@@ -298,10 +314,11 @@ export class BnglWorkerPool {
         });
     }
 
-    async initialize(): Promise<void> {
-        if (this.isInitialized) return;
+    async initialize(workerCount = this.poolSize): Promise<void> {
+        const targetWorkerCount = Math.max(1, Math.min(this.poolSize, Math.floor(workerCount)));
+        if (this.workers.length >= targetWorkerCount) return;
 
-        for (let i = 0; i < this.poolSize; i++) {
+        for (let i = this.workers.length; i < targetWorkerCount; i++) {
             // Use the same worker as BnglService
             const worker = new Worker(new URL('./bnglWorker.ts', import.meta.url), { type: 'module' });
             this.pendingWorkerRequests.set(worker, new Map());
@@ -333,9 +350,9 @@ export class BnglWorkerPool {
      * Run a single simulation on a specific worker or the next available one.
      */
     async simulate(model: BNGLModel, options: SimulationOptions, workerIdx?: number): Promise<SimulationResults> {
-        if (!this.isInitialized) await this.initialize();
+        if (!this.isInitialized) await this.initialize(1);
 
-        const idx = workerIdx ?? (this.nextWorkerIdx++ % this.poolSize);
+        const idx = workerIdx ?? (this.nextWorkerIdx++ % this.workers.length);
         const worker = this.workers[idx];
         return this.requestOnWorker(
             worker,
@@ -361,11 +378,13 @@ export class BnglWorkerPool {
         count: number,
         onProgress?: (index: number) => void
     ): Promise<SimulationResults[] | SharedEnsembleResultsHandle> {
-        if (!this.isInitialized) await this.initialize();
+        const desiredWorkers = Math.min(count, estimateSimulationWorkerCount(model, this.poolSize));
+        if (this.workers.length < desiredWorkers) await this.initialize(desiredWorkers);
+        const workers = this.workers.slice(0, desiredWorkers);
 
         // Prepare model on ALL workers for cached simulation using Promise.allSettled to avoid leaking on partial failures
         const preparationResults = await Promise.allSettled(
-            this.workers.map(w => this.prepareModelOnWorker(w, model))
+            workers.map(w => this.prepareModelOnWorker(w, model))
         );
 
         const failures = preparationResults.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
@@ -374,7 +393,7 @@ export class BnglWorkerPool {
             await Promise.all(
                 preparationResults.map((res, i) => {
                     if (res.status === 'fulfilled') {
-                        return this.releaseModelOnWorker(this.workers[i], res.value).catch(() => {});
+                        return this.releaseModelOnWorker(workers[i], res.value).catch(() => {});
                     }
                     return Promise.resolve();
                 })
@@ -384,13 +403,13 @@ export class BnglWorkerPool {
 
         const modelIds = preparationResults.map((r) => (r as PromiseFulfilledResult<number>).value);
         try {
-            const initialWaveCount = Math.min(count, this.workers.length);
+            const initialWaveCount = Math.min(count, workers.length);
             const initialResults: SimulationResults[] = new Array(initialWaveCount);
             let completed = 0;
             const initialWave = await Promise.allSettled(
                 Array.from({ length: initialWaveCount }, async (_, taskIdx) => {
                     const result = await this.simulateCachedOnWorker(
-                        this.workers[taskIdx],
+                        workers[taskIdx],
                         modelIds[taskIdx],
                         { ...options, seed: taskIdx }
                     );
@@ -428,8 +447,8 @@ export class BnglWorkerPool {
                     writeSimulationResultsToShared(shared, taskIdx, initialResults[taskIdx]);
                 }
 
-                await this.runBoundedEnsembleTasks(count, initialWaveCount, async (workerIdx, taskIdx) => {
-                    const worker = this.workers[workerIdx];
+                await this.runBoundedEnsembleTasks(workers, count, initialWaveCount, async (workerIdx, taskIdx) => {
+                    const worker = workers[workerIdx];
                     const modelId = modelIds[workerIdx];
                     await this.simulateCachedOnWorkerShared(worker, modelId, { ...options, seed: taskIdx }, {
                         slot: taskIdx,
@@ -452,8 +471,8 @@ export class BnglWorkerPool {
                 results[taskIdx] = initialResults[taskIdx];
             }
 
-            await this.runBoundedEnsembleTasks(count, initialWaveCount, async (workerIdx, taskIdx) => {
-                const worker = this.workers[workerIdx];
+            await this.runBoundedEnsembleTasks(workers, count, initialWaveCount, async (workerIdx, taskIdx) => {
+                const worker = workers[workerIdx];
                 const modelId = modelIds[workerIdx];
 
                 const res = await this.simulateCachedOnWorker(worker, modelId, { ...options, seed: taskIdx });
@@ -464,7 +483,7 @@ export class BnglWorkerPool {
 
             return results;
         } finally {
-            await Promise.all(this.workers.map((w, i) => this.releaseModelOnWorker(w, modelIds[i])));
+            await Promise.all(workers.map((w, i) => this.releaseModelOnWorker(w, modelIds[i])));
         }
     }
 
@@ -477,8 +496,8 @@ export class BnglWorkerPool {
         onProgress?: (completed: number) => void,
     ): Promise<SimulationResults[]> {
         if (overrides.length === 0) return [];
-        if (!this.isInitialized) await this.initialize();
-        const workerCount = Math.min(this.workers.length, overrides.length);
+        const workerCount = Math.min(overrides.length, estimateSimulationWorkerCount(model, this.poolSize));
+        if (this.workers.length < workerCount) await this.initialize(workerCount);
         const workers = this.workers.slice(0, workerCount);
         const preparation = await Promise.allSettled(workers.map((worker) => this.prepareModelOnWorker(worker, model)));
         const failedPreparation = preparation.find((result): result is PromiseRejectedResult => result.status === 'rejected');
@@ -518,12 +537,13 @@ export class BnglWorkerPool {
     }
 
     private async runBoundedEnsembleTasks(
+        workers: Worker[],
         count: number,
         initialWaveCount: number,
         runTask: (workerIdx: number, taskIdx: number) => Promise<void>
     ): Promise<void> {
-        const workerCount = this.workers.length;
-        const workerLoops = this.workers.map(async (_worker, workerIdx) => {
+        const workerCount = workers.length;
+        const workerLoops = workers.map(async (_worker, workerIdx) => {
             // Each worker already completed its corresponding initial-wave task.
             // Continue the same modulo assignment while awaiting every request
             // before posting that worker's next simulation.

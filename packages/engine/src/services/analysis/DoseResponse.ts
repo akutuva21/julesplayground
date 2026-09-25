@@ -20,7 +20,7 @@ import { findSteadyState } from "./SteadyStateFinder";
 import type { SteadyStateConfig, SteadyState } from "./SteadyStateFinder";
 import type { BNGLModel, BNGLReaction, BNGLSpecies } from "../../types";
 import { buildOdeSystem } from "../simulation/SimulationLoop";
-import { reevaluateParameterExpressions, reevaluateSeedSpecies } from "../../utils/paramUtils";
+import { forkPreparedModel, updatePreparedModel } from "../../utils/preparedModel";
 import { buildStoichiometryMatrix } from "../../utils/stoichiometry";
 
 // ── Public interfaces ──────────────────────────────────────────────
@@ -298,7 +298,7 @@ function detectBifurcationPoints(
 import { simulate } from "../simulation/SimulationLoop";
 import { evaluateFunctionalRate, clearAllEvaluatorCaches } from "../simulation/ExpressionEvaluator";
 function cloneExpandedModel(model: BNGLModel): BNGLModel {
-  return structuredClone(model);
+  return forkPreparedModel(model);
 }
 
 /**
@@ -327,19 +327,7 @@ function cloneExpandedModel(model: BNGLModel): BNGLModel {
  *   of implementing parameter evaluation inline.
  */
 export function updateMassActionRates(model: BNGLModel): void {
-    const context = model.parameters ?? {};
-    for (const reaction of model.reactions ?? []) {
-        if (!reaction.isFunctionalRate && reaction.rate && typeof reaction.rate === 'string') {
-            try {
-                const updatedRate = evaluateFunctionalRate(reaction.rate, context, {}, model.functions);
-                if (Number.isFinite(updatedRate)) {
-                    reaction.rateConstant = updatedRate;
-                }
-            } catch {
-                // Keep the existing concrete rate when a symbolic update fails.
-            }
-        }
-    }
+    updatePreparedModel(model, {}, { mutate: true, refreshInitialState: false });
     clearAllEvaluatorCaches();
 }
 
@@ -376,9 +364,7 @@ export async function computeDoseResponseBySimulation(
 
     for (const dose of doses) {
         try {
-            reevaluateParameterExpressions(runModel, { [inputParameter]: dose });
-            reevaluateSeedSpecies(runModel, seedExpressions);
-            updateMassActionRates(runModel);
+            updatePreparedModel(runModel, { [inputParameter]: dose }, { mutate: true, seedExpressions });
 
             const simResult = await simulate(0, runModel, simOptions, {
                 checkCancelled: () => { },
@@ -507,9 +493,8 @@ export async function computeDoseResponse(
 
     // Re-evaluate all source seed expressions for each dose. This updates
     // initial pools and conserved totals as well as the parameter table.
-    reevaluateParameterExpressions(preparedModel, { [inputParameter]: dose });
+    updatePreparedModel(preparedModel, { [inputParameter]: dose }, { mutate: true, seedExpressions });
     const params: Record<string, number> = { ...preparedModel.parameters };
-    reevaluateSeedSpecies(preparedModel, seedExpressions);
     odeSystem.updateParameters?.(params);
 
     const doseInitialState = new Float64Array(n);
