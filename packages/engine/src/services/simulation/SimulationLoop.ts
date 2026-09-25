@@ -63,6 +63,41 @@ function setSafeArrayField<T>(target: Record<string, T[]>, key: string, value: T
   }
 }
 
+function removeParenthesizedSegments(value: string): string {
+  const parts: string[] = [];
+  let segmentStart = 0;
+  let groupStart = -1;
+  let depth = 0;
+
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index];
+    if (character === '(') {
+      if (depth === 0) {
+        parts.push(value.slice(segmentStart, index));
+        groupStart = index;
+      }
+      depth++;
+    } else if (character === ')' && depth > 0) {
+      depth--;
+      if (depth === 0) {
+        segmentStart = index + 1;
+        groupStart = -1;
+      }
+    }
+  }
+
+  parts.push(value.slice(depth > 0 ? groupStart : segmentStart));
+  return parts.join('');
+}
+
+function rateRuleStateNameFromPattern(value: string): string | undefined {
+  const normalized = removeParenthesizedSegments(value.trim().replace(/^@[A-Za-z0-9_]+::/, ''));
+  const prefix = 'M___rate_rule_state__';
+  if (!normalized.startsWith(prefix)) return undefined;
+  const name = normalized.slice(prefix.length).split('@', 1)[0];
+  return name.length > 0 ? name : undefined;
+}
+
 function extractIfConditions(expression: string): string[] {
   const conditions: string[] = [];
   let idx = 0;
@@ -434,11 +469,10 @@ export async function simulate(
   const model = cloneModelForSimulation(expandedInput);
 
   const rateRuleSpeciesTarget = (value: string): { target: string; synthetic: boolean } | undefined => {
-    const normalized = value.trim()
+    const normalized = removeParenthesizedSegments(value.trim()
       .replace(/^\$/, '')
       .replace(/^@[A-Za-z0-9_]+::/, '')
-      .split('@')[0]
-      .replace(/\([^)]*\)$/, '');
+      .split('@')[0]);
     const synthetic = /^M___rate_rule_state__(.+)$/.exec(normalized);
     if (synthetic) return { target: synthetic[1], synthetic: true };
     const ordinary = /^M_(.+)$/.exec(normalized);
@@ -602,8 +636,7 @@ export async function simulate(
     const canonicalBase = (value: string): string => value
       .replace(/^@[^:]+::/, '')
       .split('.')
-      .map((molecule) => molecule
-        .replace(/\([^)]*\)/g, '')
+      .map((molecule) => removeParenthesizedSegments(molecule)
         .replace(/@[^@:\s]+$/, '')
         .replace(/^M_/, ''))
       .join('.');
@@ -1356,20 +1389,18 @@ export async function simulate(
       const candidates = model.species
         .map((species, index) => ({ species, index }))
         .filter(({ species }) => {
-          const base = species.name
+          const base = removeParenthesizedSegments(species.name
             .replace(/^@[A-Za-z0-9_]+::/, '')
-            .replace(/\([^)]*\)/g, '')
             .replace(/^M_/, '')
-            .replace(/@.*$/, '');
+            .replace(/@.*$/, ''));
           return base === targetBase;
         });
       if (candidates.length !== 1) return undefined;
       return { index: candidates[0].index, valueType: declaredType || 'amount' };
     };
 
-    const algebraicIdentifier = (value: string): string => value.trim()
-      .replace(/^@[A-Za-z0-9_]+::/, '')
-      .replace(/\([^)]*\)/g, '')
+    const algebraicIdentifier = (value: string): string => removeParenthesizedSegments(value.trim()
+      .replace(/^@[A-Za-z0-9_]+::/, ''))
       .replace(/[^A-Za-z0-9_]/g, '_')
       .replace(/^_+|_+$/g, '');
 
@@ -1506,10 +1537,14 @@ export async function simulate(
           // derivative discontinuous and can stall the integrator. Keep the
           // solved value in the observable/context namespace; callers that
           // explicitly request a projected state still get the legacy write.
-          if (projectState) {
-            currentState[target.index] = isOde
+          if (
+            projectState && Number.isInteger(target.index) &&
+            target.index >= 0 && target.index < currentState.length
+          ) {
+            const projectedValue = isOde
               ? (odeUsesAmountState ? amount : amount / volume)
               : amount;
+            currentState.fill(projectedValue, target.index, target.index + 1);
           }
           const baseSymbol = target.symbol.replace(/_(?:amt|conc)$/, '');
           const aliases = new Set([speciesName, baseSymbol, target.symbol]);
@@ -1650,16 +1685,13 @@ export async function simulate(
       // algebraic companion rules (k1 - k2 = 0), rather than using the
       // parameter's initial seed value forever.
       for (let i = 0; i < model.species.length; i++) {
-        const normalized = model.species[i].name
-          .replace(/^@[A-Za-z0-9_]+::/, '')
-          .replace(/\([^)]*\)$/, '');
-        const match = /^M___rate_rule_state__(.+?)(?:@.*)?$/.exec(normalized);
-        if (!match || !isSafeObjectKey(match[1])) continue;
+        const rateRuleName = rateRuleStateNameFromPattern(model.species[i].name);
+        if (!rateRuleName || !isSafeObjectKey(rateRuleName)) continue;
         const amount = isOde && !odeUsesAmountState
           ? currentState[i] * (speciesVolumes[i] || 1)
           : currentState[i];
-        setSafeNumberField(observableContext, match[1], amount);
-        setSafeNumberField(observableContext, `${match[1]}_amt`, amount);
+        setSafeNumberField(observableContext, rateRuleName, amount);
+        setSafeNumberField(observableContext, `${rateRuleName}_amt`, amount);
       }
       if (!suppressAssignmentRuleValues) applyAssignmentRuleValues(observableContext, currentTime, currentState);
       applyAlgebraicConstraints(observableContext, currentState, projectAlgebraicState);
@@ -1683,17 +1715,11 @@ export async function simulate(
       const withoutCompartment = trimmed.startsWith('@') && trimmed.includes(':')
         ? trimmed.slice(trimmed.indexOf(':') + 1)
         : trimmed;
-      const withoutState = withoutCompartment.replace(/\([^)]*\)/g, '');
+      const withoutState = removeParenthesizedSegments(withoutCompartment);
       return withoutState.replace(/[^A-Za-z0-9_]/g, '_').replace(/^_+|_+$/g, '');
     };
 
-    const rateRuleStateName = (value: string): string | undefined => {
-      const normalized = value.trim()
-        .replace(/^@[A-Za-z0-9_]+::/, '')
-        .replace(/\([^)]*\)$/, '');
-      const match = /^M___rate_rule_state__(.+?)(?:@.*)?$/.exec(normalized);
-      return match?.[1];
-    };
+    const rateRuleStateName = rateRuleStateNameFromPattern;
     let eventReactionFluxEvaluator: ((currentState: Float64Array, time: number, context: Record<string, number>) => void) | undefined;
     let suppressEventReactionFlux = false;
 
@@ -3543,7 +3569,7 @@ export async function simulate(
                     `[Worker] Functional rate evaluation for '${rxn.rateExpression}' failed: ${e instanceof Error ? e.message : String(e)}`
                   );
                 }
-                console.error(`[Worker] Functional rate evaluation for '${rxn.rateExpression}' failed:`, e instanceof Error ? e.message : String(e));
+                console.error("[Worker] Functional rate evaluation for '%s' failed:", rxn.rateExpression, e instanceof Error ? e.message : String(e));
                 rate = 0;
               }
             } else {
@@ -5218,9 +5244,6 @@ export async function simulate(
               denseF0 = undefined;
             }
 
-            if (result.errorMessage === "ROOT_FOUND" && VERBOSE_SIM_DEBUG) {
-              console.log(`[Worker] Root found at t=${t}. Re-evaluating rates.`);
-            }
             if (t >= segmentTarget - 1e-12 * Math.max(1, Math.abs(segmentTarget))
               && segmentTarget >= tTarget - 1e-12 * Math.max(1, Math.abs(tTarget))) break;
           }
