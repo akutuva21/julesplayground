@@ -61,8 +61,8 @@ importers:
         specifier: latest
         version: 5.17.0-beta1
       ml-matrix:
-        specifier: ^6.12.2
-        version: 6.14.0
+        specifier: ^6.15.0
+        version: 6.15.0
       pako:
         specifier: ^3.0.1
         version: 3.0.1
@@ -2956,8 +2956,8 @@ packages:
   ml-levenberg-marquardt@2.1.1:
     resolution: {integrity: sha512-2+HwUqew4qFFFYujYlQtmFUrxCB4iJAPqnUYro3P831wj70eJZcANwcRaIMGUVaH9NDKzfYuA4N5u67KExmaRA==}
 
-  ml-matrix@6.14.0:
-    resolution: {integrity: sha512-5W31+w+6jIm05l85N3Ik04fl+5LfN1lyJLBrEM/r/j7YmvwRclcUyQGXGFWXnN7ASzVjsAnAa3FUXrduAt168A==}
+  ml-matrix@6.15.0:
+    resolution: {integrity: sha512-wFa1v6KP8bKp+fj0nYmRs1Pb5K4zRkXGKsOvLinvILENFIADncm4XlOI+S1M7yuACMGfI6cfk0IifDgd4j5xmw==}
 
   monaco-editor@0.56.0:
     resolution: {integrity: sha512-sXboRm3BeBeLm938eaiyLMe0OxzfXIlZvbv4ir/jVgQy1zDhWjgmny0WoN45fuDKhCCQsYMbBJrv/A6jd8aCUg==}
@@ -6830,9 +6830,9 @@ snapshots:
   ml-levenberg-marquardt@2.1.1:
     dependencies:
       is-any-array: 0.1.1
-      ml-matrix: 6.14.0
+      ml-matrix: 6.15.0
 
-  ml-matrix@6.14.0:
+  ml-matrix@6.15.0:
     dependencies:
       is-any-array: 3.0.0
       ml-array-rescale: 2.0.0

@@ -61,7 +61,7 @@
     "jsep": "^1.4.0",
     "jszip": "^3.10.1",
     "libsbmljs_stable": "latest",
-    "ml-matrix": "^6.12.2",
+    "ml-matrix": "^6.15.0",
     "pako": "^3.0.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.5",
