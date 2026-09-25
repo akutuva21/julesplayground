@@ -296,7 +296,7 @@ function detectBifurcationPoints(
  * steady state at each dose.
  */
 import { simulate } from "../simulation/SimulationLoop";
-import { evaluateFunctionalRate, clearAllEvaluatorCaches } from "../simulation/ExpressionEvaluator";
+import { clearAllEvaluatorCaches } from "../simulation/ExpressionEvaluator";
 function cloneExpandedModel(model: BNGLModel): BNGLModel {
   return forkPreparedModel(model);
 }

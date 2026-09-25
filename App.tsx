@@ -16,7 +16,6 @@ import { loadModelCode, setCachedCode, getCachedCode } from './services/modelLoa
 import { loadModelCatalog, getModelCatalogSync, findCatalogExampleByQuery, type CatalogExample } from './services/modelCatalog';
 
 import SimulationModal from './components/SimulationModal';
-import { BNGLParser } from '@bngplayground/engine';
 import { validateBNGLModel, validationWarningsToMarkers } from './services/modelValidation';
 import { lintBNGL, lintDiagnosticsToMarkers } from './services/bnglLinter';
 import { getSharedModelFromUrl, clearModelFromUrl } from './src/utils/shareUrl';
@@ -434,7 +433,6 @@ function App() {
     setIsSimulating(true);
     setStatus({ type: 'info', message: 'Updating simulation for parameter change...' });
     try {
-      const effectiveMethod = resolveAutoMethod(updatedModel, options.method);
       const overrides = { ...preparedParameterOverridesRef.current };
       const simResults = await bnglService.simulatePreparedWithOverrides(overrides, options, {
         signal: controller.signal,
