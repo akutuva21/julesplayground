@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzePreparedModelUpdate, updatePreparedModel } from '../src/utils/preparedModel';
+import { updatePreparedModel } from '../src/utils/preparedModel';
 import type { BNGLModel } from '../src/types';
 
 function makeModel(): BNGLModel {
@@ -67,5 +67,15 @@ describe('prepared model updates', () => {
     expect(result.volumesChanged).toBe(true);
     expect(result.solverReinitRequired).toBe(true);
     expect(result.model.compartments?.[0].resolvedVolume).toBe(2);
+  });
+
+  it('does not let an unsafe compartment name alter the parameter object prototype', () => {
+    const model = makeModel();
+    model.compartments = [{ name: '__proto__', dimension: 3, size: 1 }];
+    model.paramExpressions = { __compartment___proto____: 'k' };
+    const result = updatePreparedModel(model, { k: 3 });
+
+    expect(Object.getPrototypeOf(result.model.parameters)).toBe(Object.prototype);
+    expect(Object.hasOwn(result.model.parameters, '__proto__')).toBe(false);
   });
 });

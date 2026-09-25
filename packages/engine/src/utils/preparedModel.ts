@@ -1,6 +1,7 @@
 import type { BNGLModel } from '../types';
 import { evaluateParameterExpression, reevaluateParameterExpressions } from './paramUtils';
 import { resolveCompartmentVolumesSync } from '../services/simulation/CompartmentResolver';
+import { setSafeNumberField } from './safeObjectKey';
 
 export interface PreparedModelUpdateImpact {
   affectedParameters: string[];
@@ -155,8 +156,8 @@ export function updatePreparedModel(
     target.compartments = resolved.compartments;
     for (const compartment of target.compartments ?? []) {
       const volume = compartment.resolvedVolume ?? compartment.size;
-      target.parameters[compartment.name] = volume;
-      target.parameters[`__compartment_${compartment.name}__`] = volume;
+      setSafeNumberField(target.parameters, compartment.name, volume);
+      setSafeNumberField(target.parameters, `__compartment_${compartment.name}__`, volume);
       const previous = oldVolumes.get(compartment.name);
       volumesChanged ||= previous?.[0] !== compartment.size || previous?.[1] !== compartment.resolvedVolume;
     }
