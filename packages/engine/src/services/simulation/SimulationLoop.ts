@@ -67,31 +67,31 @@ function removeParenthesizedSegments(value: string): string {
   const parts: string[] = [];
   let segmentStart = 0;
   let groupStart = -1;
-  let depth = 0;
 
   for (let index = 0; index < value.length; index++) {
     const character = value[index];
-    if (character === '(') {
-      if (depth === 0) {
-        parts.push(value.slice(segmentStart, index));
-        groupStart = index;
-      }
-      depth++;
-    } else if (character === ')' && depth > 0) {
-      depth--;
-      if (depth === 0) {
-        segmentStart = index + 1;
-        groupStart = -1;
-      }
+    if (groupStart < 0 && character === '(') {
+      parts.push(value.slice(segmentStart, index));
+      groupStart = index;
+    } else if (groupStart >= 0 && character === ')') {
+      groupStart = -1;
+      segmentStart = index + 1;
     }
   }
 
-  parts.push(value.slice(depth > 0 ? groupStart : segmentStart));
+  parts.push(value.slice(groupStart >= 0 ? groupStart : segmentStart));
   return parts.join('');
 }
 
+function removeTrailingParenthesizedSuffix(value: string): string {
+  if (!value.endsWith(')')) return value;
+  const groupStart = value.lastIndexOf('(');
+  if (groupStart < 0 || value.slice(groupStart + 1, -1).includes(')')) return value;
+  return value.slice(0, groupStart);
+}
+
 function rateRuleStateNameFromPattern(value: string): string | undefined {
-  const normalized = removeParenthesizedSegments(value.trim().replace(/^@[A-Za-z0-9_]+::/, ''));
+  const normalized = removeTrailingParenthesizedSuffix(value.trim().replace(/^@[A-Za-z0-9_]+::/, ''));
   const prefix = 'M___rate_rule_state__';
   if (!normalized.startsWith(prefix)) return undefined;
   const name = normalized.slice(prefix.length).split('@', 1)[0];
@@ -469,7 +469,7 @@ export async function simulate(
   const model = cloneModelForSimulation(expandedInput);
 
   const rateRuleSpeciesTarget = (value: string): { target: string; synthetic: boolean } | undefined => {
-    const normalized = removeParenthesizedSegments(value.trim()
+    const normalized = removeTrailingParenthesizedSuffix(value.trim()
       .replace(/^\$/, '')
       .replace(/^@[A-Za-z0-9_]+::/, '')
       .split('@')[0]);
