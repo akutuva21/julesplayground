@@ -35,6 +35,37 @@ describe('Atomizer SBML Core parity regressions', () => {
     expect(result.bngl).not.toMatch(/__assign_rule__S\(\)\s*=\s*\(\)/);
   });
 
+  it('does not emit a duplicate observable for concentration assignment-rule species', async () => {
+    const { result } = await atomize(`
+      <sbml xmlns="${CORE}" level="3" version="2">
+        <model id="concentrationAssignmentTarget">
+          <listOfCompartments><compartment id="c" size="1"/></listOfCompartments>
+          <listOfSpecies>
+            <species id="A" compartment="c" initialConcentration="1"/>
+            <species id="B" compartment="c" initialConcentration="2"/>
+            <species id="total" compartment="c" boundaryCondition="true" constant="false" hasOnlySubstanceUnits="false" initialConcentration="0"/>
+          </listOfSpecies>
+          <listOfRules>
+            <assignmentRule variable="total"><math xmlns="${MATH}"><apply><plus/><ci>A</ci><ci>B</ci></apply></math></assignmentRule>
+          </listOfRules>
+          <listOfParameters><parameter id="k" value="1"/></listOfParameters>
+          <listOfReactions>
+            <reaction id="convert">
+              <listOfReactants><speciesReference species="A"/></listOfReactants>
+              <listOfProducts><speciesReference species="B"/></listOfProducts>
+              <kineticLaw><math xmlns="${MATH}"><apply><times/><ci>k</ci><ci>total</ci></apply></math></kineticLaw>
+            </reaction>
+          </listOfReactions>
+        </model>
+      </sbml>`);
+
+    expect(result.success).toBe(true);
+    expect(() => parseBNGLStrict(result.bngl)).not.toThrow();
+    expect(result.bngl).toMatch(/^\s*total\(\)\s*=/m);
+    expect(result.bngl).not.toMatch(/^\s*Species total(?:_amt)?\s/m);
+    expect(result.bngl).toMatch(/convert:\s*M_A[^\n]*\bk\s*\*\s*total\(\)/);
+  });
+
   it('omits missing rule MathML instead of emitting a blank BNGL function', async () => {
     const { result } = await atomize(`
       <sbml xmlns="${CORE}" level="3" version="2">

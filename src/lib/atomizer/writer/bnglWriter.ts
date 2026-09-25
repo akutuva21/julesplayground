@@ -261,6 +261,16 @@ export function bnglFunction(
       // the label AND the lookup by the same name so the emitted BNGL binds AND is numerically
       // correct.
       const obsName = standardizeName(match);
+      if (
+        (assignmentRuleVariables.has(match) || assignmentRuleVariables.has(obsName)) &&
+        !observableConvertedRules.has(match) &&
+        !observableConvertedRules.has(obsName)
+      ) {
+        // A non-observable assignment-rule species is emitted as a zero-argument
+        // BNGL function. Refer to that function directly instead of inventing the
+        // missing `${obsName}_amt` observable.
+        return `${obsName}()`;
+      }
       if (isSaturationRate && speciesWithConcFunctions.has(obsName)) {
         return `${obsName}_amt`;
       } else if (speciesWithConcFunctions.has(obsName)) {
@@ -1114,6 +1124,10 @@ export function writeObservables(
       if (bnglId) {
         const pattern = idToPattern.get(bnglId);
         if (pattern) {
+          // Assignment-rule species are represented below either as a derived
+          // Molecules observable or as an executable function. Emitting direct
+          // Species observables here would collide with the latter in BNG2.
+          if (assignmentRuleTargets.has(id)) continue;
           // Use the actual pattern instead of the ID label (S1, S2...)
           // This avoids BioNetGen interpreting S1 as a molecule type
           lines.push(`Species ${name}_amt ${pattern}`);
