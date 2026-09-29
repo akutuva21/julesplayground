@@ -90,7 +90,8 @@ export const EXPECTED_MISMATCHES: Record<string, string> = {
 // Trajectory parity can hide a structurally smaller network, so these are
 // tracked separately from EXPECTED_MISMATCHES. Keys are lowercased basenames.
 export const EXPECTED_NETWORK_MISMATCHES: Record<string, string> = {
-  // placeholder: add entries as real divergences are triaged
+  complexdegradation:
+    'Rule04 omits DeleteMolecules keyword; BNG2 rejects rule application when degraded molecule is complexed with extra unmatched molecules',
 };
 
 // Allow steady-state models to have different row counts if values match in overlap
