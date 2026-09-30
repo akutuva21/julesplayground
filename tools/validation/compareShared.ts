@@ -104,7 +104,25 @@ export const EXPECTED_MISMATCHES: Record<string, string> = {
 // Trajectory parity can hide a structurally smaller network, so these are
 // tracked separately from EXPECTED_MISMATCHES. Keys are lowercased basenames.
 export const EXPECTED_NETWORK_MISMATCHES: Record<string, string> = {
-  // placeholder: add entries as real divergences are triaged
+  '190127_cho_egfr_best_fit': 'Structural network shape divergence in EGFR cell line model family (465 vs 618 reactions)',
+  '190127_cho_egfr_epigen': 'Structural network shape divergence in EGFR cell line model family (465 vs 618 reactions)',
+  '190127_cho_ha_egfr_l858r': 'Structural network shape divergence in EGFR cell line model family (465 vs 618 reactions)',
+  '190127_hela': 'Structural network shape divergence in EGFR cell line model family (465 vs 618 reactions)',
+  '190127_hmec': 'Structural network shape divergence in EGFR cell line model family (465 vs 618 reactions)',
+  '190127_mcf10a': 'Structural network shape divergence in EGFR cell line model family (465 vs 618 reactions)',
+  'barua_2007': 'Structural network shape divergence in Barua model family (1101 vs 1032 reactions)',
+  'baruabcr_2012': 'Structural network shape divergence in Barua BCR model family (23167 vs 24388 reactions)',
+  'blinov_2006': 'Structural network shape divergence in Blinov 2006 EGFR family (3745 vs 3749 reactions)',
+  'complexdegradation': 'Rule04 omits DeleteMolecules causing BNG2 to reject rule application on species with extra unmatched molecules',
+  'egfr': 'Structural network shape divergence in EGFR family (3745 vs 4301 reactions)',
+  'egfr_gen183ind67': 'Structural network shape divergence in Blinov 2006 EGFR family (3745 vs 3749 reactions)',
+  'egfr_gen1848ind184': 'Structural network shape divergence in Blinov 2006 EGFR family (3745 vs 3749 reactions)',
+  'egfr_gen400ind106': 'Structural network shape divergence in Blinov 2006 EGFR family (3745 vs 3749 reactions)',
+  'egfr_gen738ind73': 'Structural network shape divergence in Blinov 2006 EGFR family (3745 vs 3749 reactions)',
+  'egfr_ground': 'Structural network shape divergence in Blinov 2006 EGFR family (3745 vs 3749 reactions)',
+  'egfr_iter178p206': 'Structural network shape divergence in Blinov 2006 EGFR family (3745 vs 3749 reactions)',
+  'egfr_iter230p3h1': 'Structural network shape divergence in Blinov 2006 EGFR family (3745 vs 3749 reactions)',
+  'egfr_net': 'Structural network shape divergence in Blinov 2006 EGFR family (3745 vs 3749 reactions)',
 };
 
 // Allow steady-state models to have different row counts if values match in overlap
