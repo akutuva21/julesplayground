@@ -8,6 +8,7 @@
  */
 
 import type { BNGLModel } from '../../types';
+import { BNGLParser } from './core/BNGLParser';
 
 export interface NetFileParseResult {
   model: BNGLModel;
@@ -186,27 +187,47 @@ export function parseNetFile(content: string): NetFileParseResult {
 }
 
 /**
- * Parse a parameter line: <index> <name> <value>
+ * Parse a parameter line: <index> <name> <valueOrExpression>
  * Example: "1 NA 6.02e+23"
+ * Example: "18 Vc f*1.0e-12"
  */
 function parseParameterLine(line: string, model: BNGLModel, lineNum: number): void {
-  const parts = line.trim().split(/\s+/);
-  if (parts.length < 3) {
+  const trimmed = line.trim();
+  const firstSpace = trimmed.search(/\s/);
+  if (firstSpace <= 0) {
     throw new Error(
       `Invalid parameter format in .net file at line ${lineNum}: expected "index name value" (e.g., "1 NA 6.02e+23"), ` +
       `but got "${line.trim()}".`
     );
   }
 
-  const index = parseInt(parts[0]);
-  const name = parts[1];
-  const value = parseFloat(parts[2]);
-
-  if (isNaN(index) || isNaN(value)) {
+  const indexStr = trimmed.slice(0, firstSpace).trim();
+  const rest = trimmed.slice(firstSpace).trim();
+  const secondSpace = rest.search(/\s/);
+  if (secondSpace <= 0) {
     throw new Error(
-      `Invalid parameter in .net file at line ${lineNum}: the index and value must be numeric, ` +
-      `but got index="${parts[0]}", value="${parts[2]}".`
+      `Invalid parameter format in .net file at line ${lineNum}: expected "index name value" (e.g., "1 NA 6.02e+23"), ` +
+      `but got "${line.trim()}".`
     );
+  }
+
+  const name = rest.slice(0, secondSpace).trim();
+  const valueExpr = rest.slice(secondSpace + 1).trim();
+
+  const index = parseInt(indexStr, 10);
+  if (isNaN(index)) {
+    throw new Error(
+      `Invalid parameter in .net file at line ${lineNum}: the index must be numeric, but got index="${indexStr}".`
+    );
+  }
+
+  let value = Number(valueExpr);
+  if (isNaN(value)) {
+    try {
+      value = BNGLParser.evaluateExpression(valueExpr, new Map(Object.entries(model.parameters)));
+    } catch {
+      value = 0;
+    }
   }
 
   model.parameters[name] = value;
@@ -363,6 +384,8 @@ function parseReactionLine(
  *   8 IkB_active           15,23,57,61
  * Older/alternate writers use "<index> <name> <type> <patterns...>", e.g.
  *   1 Dimers Molecules EGFR(CR1!+)
+ * Groups may also have no species (e.g. "1 EmptyGroup"):
+ *   1 EmptyGroup
  * Both are accepted; the group form resolves its indices to species names.
  */
 function parseGroupLine(
@@ -372,7 +395,13 @@ function parseGroupLine(
   resolveParticipant: (token: string) => string
 ): void {
   const parts = line.trim().split(/\s+/);
-  const index = parseInt(parts[0]);
+  if (parts.length < 2) {
+    throw new Error(
+      `Invalid group line in .net file at line ${lineNum}: expected at least "index name"`
+    );
+  }
+
+  const index = parseInt(parts[0], 10);
   if (isNaN(index)) {
     throw new Error(
       `Invalid observable in .net file at line ${lineNum}: the observable index "${parts[0]}" is not a valid number.`
@@ -381,8 +410,17 @@ function parseGroupLine(
 
   const name = parts[1];
 
-  // Group form: the third token is a species index list, not a type keyword.
-  const looksLikeGroup = parts.length === 3 && isSpeciesIndexList(parts[2]);
+  if (parts.length === 2) {
+    model.observables.push({
+      name,
+      type: 'molecules',
+      pattern: ''
+    });
+    return;
+  }
+
+  const isTypeKeyword = ['molecules', 'species', 'counter'].includes(parts[2].toLowerCase());
+  const looksLikeGroup = isSpeciesIndexList(parts[2]) || (!isTypeKeyword && parts.length === 3);
 
   if (looksLikeGroup) {
     const species = splitParticipants(parts[2]).map(resolveParticipant);
@@ -409,11 +447,11 @@ function parseGroupLine(
 }
 
 /**
- * Parse a function line: <index> <name>() = <expression>
+ * Parse a function line: <index> <name>() = <expression> or <index> <name>() <expression>
  * Example: "1 TotEGFR() = EGFR_free + EGFR_bound"
+ * Example: "1 v1() v1__FREE"
  */
 function parseFunctionLine(line: string, model: BNGLModel, lineNum: number): void {
-  // Format: index name(args) = expression
   const trimmed = line.trim();
   const firstSpace = trimmed.search(/\s/);
   if (firstSpace <= 0) {
@@ -427,8 +465,8 @@ function parseFunctionLine(line: string, model: BNGLModel, lineNum: number): voi
   const rhs = trimmed.slice(firstSpace).trim();
   const openParen = rhs.indexOf('(');
   const closeParen = rhs.indexOf(')', openParen + 1);
-  const eqIdx = rhs.indexOf('=', closeParen + 1);
-  if (openParen <= 0 || closeParen <= openParen || eqIdx <= closeParen) {
+
+  if (openParen <= 0 || closeParen <= openParen) {
     throw new Error(
       `Invalid function format in .net file at line ${lineNum}: expected "index name(args) = expression" ` +
       `(e.g., "1 TotEGFR() = EGFR_free + EGFR_bound"), but got "${line.trim()}".`
@@ -436,15 +474,19 @@ function parseFunctionLine(line: string, model: BNGLModel, lineNum: number): voi
   }
 
   const index = parseInt(indexToken, 10);
-  const name = rhs.slice(0, openParen).trim();
-  const argsStr = rhs.slice(openParen + 1, closeParen).trim();
-  const expression = rhs.slice(eqIdx + 1).trim();
-
   if (isNaN(index)) {
     throw new Error(
       `Invalid function in .net file at line ${lineNum}: the function index "${indexToken}" is not a valid number.`
     );
   }
+
+  const name = rhs.slice(0, openParen).trim();
+  const argsStr = rhs.slice(openParen + 1, closeParen).trim();
+  let afterClose = rhs.slice(closeParen + 1).trim();
+  if (afterClose.startsWith('=')) {
+    afterClose = afterClose.slice(1).trim();
+  }
+  const expression = afterClose;
 
   const args = argsStr ? parseCommaSeparated(argsStr, false) : [];
 
