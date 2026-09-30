@@ -426,16 +426,17 @@ function parseGroupLine(
 }
 
 /**
- * Parse a function line: <index> <name>() = <expression>
+ * Parse a function line: <index> <name>() [=] <expression>
  * Example: "1 TotEGFR() = EGFR_free + EGFR_bound"
+ * Example: "1 pY1068_percent() (100*pY1068)/E"
  */
 function parseFunctionLine(line: string, model: BNGLModel, lineNum: number): void {
-  // Format: index name(args) = expression
+  // Format: index name(args) = expression OR index name(args) expression
   const trimmed = line.trim();
   const firstSpace = trimmed.search(/\s/);
   if (firstSpace <= 0) {
     throw new Error(
-      `Invalid function format in .net file at line ${lineNum}: expected "index name(args) = expression" ` +
+      `Invalid function format in .net file at line ${lineNum}: expected "index name(args) [=] expression" ` +
       `(e.g., "1 TotEGFR() = EGFR_free + EGFR_bound"), but got "${line.trim()}".`
     );
   }
@@ -444,10 +445,9 @@ function parseFunctionLine(line: string, model: BNGLModel, lineNum: number): voi
   const rhs = trimmed.slice(firstSpace).trim();
   const openParen = rhs.indexOf('(');
   const closeParen = rhs.indexOf(')', openParen + 1);
-  const eqIdx = rhs.indexOf('=', closeParen + 1);
-  if (openParen <= 0 || closeParen <= openParen || eqIdx <= closeParen) {
+  if (openParen <= 0 || closeParen <= openParen) {
     throw new Error(
-      `Invalid function format in .net file at line ${lineNum}: expected "index name(args) = expression" ` +
+      `Invalid function format in .net file at line ${lineNum}: expected "index name(args) [=] expression" ` +
       `(e.g., "1 TotEGFR() = EGFR_free + EGFR_bound"), but got "${line.trim()}".`
     );
   }
@@ -455,7 +455,11 @@ function parseFunctionLine(line: string, model: BNGLModel, lineNum: number): voi
   const index = parseInt(indexToken, 10);
   const name = rhs.slice(0, openParen).trim();
   const argsStr = rhs.slice(openParen + 1, closeParen).trim();
-  const expression = rhs.slice(eqIdx + 1).trim();
+  let exprStr = rhs.slice(closeParen + 1).trim();
+  if (exprStr.startsWith('=')) {
+    exprStr = exprStr.slice(1).trim();
+  }
+  const expression = exprStr;
 
   if (isNaN(index)) {
     throw new Error(

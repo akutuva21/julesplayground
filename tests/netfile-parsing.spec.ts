@@ -107,4 +107,18 @@ describe('parseNetFile against real BioNetGen 2.9.3 output', () => {
     expect(r.errors).toEqual([]);
     expect(r.model.reactions?.[0].reactants[0]).toBe('CD14(LPS,MD2,TLR4)');
   });
+
+  it('parses functions omitting or including an equals sign', () => {
+    const net = REAL_BNG2_NET + `begin functions
+    1 pY1068_percent() (100*pY1068)/E
+    2 TotEGFR() = EGFR_free + EGFR_bound
+end functions
+`;
+    const r = parseNetFile(net);
+    expect(r.errors).toEqual([]);
+    expect(r.model.functions).toEqual([
+      { name: 'pY1068_percent', args: [], expression: '(100*pY1068)/E' },
+      { name: 'TotEGFR', args: [], expression: 'EGFR_free + EGFR_bound' }
+    ]);
+  });
 });
