@@ -101,4 +101,43 @@ describe('parseNetFile against real BioNetGen 2.9.3 output', () => {
     expect(r.errors).toEqual([]);
     expect(r.model.reactions?.[0].reactants[0]).toBe('CD14(LPS,MD2,TLR4)');
   });
+
+  it('evaluates constant expression parameter lines', () => {
+    const net = `# Created by BioNetGen 2.9.3
+begin parameters
+    1 kL                         0.94  # Constant
+    2 fA                         0.44  # Constant
+    3 _rateLaw21                 kL*fA  # ConstantExpression
+end parameters
+begin species
+end species
+begin reactions
+end reactions
+`;
+    const r = parseNetFile(net);
+    expect(r.errors).toEqual([]);
+    expect(r.model.parameters['_rateLaw21']).toBeCloseTo(0.4136);
+  });
+
+  it('parses function lines with or without an equals sign', () => {
+    const net = `# Created by BioNetGen 2.9.3
+begin parameters
+    1 v1__FREE   10  # Constant
+end parameters
+begin functions
+    1 v1() v1__FREE
+    2 TotEGFR() = EGFR_free + EGFR_bound
+end functions
+begin species
+end species
+begin reactions
+end reactions
+`;
+    const r = parseNetFile(net);
+    expect(r.errors).toEqual([]);
+    expect(r.model.functions).toEqual([
+      { name: 'v1', args: [], expression: 'v1__FREE' },
+      { name: 'TotEGFR', args: [], expression: 'EGFR_free + EGFR_bound' },
+    ]);
+  });
 });

@@ -8,6 +8,7 @@
  */
 
 import type { BNGLModel } from '../../types';
+import { BNGLParser } from './core/BNGLParser';
 
 export interface NetFileParseResult {
   model: BNGLModel;
@@ -188,25 +189,46 @@ export function parseNetFile(content: string): NetFileParseResult {
 /**
  * Parse a parameter line: <index> <name> <value>
  * Example: "1 NA 6.02e+23"
+ * Example: "25 _rateLaw21 kL*fA # ConstantExpression"
  */
 function parseParameterLine(line: string, model: BNGLModel, lineNum: number): void {
-  const parts = line.trim().split(/\s+/);
-  if (parts.length < 3) {
+  const trimmed = line.trim();
+  const firstSpace = trimmed.search(/\s/);
+  if (firstSpace <= 0) {
     throw new Error(
       `Invalid parameter format in .net file at line ${lineNum}: expected "index name value" (e.g., "1 NA 6.02e+23"), ` +
-      `but got "${line.trim()}".`
+        `but got "${line.trim()}".`
+    );
+  }
+  const indexToken = trimmed.slice(0, firstSpace).trim();
+  const rest = trimmed.slice(firstSpace).trim();
+  const secondSpace = rest.search(/\s/);
+  if (secondSpace <= 0) {
+    throw new Error(
+      `Invalid parameter format in .net file at line ${lineNum}: expected "index name value" (e.g., "1 NA 6.02e+23"), ` +
+        `but got "${line.trim()}".`
+    );
+  }
+  const name = rest.slice(0, secondSpace).trim();
+  const expr = rest.slice(secondSpace).trim();
+
+  const index = parseInt(indexToken, 10);
+  if (isNaN(index)) {
+    throw new Error(
+      `Invalid parameter in .net file at line ${lineNum}: the index must be numeric, ` +
+        `but got index="${indexToken}".`
     );
   }
 
-  const index = parseInt(parts[0]);
-  const name = parts[1];
-  const value = parseFloat(parts[2]);
-
-  if (isNaN(index) || isNaN(value)) {
-    throw new Error(
-      `Invalid parameter in .net file at line ${lineNum}: the index and value must be numeric, ` +
-      `but got index="${parts[0]}", value="${parts[2]}".`
-    );
+  let value = parseFloat(expr);
+  if (isNaN(value)) {
+    const paramMap = new Map<string, number>(Object.entries(model.parameters));
+    const evaluated = BNGLParser.evaluateExpression(expr, paramMap);
+    if (!isNaN(evaluated)) {
+      value = evaluated;
+    } else {
+      value = 0;
+    }
   }
 
   model.parameters[name] = value;
@@ -409,17 +431,18 @@ function parseGroupLine(
 }
 
 /**
- * Parse a function line: <index> <name>() = <expression>
+ * Parse a function line: <index> <name>(<args>) [=] <expression>
  * Example: "1 TotEGFR() = EGFR_free + EGFR_bound"
+ * Example: "1 v1() v1__FREE"
  */
 function parseFunctionLine(line: string, model: BNGLModel, lineNum: number): void {
-  // Format: index name(args) = expression
+  // Format: index name(args) [=] expression
   const trimmed = line.trim();
   const firstSpace = trimmed.search(/\s/);
   if (firstSpace <= 0) {
     throw new Error(
-      `Invalid function format in .net file at line ${lineNum}: expected "index name(args) = expression" ` +
-      `(e.g., "1 TotEGFR() = EGFR_free + EGFR_bound"), but got "${line.trim()}".`
+      `Invalid function format in .net file at line ${lineNum}: expected "index name(args) [=] expression" ` +
+        `(e.g., "1 TotEGFR() = EGFR_free + EGFR_bound"), but got "${line.trim()}".`
     );
   }
 
@@ -427,18 +450,22 @@ function parseFunctionLine(line: string, model: BNGLModel, lineNum: number): voi
   const rhs = trimmed.slice(firstSpace).trim();
   const openParen = rhs.indexOf('(');
   const closeParen = rhs.indexOf(')', openParen + 1);
-  const eqIdx = rhs.indexOf('=', closeParen + 1);
-  if (openParen <= 0 || closeParen <= openParen || eqIdx <= closeParen) {
+  if (openParen <= 0 || closeParen <= openParen) {
     throw new Error(
-      `Invalid function format in .net file at line ${lineNum}: expected "index name(args) = expression" ` +
-      `(e.g., "1 TotEGFR() = EGFR_free + EGFR_bound"), but got "${line.trim()}".`
+      `Invalid function format in .net file at line ${lineNum}: expected "index name(args) [=] expression" ` +
+        `(e.g., "1 TotEGFR() = EGFR_free + EGFR_bound"), but got "${line.trim()}".`
     );
   }
 
   const index = parseInt(indexToken, 10);
   const name = rhs.slice(0, openParen).trim();
   const argsStr = rhs.slice(openParen + 1, closeParen).trim();
-  const expression = rhs.slice(eqIdx + 1).trim();
+
+  let restAfterParen = rhs.slice(closeParen + 1).trim();
+  if (restAfterParen.startsWith('=')) {
+    restAfterParen = restAfterParen.slice(1).trim();
+  }
+  const expression = restAfterParen;
 
   if (isNaN(index)) {
     throw new Error(
