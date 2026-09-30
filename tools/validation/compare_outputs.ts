@@ -477,377 +477,422 @@ function getMultiPhaseReference(
 
   console.log(`[MultiPhase] Constructed reference for ${baseName}: ${concatenatedData.length} rows`);
   return { headers, data: concatenatedData };
+}
+
+function chooseReferenceFromBngl(baseName: string, bnglPath: string, gdatFiles: string[]): string | null {
+  const content = fs.readFileSync(bnglPath, 'utf8');
+  const calls = parseSimulateCallsFromBngl(content);
+  if (calls.length === 0) return null;
+
+  // Prefer the first ODE simulate call.
+  // The web UI/batch behavior selects the first matching simulate() (not the last),
+  // so choosing the last here can incorrectly compare against a different phase/suffix.
+  const odeCalls = calls.filter(c => c.method === 'ode');
+  const chosen = (odeCalls.length > 0 ? odeCalls[0] : calls[0]);
+  const expectedName = chosen.suffix ? `${baseName}_${chosen.suffix}.gdat` : `${baseName}.gdat`;
+  const expectedPath = path.join(BNG_OUTPUT_DIR, expectedName);
+  if (fs.existsSync(expectedPath)) return expectedPath;
+
+  // Fallback: try to find by normalized key.
+  const expectedKey = normalizeKey(expectedName);
+  for (const gf of gdatFiles) {
+    if (normalizeKey(gf) === expectedKey) return path.join(BNG_OUTPUT_DIR, gf);
+  }
+  return null;
+}
+
+/**
+ * The RuleHub model a web CSV was produced from.
+ *
+ * The browser names its export `results_<manifest id>_<simulate suffix>.csv`,
+ * so the manifest id is a prefix of the CSV label. Resolving it directly is
+ * what disambiguates models that share a basename (`alabama_Alabama` and
+ * `mallela2021_states_Alabama` are `Alabama/Alabama.bngl` and
+ * `Mallela2021/SI_files_Alabama_Alabama.bngl`), which basename scoring
+ * cannot do.
+ */
+function modelSourceForCsvLabel(csvFile: string): string | null {
+  const labelKey = normalizeKey(csvModelLabel(csvFile));
+  const ruleHubRoot = resolveRuleHubRoot(PROJECT_ROOT);
+  if (!ruleHubRoot) return null;
+
+  let best: { id: string; file: string } | null = null;
+  for (const entry of loadRuleHubManifest(PROJECT_ROOT)) {
+    if (!entry.id || !entry.path) continue;
+    const idKey = normalizeKey(entry.id);
+    // A 4-character floor keeps a short id from prefix-matching everything,
+    // and the longest match wins so a specific id beats a shorter one.
+    if (idKey.length < 4 || !labelKey.startsWith(idKey)) continue;
+    const file = path.join(ruleHubRoot, entry.path);
+    if (!fs.existsSync(file)) continue;
+    if (!best || idKey.length > normalizeKey(best.id).length) best = { id: entry.id, file };
+  }
+  return best?.file ?? null;
+}
+
+/**
+ * The `.bngl` a reference was generated from: the reference generator writes
+ * `<safeName>.bngl` next to the `<safeName>[_suffix].gdat` it produced.
+ */
+function referenceSourceBngl(gdatPath: string, bnglNames: string[]): string | null {
+  const base = path.basename(gdatPath).replace(/\.gdat$/i, '').toLowerCase();
+  let best: { name: string; file: string } | null = null;
+  for (const name of bnglNames) {
+    const stem = name.replace(/\.bngl$/i, '').toLowerCase();
+    if (!base.startsWith(stem)) continue;
+    if (!best || stem.length > best.name.length) best = { name: stem, file: path.join(BNG_OUTPUT_DIR, name) };
+  }
+  return best?.file ?? null;
+}
+
+/**
+ * Drop references that provably come from a different model than the web run.
+ * A wrong reference reports a divergence that belongs to a different model,
+ * so a false failure is worse than an honest "no reference".
+ */
+function keepReferencesForModel(
+  candidates: string[],
+  modelSourcePath: string | null,
+  bnglNames: string[],
+): string[] {
+  if (!modelSourcePath) return candidates;
+  const modelSource = fs.readFileSync(modelSourcePath, 'utf8');
+  const trusted = candidates.filter((candidate) => {
+    const referenceSource = referenceSourceBngl(candidate, bnglNames);
+    // No provenance on record: keep the candidate as before.
+    if (!referenceSource || !fs.existsSync(referenceSource)) return true;
+    if (referenceMatchesModel(fs.readFileSync(referenceSource, 'utf8'), modelSource)) return true;
+    console.warn(
+      `[compare] Dropping ${path.basename(candidate)} for ${path.basename(modelSourcePath)}: it was generated from a different model.`
+    );
+    return false;
+  });
+  return trusted;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of values) {
+    const key = v.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(v);
+  }
+  return out;
+}
+
+function isClearlyNonOdeGdat(filePathOrName: string): boolean {
+  const base = path.basename(filePathOrName).toLowerCase();
+  // Conservative filters: only drop variants that explicitly advertise non-ODE method.
+  // This prevents accidentally excluding normal ODE outputs whose basenames contain
+  // these tokens as part of another word.
+  return (
+    /(^|_)ssa(\d+)?\./.test(base) ||
+    /(^|_)ssa(\d+)?_/.test(base) ||
+    /(^|_)nfsim\./.test(base) ||
+    /(^|_)nfsim_/.test(base) ||
+    /(^|_)nf\./.test(base) ||
+    /(^|_)nf_/.test(base)
+  );
+}
+
+function findBestBnglForCsv(csvFile: string, bnglFilePaths: string[]): string | null {
+  const raw = csvModelLabel(csvFile);
+  const tokens = raw.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const modelKey = normalizeKey(raw);
+
+  // Avoid misleading fuzzy matches for very short/ambiguous labels like "toggle".
+  if (modelKey.length <= 8 && tokens.length <= 1) {
+    const exact = bnglFilePaths.find((fp) => normalizeKey(path.basename(fp)) === modelKey);
+    return exact ? exact : null;
   }
 
-  function chooseReferenceFromBngl(baseName: string, bnglPath: string, gdatFiles: string[]): string | null {
-    const content = fs.readFileSync(bnglPath, 'utf8');
-    const calls = parseSimulateCallsFromBngl(content);
-    if (calls.length === 0) return null;
+  let best: { path: string; score: number } | null = null;
+  for (const fp of bnglFilePaths) {
+    const base = path.basename(fp).replace(/\.bngl$/i, '');
+    const baseLower = base.toLowerCase();
+    const bKey = normalizeKey(base);
 
-    // Prefer the first ODE simulate call.
-    // The web UI/batch behavior selects the first matching simulate() (not the last),
-    // so choosing the last here can incorrectly compare against a different phase/suffix.
-    const odeCalls = calls.filter(c => c.method === 'ode');
-    const chosen = (odeCalls.length > 0 ? odeCalls[0] : calls[0]);
-    const expectedName = chosen.suffix ? `${baseName}_${chosen.suffix}.gdat` : `${baseName}.gdat`;
-    const expectedPath = path.join(BNG_OUTPUT_DIR, expectedName);
-    if (fs.existsSync(expectedPath)) return expectedPath;
+    let score = 0;
+    if (bKey === modelKey) score += 1000;
+    if (bKey.includes(modelKey) || modelKey.includes(bKey)) score += 400;
 
-    // Fallback: try to find by normalized key.
-    const expectedKey = normalizeKey(expectedName);
-    for (const gf of gdatFiles) {
-      if (normalizeKey(gf) === expectedKey) return path.join(BNG_OUTPUT_DIR, gf);
+    for (const t of tokens) {
+      if (t.length < 3) continue;
+      if (baseLower.includes(t)) score += 20;
     }
-    return null;
+
+    // Small preference for shorter names when tied.
+    score -= Math.abs(bKey.length - modelKey.length);
+
+    if (!best || score > best.score) best = { path: fp, score };
   }
 
-  /**
-   * The RuleHub model a web CSV was produced from.
-   *
-   * The browser names its export `results_<manifest id>_<simulate suffix>.csv`,
-   * so the manifest id is a prefix of the CSV label. Resolving it directly is
-   * what disambiguates models that share a basename (`alabama_Alabama` and
-   * `mallela2021_states_Alabama` are `Alabama/Alabama.bngl` and
-   * `Mallela2021/SI_files_Alabama_Alabama.bngl`), which basename scoring
-   * cannot do.
-   */
-  function modelSourceForCsvLabel(csvFile: string): string | null {
-    const labelKey = normalizeKey(csvModelLabel(csvFile));
-    const ruleHubRoot = resolveRuleHubRoot(PROJECT_ROOT);
-    if (!ruleHubRoot) return null;
+  if (!best || best.score < 30) return null;
+  return best.path;
+}
 
-    let best: { id: string; file: string } | null = null;
-    for (const entry of loadRuleHubManifest(PROJECT_ROOT)) {
-      if (!entry.id || !entry.path) continue;
-      const idKey = normalizeKey(entry.id);
-      // A 4-character floor keeps a short id from prefix-matching everything,
-      // and the longest match wins so a specific id beats a shorter one.
-      if (idKey.length < 4 || !labelKey.startsWith(idKey)) continue;
-      const file = path.join(ruleHubRoot, entry.path);
-      if (!fs.existsSync(file)) continue;
-      if (!best || idKey.length > normalizeKey(best.id).length) best = { id: entry.id, file };
+function findGdatCandidates(csvFile: string): { gdatPaths: string[]; bnglPath?: string; inferred?: boolean } {
+  if (!fs.existsSync(BNG_OUTPUT_DIR)) return { gdatPaths: [] };
+
+  const gdatFiles = fs.readdirSync(BNG_OUTPUT_DIR).filter(f => f.toLowerCase().endsWith('.gdat'));
+
+  const bnglFiles = getRuleHubManifestBnglPaths(PROJECT_ROOT, (entry) => entry.bng2_compatible !== false && entry.compatibility?.bng2 !== false);
+
+  const rawLabel = csvModelLabel(csvFile);
+  const baseKey = normalizeKey(rawLabel);
+  const requiresTofit = baseKey.includes('tofit');
+  const alias = CSV_MODEL_ALIASES[baseKey];
+  const normalizedAlias = alias ? normalizeKey(alias) : null;
+  const candidateKeys = [baseKey, normalizedAlias].filter(Boolean) as string[];
+
+  const directMatches: string[] = [];
+
+  // 1) Direct match by normalized key.
+  for (const gf of gdatFiles) {
+    const gKey = normalizeKey(gf);
+    if (candidateKeys.includes(gKey)) {
+      directMatches.push(path.join(BNG_OUTPUT_DIR, gf));
     }
-    return best?.file ?? null;
   }
 
-  /**
-   * The `.bngl` a reference was generated from: the reference generator writes
-   * `<safeName>.bngl` next to the `<safeName>[_suffix].gdat` it produced.
-   */
-  function referenceSourceBngl(gdatPath: string, bnglNames: string[]): string | null {
-    const base = path.basename(gdatPath).replace(/\.gdat$/i, '').toLowerCase();
-    let best: { name: string; file: string } | null = null;
-    for (const name of bnglNames) {
-      const stem = name.replace(/\.bngl$/i, '').toLowerCase();
-      if (!base.startsWith(stem)) continue;
-      if (!best || stem.length > best.name.length) best = { name: stem, file: path.join(BNG_OUTPUT_DIR, name) };
-    }
-    return best?.file ?? null;
+  // Even for direct matches, try to find a BNGL file for multi-phase concatenation
+  const bnglPathForDirect = findBestBnglForCsv(csvFile, bnglFiles);
+  const referenceBnglNames = fs
+    .readdirSync(BNG_OUTPUT_DIR)
+    .filter((f) => f.toLowerCase().endsWith('.bngl'));
+  const modelSource = modelSourceForCsvLabel(csvFile);
+
+  if (directMatches.length > 0) {
+    return {
+      gdatPaths: keepReferencesForModel(uniqueStrings(directMatches), modelSource, referenceBnglNames),
+      bnglPath: bnglPathForDirect ?? undefined,
+      inferred: false,
+    };
   }
 
-  /**
-   * Drop references that provably come from a different model than the web run.
-   * A wrong reference reports a divergence that belongs to a different model,
-   * so a false failure is worse than an honest "no reference".
-   */
-  function keepReferencesForModel(
-    candidates: string[],
-    modelSourcePath: string | null,
-    bnglNames: string[],
-  ): string[] {
-    if (!modelSourcePath) return candidates;
-    const modelSource = fs.readFileSync(modelSourcePath, 'utf8');
-    const trusted = candidates.filter((candidate) => {
-      const referenceSource = referenceSourceBngl(candidate, bnglNames);
-      // No provenance on record: keep the candidate as before.
-      if (!referenceSource || !fs.existsSync(referenceSource)) return true;
-      if (referenceMatchesModel(fs.readFileSync(referenceSource, 'utf8'), modelSource)) return true;
-      console.warn(
-        `[compare] Dropping ${path.basename(candidate)} for ${path.basename(modelSourcePath)}: it was generated from a different model.`
-      );
-      return false;
+  // 2) Try infer from matching BNGL and its last simulate() call.
+  // 2) Try infer from matching BNGL and its last simulate() call.
+  // If a CSV alias exists, try that first.
+  const bnglPath = alias
+    ? ((): string | null => {
+      const exact = bnglFiles.find((fp) => normalizeKey(path.basename(fp)) === normalizeKey(alias + '.bngl'));
+      return exact ? exact : findBestBnglForCsv(csvFile, bnglFiles);
+    })()
+    : findBestBnglForCsv(csvFile, bnglFiles);
+  if (!bnglPath) return { gdatPaths: [] };
+
+  const baseName = path.basename(bnglPath).replace(/\.bngl$/i, '');
+
+  // Primary inferred candidate based on simulate() suffix.
+  const inferredGdat = chooseReferenceFromBngl(baseName, bnglPath, gdatFiles);
+
+  // Also consider all available GDAT variants for this BNGL base name.
+  // Many models have multiple simulate phases (and thus multiple GDAT files).
+  // The web batch runner may correspond to a different phase than a simple
+  // "first/last" heuristic, so we try all variants and pick the best match.
+  const baseNameLower = baseName.toLowerCase();
+  const byPrefix = gdatFiles
+    .filter((gf) => {
+      const lower = gf.toLowerCase();
+      return lower === `${baseNameLower}.gdat` || lower.startsWith(`${baseNameLower}_`);
+    })
+    .map((gf) => path.join(BNG_OUTPUT_DIR, gf));
+
+  const requestedPhaseIndex = inferRequestedPhaseIndex(rawLabel, bnglPath);
+  const candidates = uniqueStrings([...(inferredGdat ? [inferredGdat] : []), ...byPrefix]);
+  // Prefer comparing against ODE references; drop explicit SSA/NF variants.
+  const odeCandidates = candidates.filter((p) => !isClearlyNonOdeGdat(p));
+  const filteredCandidates = odeCandidates.length > 0 ? odeCandidates : candidates;
+  const trustedCandidates = keepReferencesForModel(filteredCandidates, modelSource, referenceBnglNames);
+  const tofitFilteredCandidates = requiresTofit
+    ? trustedCandidates.filter((candidate) => normalizeKey(path.basename(candidate)).includes('tofit'))
+    : trustedCandidates;
+
+  if (requestedPhaseIndex > 1) {
+    const phaseSpecificCandidates = tofitFilteredCandidates.filter((candidate) => {
+      const fileName = path.basename(candidate, '.gdat').toLowerCase();
+      return fileName === rawLabel.toLowerCase() || fileName === `${baseNameLower}_${requestedPhaseIndex}`;
     });
-    return trusted;
+    return { gdatPaths: phaseSpecificCandidates, bnglPath, inferred: true };
   }
 
-  function uniqueStrings(values: string[]): string[] {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const v of values) {
-      const key = v.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(v);
-    }
-    return out;
-  }
+  return { gdatPaths: tofitFilteredCandidates, bnglPath, inferred: true };
+}
 
-  function isClearlyNonOdeGdat(filePathOrName: string): boolean {
-    const base = path.basename(filePathOrName).toLowerCase();
-    // Conservative filters: only drop variants that explicitly advertise non-ODE method.
-    // This prevents accidentally excluding normal ODE outputs whose basenames contain
-    // these tokens as part of another word.
-    return (
-      /(^|_)ssa(\d+)?\./.test(base) ||
-      /(^|_)ssa(\d+)?_/.test(base) ||
-      /(^|_)nfsim\./.test(base) ||
-      /(^|_)nfsim_/.test(base) ||
-      /(^|_)nf\./.test(base) ||
-      /(^|_)nf_/.test(base)
+function betterCandidate(a: ComparisonResult, b: ComparisonResult): boolean {
+  const ad = a.details;
+  const bd = b.details;
+  if (!ad) return false;
+  if (!bd) return true;
+
+  const aStrict = a.status === 'match';
+  const bStrict = b.status === 'match';
+  if (aStrict !== bStrict) return aStrict;
+
+  if (ad.columnMatch !== bd.columnMatch) return ad.columnMatch;
+  if (ad.timeMatch !== bd.timeMatch) return ad.timeMatch;
+
+  const aRowDelta = Math.abs(ad.webRows - ad.refRows);
+  const bRowDelta = Math.abs(bd.webRows - bd.refRows);
+  if (aRowDelta !== bRowDelta) return aRowDelta < bRowDelta;
+
+  const aSamples = ad.samples?.length ?? 0;
+  const bSamples = bd.samples?.length ?? 0;
+  if (aSamples !== bSamples) return aSamples < bSamples;
+
+  if (ad.maxRelativeError !== bd.maxRelativeError) return ad.maxRelativeError < bd.maxRelativeError;
+  return ad.maxAbsoluteError < bd.maxAbsoluteError;
+}
+
+function compareData(
+  webData: { headers: string[]; data: number[][] },
+  refData: { headers: string[]; data: number[][] },
+  modelName: string
+): ComparisonResult['details'] {
+  const { absTol, relTol } = getTolerances(modelName);
+  // Normalize headers (lowercase, remove spaces)
+  const normalizeHeader = (h: string) => h.toLowerCase().replace(/\s+/g, '_');
+  const webHeadersNorm = webData.headers.map(normalizeHeader);
+  const refHeadersNorm = refData.headers.map(normalizeHeader);
+
+  // Column coverage is one-directional: the reference may carry columns the
+  // web run cannot produce (BNG2 writes model parameters and the
+  // `_rateLaw*` helpers it synthesises for functional rate rules), but a web
+  // column with no reference column is a genuine mismatch.
+  const coverage = compareColumnCoverage(webHeadersNorm, refHeadersNorm);
+  const { columnMatch, matchedColumns, referenceOnlyColumns, webOnlyColumns } = coverage;
+  const totalDataColumnCount = coverage.totalWebColumns;
+  const missingColumns = referenceOnlyColumns;
+  const extraColumns = webOnlyColumns;
+
+  if (webOnlyColumns.length > 0) {
+    console.warn(
+      `[compare] ${modelName}: web columns absent from the reference: ${webOnlyColumns.slice(0, 10).join(', ')}`
+    );
+  }
+  if (coverage.lowCoverage) {
+    console.warn(
+      `[compare] Low column coverage for ${modelName}: matched ${matchedColumns.length}/${coverage.totalWebColumns} web columns against ${coverage.totalRefColumns} reference columns.`
     );
   }
 
-  function findBestBnglForCsv(csvFile: string, bnglFilePaths: string[]): string | null {
-    const raw = csvModelLabel(csvFile);
-    const tokens = raw.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-    const modelKey = normalizeKey(raw);
+  let maxRelativeError = 0;
+  let maxAbsoluteError = 0;
+  let absTolDominated = false;
+  let maxAbsoluteErrorAtTime: number | undefined;
+  let maxAbsoluteErrorColumn: string | undefined;
+  let maxRelativeErrorAtTime: number | undefined;
+  let maxRelativeErrorColumn: string | undefined;
+  let errorAtTime: number | undefined;
+  let errorColumn: string | undefined;
+  const samples: { time: number; column: string; web: number; ref: number; relError: number }[] = [];
+  const nonFiniteReferenceCells: { time: number; column: string; value: string }[] = [];
+  const bothNonFiniteCells: { time: number; column: string; web: string; ref: string }[] = [];
 
-    // Avoid misleading fuzzy matches for very short/ambiguous labels like "toggle".
-    if (modelKey.length <= 8 && tokens.length <= 1) {
-      const exact = bnglFilePaths.find((fp) => normalizeKey(path.basename(fp)) === modelKey);
-      return exact ? exact : null;
-    }
+  const webTimeIdx = webHeadersNorm.indexOf('time');
+  const refTimeIdx = refHeadersNorm.indexOf('time');
 
-    let best: { path: string; score: number } | null = null;
-    for (const fp of bnglFilePaths) {
-      const base = path.basename(fp).replace(/\.bngl$/i, '');
-      const baseLower = base.toLowerCase();
-      const bKey = normalizeKey(base);
+  if (webTimeIdx === -1 || refTimeIdx === -1) {
+    return {
+      webRows: webData.data.length,
+      refRows: refData.data.length,
+      webColumns: webData.headers,
+      refColumns: refData.headers,
+      columnMatch: false,
+      matchedColumns,
+      matchedColumnCount: matchedColumns.length,
+      totalDataColumnCount,
+      timeMatch: false,
+      maxRelativeError: -1,
+      maxAbsoluteError: -1,
+    };
+  }
 
-      let score = 0;
-      if (bKey === modelKey) score += 1000;
-      if (bKey.includes(modelKey) || modelKey.includes(bKey)) score += 400;
+  // Check for steady-state models (e.g., barua_2007)
+  const isSteadyStateModel = STEADY_STATE_MODELS.some(m =>
+    modelName.toLowerCase().includes(m.toLowerCase())
+  );
 
-      for (const t of tokens) {
-        if (t.length < 3) continue;
-        if (baseLower.includes(t)) score += 20;
+  // For steady-state models, we need special handling because row counts can differ
+  // due to different steady-state detection timing while values match in overlap
+  const isSteadyStateRowMismatch = isSteadyStateModel && webData.data.length !== refData.data.length;
+
+  // Compare all rows/cols (by index once headers are mapped).
+  const refColumnIndex = indexReferenceColumns(refData.headers);
+
+  const minRows = Math.min(webData.data.length, refData.data.length);
+  const alignedRows = alignRowsByTime(webData.data, refData.data, webTimeIdx, refTimeIdx);
+  const allOverlapRowsAligned = alignedRows.length === minRows;
+  // A pair with no aligned row pair compared nothing at all, and every error
+  // accumulator below stays at its 0 initial value, so it would otherwise be
+  // reported as a zero-error match. Two header-only files are not a match.
+  const comparedAnyRow = alignedRows.length > 0;
+  let timeMatch = comparedAnyRow && webData.data.length === refData.data.length && alignedRows.length === webData.data.length;
+  let timeOffset: number | undefined;
+  if (alignedRows.length > 0) {
+    timeOffset = alignedRows[0].webRow[webTimeIdx] - alignedRows[0].refRow[refTimeIdx];
+  }
+
+  const timeGridMatches = allOverlapRowsAligned;
+  // The overlap relaxation exists because the *reference* is a prefix: the web
+  // run emits every phase while BNG2 only produced the first. It must never
+  // apply in the other direction, where the web trajectory stops early and
+  // the unverified tail of the reference is the divergent part. Requiring the
+  // aligned rows to span the whole reference keeps the documented case and
+  // rejects a truncated web run.
+  const overlapCoversWholeReference = alignedRows.length === refData.data.length;
+
+  let overlapMatch = false;
+
+  // For steady-state models, if time grid matches and values match in overlap, accept as PASS
+  if (isSteadyStateRowMismatch && timeGridMatches) {
+    const overlapRows = alignedRows.length;
+    let valuesMatchInOverlap = true;
+    let maxOverlapRelError = 0;
+
+    for (const { webRow, refRow } of alignedRows) {
+      if (!valuesMatchInOverlap) break;
+
+      for (let ci = 0; ci < webData.headers.length; ci++) {
+        const colName = webData.headers[ci];
+        const colNameNorm = normalizeHeader(colName);
+        if (colNameNorm === 'time') continue;
+
+        const refColIdx = refColumnIndex(colName);
+        if (refColIdx === undefined) continue;
+
+        const webVal = webRow[ci];
+        const refVal = refRow[refColIdx];
+
+        const absErr = Math.abs(webVal - refVal);
+        const denom = Math.max(Math.abs(refVal), Math.abs(webVal), 1e-30);
+        const relError = absErr / denom;
+
+        maxOverlapRelError = Math.max(maxOverlapRelError, relError);
+
+        if (absErr > ABS_TOL && relError > REL_TOL) {
+          valuesMatchInOverlap = false;
+          break;
+        }
       }
-
-      // Small preference for shorter names when tied.
-      score -= Math.abs(bKey.length - modelKey.length);
-
-      if (!best || score > best.score) best = { path: fp, score };
     }
 
-    if (!best || best.score < 30) return null;
-    return best.path;
-  }
-
-  function findGdatCandidates(csvFile: string): { gdatPaths: string[]; bnglPath?: string; inferred?: boolean } {
-    if (!fs.existsSync(BNG_OUTPUT_DIR)) return { gdatPaths: [] };
-
-    const gdatFiles = fs.readdirSync(BNG_OUTPUT_DIR).filter(f => f.toLowerCase().endsWith('.gdat'));
-
-    const bnglFiles = getRuleHubManifestBnglPaths(PROJECT_ROOT, (entry) => entry.bng2_compatible !== false && entry.compatibility?.bng2 !== false);
-
-    const rawLabel = csvModelLabel(csvFile);
-    const baseKey = normalizeKey(rawLabel);
-    const requiresTofit = baseKey.includes('tofit');
-    const alias = CSV_MODEL_ALIASES[baseKey];
-    const normalizedAlias = alias ? normalizeKey(alias) : null;
-    const candidateKeys = [baseKey, normalizedAlias].filter(Boolean) as string[];
-
-    const directMatches: string[] = [];
-
-    // 1) Direct match by normalized key.
-    for (const gf of gdatFiles) {
-      const gKey = normalizeKey(gf);
-      if (candidateKeys.includes(gKey)) {
-        directMatches.push(path.join(BNG_OUTPUT_DIR, gf));
-      }
+    if (valuesMatchInOverlap) {
+      timeMatch = true;
+      overlapMatch = true;
+      console.log(`  [steady_state model] Row count differs (web=${webData.data.length}, ref=${refData.data.length}) but values match in ${overlapRows} overlapping rows.`);
+      console.log(`    Max relative error in overlap: ${(maxOverlapRelError * 100).toFixed(6)}%`);
+      console.log(`    Accepting as PASS (steady-state timing difference).`);
     }
+  } else if (!isSteadyStateModel) {
+    // For non-steady-state models, timeMatch requires exact row count match
+    timeMatch = comparedAnyRow && timeGridMatches && webData.data.length === refData.data.length;
 
-    // Even for direct matches, try to find a BNGL file for multi-phase concatenation
-    const bnglPathForDirect = findBestBnglForCsv(csvFile, bnglFiles);
-    const referenceBnglNames = fs
-      .readdirSync(BNG_OUTPUT_DIR)
-      .filter((f) => f.toLowerCase().endsWith('.bngl'));
-    const modelSource = modelSourceForCsvLabel(csvFile);
-
-    if (directMatches.length > 0) {
-      return {
-        gdatPaths: keepReferencesForModel(uniqueStrings(directMatches), modelSource, referenceBnglNames),
-        bnglPath: bnglPathForDirect ?? undefined,
-        inferred: false,
-      };
-    }
-
-    // 2) Try infer from matching BNGL and its last simulate() call.
-    // 2) Try infer from matching BNGL and its last simulate() call.
-    // If a CSV alias exists, try that first.
-    const bnglPath = alias
-      ? ((): string | null => {
-        const exact = bnglFiles.find((fp) => normalizeKey(path.basename(fp)) === normalizeKey(alias + '.bngl'));
-        return exact ? exact : findBestBnglForCsv(csvFile, bnglFiles);
-      })()
-      : findBestBnglForCsv(csvFile, bnglFiles);
-    if (!bnglPath) return { gdatPaths: [] };
-
-    const baseName = path.basename(bnglPath).replace(/\.bngl$/i, '');
-
-    // Primary inferred candidate based on simulate() suffix.
-    const inferredGdat = chooseReferenceFromBngl(baseName, bnglPath, gdatFiles);
-
-    // Also consider all available GDAT variants for this BNGL base name.
-    // Many models have multiple simulate phases (and thus multiple GDAT files).
-    // The web batch runner may correspond to a different phase than a simple
-    // "first/last" heuristic, so we try all variants and pick the best match.
-    const baseNameLower = baseName.toLowerCase();
-    const byPrefix = gdatFiles
-      .filter((gf) => {
-        const lower = gf.toLowerCase();
-        return lower === `${baseNameLower}.gdat` || lower.startsWith(`${baseNameLower}_`);
-      })
-      .map((gf) => path.join(BNG_OUTPUT_DIR, gf));
-
-    const requestedPhaseIndex = inferRequestedPhaseIndex(rawLabel, bnglPath);
-    const candidates = uniqueStrings([...(inferredGdat ? [inferredGdat] : []), ...byPrefix]);
-    // Prefer comparing against ODE references; drop explicit SSA/NF variants.
-    const odeCandidates = candidates.filter((p) => !isClearlyNonOdeGdat(p));
-    const filteredCandidates = odeCandidates.length > 0 ? odeCandidates : candidates;
-    const trustedCandidates = keepReferencesForModel(filteredCandidates, modelSource, referenceBnglNames);
-    const tofitFilteredCandidates = requiresTofit
-      ? trustedCandidates.filter((candidate) => normalizeKey(path.basename(candidate)).includes('tofit'))
-      : trustedCandidates;
-
-    if (requestedPhaseIndex > 1) {
-      const phaseSpecificCandidates = tofitFilteredCandidates.filter((candidate) => {
-        const fileName = path.basename(candidate, '.gdat').toLowerCase();
-        return fileName === rawLabel.toLowerCase() || fileName === `${baseNameLower}_${requestedPhaseIndex}`;
-      });
-      return { gdatPaths: phaseSpecificCandidates, bnglPath, inferred: true };
-    }
-
-    return { gdatPaths: tofitFilteredCandidates, bnglPath, inferred: true };
-  }
-
-  function betterCandidate(a: ComparisonResult, b: ComparisonResult): boolean {
-    const ad = a.details;
-    const bd = b.details;
-    if (!ad) return false;
-    if (!bd) return true;
-
-    const aStrict = a.status === 'match';
-    const bStrict = b.status === 'match';
-    if (aStrict !== bStrict) return aStrict;
-
-    if (ad.columnMatch !== bd.columnMatch) return ad.columnMatch;
-    if (ad.timeMatch !== bd.timeMatch) return ad.timeMatch;
-
-    const aRowDelta = Math.abs(ad.webRows - ad.refRows);
-    const bRowDelta = Math.abs(bd.webRows - bd.refRows);
-    if (aRowDelta !== bRowDelta) return aRowDelta < bRowDelta;
-
-    const aSamples = ad.samples?.length ?? 0;
-    const bSamples = bd.samples?.length ?? 0;
-    if (aSamples !== bSamples) return aSamples < bSamples;
-
-    if (ad.maxRelativeError !== bd.maxRelativeError) return ad.maxRelativeError < bd.maxRelativeError;
-    return ad.maxAbsoluteError < bd.maxAbsoluteError;
-  }
-
-  function compareData(
-    webData: { headers: string[]; data: number[][] },
-    refData: { headers: string[]; data: number[][] },
-    modelName: string
-  ): ComparisonResult['details'] {
-    const { absTol, relTol } = getTolerances(modelName);
-    // Normalize headers (lowercase, remove spaces)
-    const normalizeHeader = (h: string) => h.toLowerCase().replace(/\s+/g, '_');
-    const webHeadersNorm = webData.headers.map(normalizeHeader);
-    const refHeadersNorm = refData.headers.map(normalizeHeader);
-
-    // Column coverage is one-directional: the reference may carry columns the
-    // web run cannot produce (BNG2 writes model parameters and the
-    // `_rateLaw*` helpers it synthesises for functional rate rules), but a web
-    // column with no reference column is a genuine mismatch.
-    const coverage = compareColumnCoverage(webHeadersNorm, refHeadersNorm);
-    const { columnMatch, matchedColumns, referenceOnlyColumns, webOnlyColumns } = coverage;
-    const totalDataColumnCount = coverage.totalWebColumns;
-    const missingColumns = referenceOnlyColumns;
-    const extraColumns = webOnlyColumns;
-
-    if (webOnlyColumns.length > 0) {
-      console.warn(
-        `[compare] ${modelName}: web columns absent from the reference: ${webOnlyColumns.slice(0, 10).join(', ')}`
-      );
-    }
-    if (coverage.lowCoverage) {
-      console.warn(
-        `[compare] Low column coverage for ${modelName}: matched ${matchedColumns.length}/${coverage.totalWebColumns} web columns against ${coverage.totalRefColumns} reference columns.`
-      );
-    }
-
-    let maxRelativeError = 0;
-    let maxAbsoluteError = 0;
-    let absTolDominated = false;
-    let maxAbsoluteErrorAtTime: number | undefined;
-    let maxAbsoluteErrorColumn: string | undefined;
-    let maxRelativeErrorAtTime: number | undefined;
-    let maxRelativeErrorColumn: string | undefined;
-    let errorAtTime: number | undefined;
-    let errorColumn: string | undefined;
-    const samples: { time: number; column: string; web: number; ref: number; relError: number }[] = [];
-    const nonFiniteReferenceCells: { time: number; column: string; value: string }[] = [];
-    const bothNonFiniteCells: { time: number; column: string; web: string; ref: string }[] = [];
-
-    const webTimeIdx = webHeadersNorm.indexOf('time');
-    const refTimeIdx = refHeadersNorm.indexOf('time');
-
-    if (webTimeIdx === -1 || refTimeIdx === -1) {
-      return {
-        webRows: webData.data.length,
-        refRows: refData.data.length,
-        webColumns: webData.headers,
-        refColumns: refData.headers,
-        columnMatch: false,
-        matchedColumns,
-        matchedColumnCount: matchedColumns.length,
-        totalDataColumnCount,
-        timeMatch: false,
-        maxRelativeError: -1,
-        maxAbsoluteError: -1,
-      };
-    }
-
-    // Check for steady-state models (e.g., barua_2007)
-    const isSteadyStateModel = STEADY_STATE_MODELS.some(m =>
-      modelName.toLowerCase().includes(m.toLowerCase())
-    );
-
-    // For steady-state models, we need special handling because row counts can differ
-    // due to different steady-state detection timing while values match in overlap
-    const isSteadyStateRowMismatch = isSteadyStateModel && webData.data.length !== refData.data.length;
-
-    // Compare all rows/cols (by index once headers are mapped).
-    const refColumnIndex = indexReferenceColumns(refData.headers);
-
-    const minRows = Math.min(webData.data.length, refData.data.length);
-    const alignedRows = alignRowsByTime(webData.data, refData.data, webTimeIdx, refTimeIdx);
-    const allOverlapRowsAligned = alignedRows.length === minRows;
-    // A pair with no aligned row pair compared nothing at all, and every error
-    // accumulator below stays at its 0 initial value, so it would otherwise be
-    // reported as a zero-error match. Two header-only files are not a match.
-    const comparedAnyRow = alignedRows.length > 0;
-    let timeMatch = comparedAnyRow && webData.data.length === refData.data.length && alignedRows.length === webData.data.length;
-    let timeOffset: number | undefined;
-    if (alignedRows.length > 0) {
-      timeOffset = alignedRows[0].webRow[webTimeIdx] - alignedRows[0].refRow[refTimeIdx];
-    }
-
-    const timeGridMatches = allOverlapRowsAligned;
-    // The overlap relaxation exists because the *reference* is a prefix: the web
-    // run emits every phase while BNG2 only produced the first. It must never
-    // apply in the other direction, where the web trajectory stops early and
-    // the unverified tail of the reference is the divergent part. Requiring the
-    // aligned rows to span the whole reference keeps the documented case and
-    // rejects a truncated web run.
-    const overlapCoversWholeReference = alignedRows.length === refData.data.length;
-
-    let overlapMatch = false;
-
-    // For steady-state models, if time grid matches and values match in overlap, accept as PASS
-    if (isSteadyStateRowMismatch && timeGridMatches) {
+    // If time grids match for the overlapping rows and values are within tolerance,
+    // accept overlap-only comparisons (e.g., web trims early phases).
+    if (!timeMatch && comparedAnyRow && timeGridMatches && webData.data.length !== refData.data.length) {
       const overlapRows = alignedRows.length;
       let valuesMatchInOverlap = true;
       let maxOverlapRelError = 0;
@@ -872,198 +917,153 @@ function getMultiPhaseReference(
 
           maxOverlapRelError = Math.max(maxOverlapRelError, relError);
 
-          if (absErr > ABS_TOL && relError > REL_TOL) {
+          if (absErr > absTol && relError > relTol) {
             valuesMatchInOverlap = false;
             break;
           }
         }
       }
 
-      if (valuesMatchInOverlap) {
+      // PARTIAL_MATCH_TIME names the models whose reference is deliberately
+      // only a prefix of the web run (BNG2 could not produce the later
+      // phases). That is a reviewed, per-model exception to the rule above;
+      // every other model must cover its whole reference.
+      const partialMatchIsDeclared = PARTIAL_MATCH_TIME[normalizeKey(modelName)] !== undefined;
+      if (valuesMatchInOverlap && (overlapCoversWholeReference || partialMatchIsDeclared)) {
         timeMatch = true;
         overlapMatch = true;
-        console.log(`  [steady_state model] Row count differs (web=${webData.data.length}, ref=${refData.data.length}) but values match in ${overlapRows} overlapping rows.`);
+        console.log(`  [overlap match] Row count differs (web=${webData.data.length}, ref=${refData.data.length}) but values match in ${overlapRows} overlapping rows.`);
         console.log(`    Max relative error in overlap: ${(maxOverlapRelError * 100).toFixed(6)}%`);
-        console.log(`    Accepting as PASS (steady-state timing difference).`);
-      }
-    } else if (!isSteadyStateModel) {
-      // For non-steady-state models, timeMatch requires exact row count match
-      timeMatch = comparedAnyRow && timeGridMatches && webData.data.length === refData.data.length;
-
-      // If time grids match for the overlapping rows and values are within tolerance,
-      // accept overlap-only comparisons (e.g., web trims early phases).
-      if (!timeMatch && comparedAnyRow && timeGridMatches && webData.data.length !== refData.data.length) {
-        const overlapRows = alignedRows.length;
-        let valuesMatchInOverlap = true;
-        let maxOverlapRelError = 0;
-
-        for (const { webRow, refRow } of alignedRows) {
-          if (!valuesMatchInOverlap) break;
-
-          for (let ci = 0; ci < webData.headers.length; ci++) {
-            const colName = webData.headers[ci];
-            const colNameNorm = normalizeHeader(colName);
-            if (colNameNorm === 'time') continue;
-
-            const refColIdx = refColumnIndex(colName);
-            if (refColIdx === undefined) continue;
-
-            const webVal = webRow[ci];
-            const refVal = refRow[refColIdx];
-
-            const absErr = Math.abs(webVal - refVal);
-            const denom = Math.max(Math.abs(refVal), Math.abs(webVal), 1e-30);
-            const relError = absErr / denom;
-
-            maxOverlapRelError = Math.max(maxOverlapRelError, relError);
-
-            if (absErr > absTol && relError > relTol) {
-              valuesMatchInOverlap = false;
-              break;
-            }
-          }
-        }
-
-        // PARTIAL_MATCH_TIME names the models whose reference is deliberately
-        // only a prefix of the web run (BNG2 could not produce the later
-        // phases). That is a reviewed, per-model exception to the rule above;
-        // every other model must cover its whole reference.
-        const partialMatchIsDeclared = PARTIAL_MATCH_TIME[normalizeKey(modelName)] !== undefined;
-        if (valuesMatchInOverlap && (overlapCoversWholeReference || partialMatchIsDeclared)) {
-          timeMatch = true;
-          overlapMatch = true;
-          console.log(`  [overlap match] Row count differs (web=${webData.data.length}, ref=${refData.data.length}) but values match in ${overlapRows} overlapping rows.`);
-          console.log(`    Max relative error in overlap: ${(maxOverlapRelError * 100).toFixed(6)}%`);
-        } else if (valuesMatchInOverlap) {
-          console.log(`  [overlap] Rejecting: the aligned rows cover only ${alignedRows.length}/${refData.data.length} reference rows, so the tail of the reference is unverified.`);
-        }
+      } else if (valuesMatchInOverlap) {
+        console.log(`  [overlap] Rejecting: the aligned rows cover only ${alignedRows.length}/${refData.data.length} reference rows, so the tail of the reference is unverified.`);
       }
     }
+  }
 
-    for (const { webRow, refRow, time: webTime } of alignedRows) {
+  for (const { webRow, refRow, time: webTime } of alignedRows) {
 
-      for (let ci = 0; ci < webData.headers.length; ci++) {
-        const colName = webData.headers[ci];
-        const colNameNorm = normalizeHeader(colName);
-        if (colNameNorm === 'time') continue;
+    for (let ci = 0; ci < webData.headers.length; ci++) {
+      const colName = webData.headers[ci];
+      const colNameNorm = normalizeHeader(colName);
+      if (colNameNorm === 'time') continue;
 
-        const refColIdx = refColumnIndex(colName);
-        if (refColIdx === undefined) continue;
+      const refColIdx = refColumnIndex(colName);
+      if (refColIdx === undefined) continue;
 
-        const webVal = webRow[ci];
-        const refVal = refRow[refColIdx];
+      const webVal = webRow[ci];
+      const refVal = refRow[refColIdx];
 
-        // A non-finite value in a column the two runs share is a failed solve,
-        // never agreement: `NaN > tol` and `NaN <= tol` are both false, so such
-        // a cell would leave every error accumulator at 0 and be reported as a
-        // zero-error match.
-        //
-        // When only ONE side is non-finite that is a divergence and is recorded
-        // as a discrepancy. When BOTH are non-finite it is not: the two runs
-        // agree that the quantity is undefined at that point, just with
-        // different notation — BNG2's mu::Parser writes `1.#INF` where our
-        // exporter writes `Infinity`. pt403/pt409 hit exactly this at t=0 on
-        // lnV/half_life/lnV_tangent and matched to 4.9e-13 absolute everywhere
-        // else; failing them for agreeing that a log is -inf would be the gate
-        // inventing a divergence that is not there.
-        if (!Number.isFinite(webVal) || !Number.isFinite(refVal)) {
-          const bothNonFinite = !Number.isFinite(webVal) && !Number.isFinite(refVal);
-          if (!bothNonFinite) {
-            if (nonFiniteReferenceCells.length < 10) {
-              nonFiniteReferenceCells.push({ time: webTime, column: colName, value: String(refVal) });
-            }
-            if (samples.length < 10) {
-              samples.push({ time: webTime, column: colName, web: webVal, ref: refVal, relError: Number.NaN });
-            }
-          } else if (bothNonFiniteCells.length < 10) {
-            bothNonFiniteCells.push({ time: webTime, column: colName, web: String(webVal), ref: String(refVal) });
+      // A non-finite value in a column the two runs share is a failed solve,
+      // never agreement: `NaN > tol` and `NaN <= tol` are both false, so such
+      // a cell would leave every error accumulator at 0 and be reported as a
+      // zero-error match.
+      //
+      // When only ONE side is non-finite that is a divergence and is recorded
+      // as a discrepancy. When BOTH are non-finite it is not: the two runs
+      // agree that the quantity is undefined at that point, just with
+      // different notation — BNG2's mu::Parser writes `1.#INF` where our
+      // exporter writes `Infinity`. pt403/pt409 hit exactly this at t=0 on
+      // lnV/half_life/lnV_tangent and matched to 4.9e-13 absolute everywhere
+      // else; failing them for agreeing that a log is -inf would be the gate
+      // inventing a divergence that is not there.
+      if (!Number.isFinite(webVal) || !Number.isFinite(refVal)) {
+        const bothNonFinite = !Number.isFinite(webVal) && !Number.isFinite(refVal);
+        if (!bothNonFinite) {
+          if (nonFiniteReferenceCells.length < 10) {
+            nonFiniteReferenceCells.push({ time: webTime, column: colName, value: String(refVal) });
           }
-          continue;
+          if (samples.length < 10) {
+            samples.push({ time: webTime, column: colName, web: webVal, ref: refVal, relError: Number.NaN });
+          }
+        } else if (bothNonFiniteCells.length < 10) {
+          bothNonFiniteCells.push({ time: webTime, column: colName, web: String(webVal), ref: String(refVal) });
         }
+        continue;
+      }
 
-        const absError = Math.abs(webVal - refVal);
-        const denom = Math.max(Math.abs(refVal), Math.abs(webVal), 1e-30);
-        const relError = absError / denom;
+      const absError = Math.abs(webVal - refVal);
+      const denom = Math.max(Math.abs(refVal), Math.abs(webVal), 1e-30);
+      const relError = absError / denom;
 
-        if (absError > maxAbsoluteError) {
-          maxAbsoluteError = absError;
-          maxAbsoluteErrorAtTime = webTime;
-          maxAbsoluteErrorColumn = colName;
-        }
-        if (relError > maxRelativeError) {
-          maxRelativeError = relError;
-          maxRelativeErrorAtTime = webTime;
-          maxRelativeErrorColumn = colName;
-          errorAtTime = webTime;
-          errorColumn = colName;
-        }
+      if (absError > maxAbsoluteError) {
+        maxAbsoluteError = absError;
+        maxAbsoluteErrorAtTime = webTime;
+        maxAbsoluteErrorColumn = colName;
+      }
+      if (relError > maxRelativeError) {
+        maxRelativeError = relError;
+        maxRelativeErrorAtTime = webTime;
+        maxRelativeErrorColumn = colName;
+        errorAtTime = webTime;
+        errorColumn = colName;
+      }
 
-        // If absError is within absTol but relative error is huge, this is a near-zero-value case.
-        // Mark it so the summary can report it clearly.
-        if (absError <= absTol && relError > relTol) {
-          absTolDominated = true;
-        }
+      // If absError is within absTol but relative error is huge, this is a near-zero-value case.
+      // Mark it so the summary can report it clearly.
+      if (absError <= absTol && relError > relTol) {
+        absTolDominated = true;
+      }
 
-        // Sample some points above tolerance.
-        const tolerance = absTol + relTol * Math.max(Math.abs(refVal), Math.abs(webVal));
-        if (samples.length < 10 && absError > tolerance) {
-          samples.push({ time: webTime, column: colName, web: webVal, ref: refVal, relError });
-        }
+      // Sample some points above tolerance.
+      const tolerance = absTol + relTol * Math.max(Math.abs(refVal), Math.abs(webVal));
+      if (samples.length < 10 && absError > tolerance) {
+        samples.push({ time: webTime, column: colName, web: webVal, ref: refVal, relError });
       }
     }
-
-    return {
-      webRows: webData.data.length,
-      refRows: refData.data.length,
-      webColumns: webData.headers,
-      refColumns: refData.headers,
-      columnMatch,
-      missingColumns,
-      extraColumns,
-      matchedColumns,
-      matchedColumnCount: matchedColumns.length,
-      totalDataColumnCount,
-      timeMatch,
-      timeOffset,
-      maxRelativeError,
-      maxAbsoluteError,
-      absTolDominated,
-      overlapMatch,
-      maxAbsoluteErrorAtTime,
-      maxAbsoluteErrorColumn,
-      maxRelativeErrorAtTime,
-      maxRelativeErrorColumn,
-      errorAtTime,
-      errorColumn,
-      samples,
-      nonFiniteReferenceCells,
-      bothNonFiniteCells,
-    };
   }
 
-  function hasInsufficientColumnOverlap(details: ComparisonResult['details']): boolean {
-    if (!details) return false;
-    const matched = details.matchedColumnCount ?? 0;
-    const total = details.totalDataColumnCount ?? 0;
-    if (total <= 0) return matched === 0;
-    const ratio = matched / total;
-    return matched === 0 || ratio < 0.5;
-  }
+  return {
+    webRows: webData.data.length,
+    refRows: refData.data.length,
+    webColumns: webData.headers,
+    refColumns: refData.headers,
+    columnMatch,
+    missingColumns,
+    extraColumns,
+    matchedColumns,
+    matchedColumnCount: matchedColumns.length,
+    totalDataColumnCount,
+    timeMatch,
+    timeOffset,
+    maxRelativeError,
+    maxAbsoluteError,
+    absTolDominated,
+    overlapMatch,
+    maxAbsoluteErrorAtTime,
+    maxAbsoluteErrorColumn,
+    maxRelativeErrorAtTime,
+    maxRelativeErrorColumn,
+    errorAtTime,
+    errorColumn,
+    samples,
+    nonFiniteReferenceCells,
+    bothNonFiniteCells,
+  };
+}
 
-  function hasExtremeRowMismatch(
-    details: ComparisonResult['details'],
-    referenceModelInfo?: ReferenceModelInfo | null
-  ): boolean {
-    if (!details) return false;
-    if (referenceModelInfo?.isMultiPhaseOde) return false;
-    const webRows = details.webRows;
-    const refRows = details.refRows;
-    if (webRows <= 0 || refRows <= 0) return false;
-    const ratio = Math.max(webRows, refRows) / Math.min(webRows, refRows);
-    return ratio > 10;
-  }
+function hasInsufficientColumnOverlap(details: ComparisonResult['details']): boolean {
+  if (!details) return false;
+  const matched = details.matchedColumnCount ?? 0;
+  const total = details.totalDataColumnCount ?? 0;
+  if (total <= 0) return matched === 0;
+  const ratio = matched / total;
+  return matched === 0 || ratio < 0.5;
+}
 
-  async function main() {
+function hasExtremeRowMismatch(
+  details: ComparisonResult['details'],
+  referenceModelInfo?: ReferenceModelInfo | null
+): boolean {
+  if (!details) return false;
+  if (referenceModelInfo?.isMultiPhaseOde) return false;
+  const webRows = details.webRows;
+  const refRows = details.refRows;
+  if (webRows <= 0 || refRows <= 0) return false;
+  const ratio = Math.max(webRows, refRows) / Math.min(webRows, refRows);
+  return ratio > 10;
+}
+
+async function main() {
     console.log('='.repeat(80));
     console.log('BioNetGen Web Simulator Output Comparison');
     console.log('='.repeat(80));
