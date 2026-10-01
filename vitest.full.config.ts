@@ -11,7 +11,12 @@ export default defineConfig({
   },
   test: {
     globalSetup: ['./tests/global-setup.ts'],
-    include: ['tests/**/*.spec.ts', 'tests/**/*.spec.tsx'],
+    include: [
+      'tests/**/*.spec.ts',
+      'tests/**/*.spec.tsx',
+      'packages/engine/tests/**/*.{test,spec}.ts',
+      'packages/mcp-server/tests/**/*.{test,spec}.ts',
+    ],
     exclude: [
       '**/node_modules/**',
       'tests/debug-*.{test,spec}.ts',
@@ -38,7 +43,6 @@ export default defineConfig({
       // Mirror the default CI gate exclusions for unstable suites under refactor.
       'tests/bngl-pattern-validation.spec.ts',
       'tests/functionalRatesSecurity.spec.ts',
-      'tests/stat-factors.spec.ts',
       'tests/analysis/ContactMap.spec.ts',
       'tests/services/NetworkExpansion.spec.ts',
       'tests/VerifyJITPhase.spec.ts',
