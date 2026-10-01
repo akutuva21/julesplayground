@@ -446,13 +446,16 @@ export const UNPARSEABLE_REFERENCE_REASONS: Record<string, string> = {
   "york_hanover_pa_york_hanover_pa": "PyBNF fitting model: BioNetGen requires the fitter to supply the '<param>__FREE' values it references and aborts with \"Parameter '...__FREE' is referenced but not defined\" on the model as published, so no standalone reference exists.",
   "youngstown_warren_boardman_oh_pa_youngstown_warren_boardman_oh_pa": "PyBNF fitting model: BioNetGen requires the fitter to supply the '<param>__FREE' values it references and aborts with \"Parameter '...__FREE' is referenced but not defined\" on the model as published, so no standalone reference exists.",
   "yuma_az_yuma_az": "PyBNF fitting model: BioNetGen requires the fitter to supply the '<param>__FREE' values it references and aborts with \"Parameter '...__FREE' is referenced but not defined\" on the model as published, so no standalone reference exists.",
-  // --- network_free (12) ---
+  // --- network_free (15) ---
+  "blbr": "Network-free model: its simulate actions are NFsim/stochastic and it never asks for a network, so BioNetGen writes no .net.",
   "camkii_holo": "Network-free model: its simulate actions are NFsim/stochastic and it never asks for a network, so BioNetGen writes no .net.",
   "chattaraj_2021": "Network-free model: its simulate actions are NFsim/stochastic and it never asks for a network, so BioNetGen writes no .net.",
   "chylek_library": "Network-free model: its simulate actions are NFsim/stochastic and it never asks for a network, so BioNetGen writes no .net.",
   "chylekfceri_2014": "Network-free model: its simulate actions are NFsim/stochastic and it never asks for a network, so BioNetGen writes no .net.",
   "chylektcr_2014": "Network-free model: its simulate actions are NFsim/stochastic and it never asks for a network, so BioNetGen writes no .net.",
   "creamer_2012": "Network-free model: its simulate actions are NFsim/stochastic and it never asks for a network, so BioNetGen writes no .net.",
+  "dolan2015": "Network-free model: its simulate actions are NFsim/stochastic and it never asks for a network, so BioNetGen writes no .net.",
+  "dolan_2015": "Network-free model: its simulate actions are NFsim/stochastic and it never asks for a network, so BioNetGen writes no .net.",
   "ensemble_tofit": "Network-free model: its simulate actions are NFsim/stochastic and it never asks for a network, so BioNetGen writes no .net.",
   "kocieniewski_2012": "Network-free model: its simulate actions are NFsim/stochastic and it never asks for a network, so BioNetGen writes no .net.",
   "machine_tofit": "Network-free model: its simulate actions are NFsim/stochastic and it never asks for a network, so BioNetGen writes no .net.",
