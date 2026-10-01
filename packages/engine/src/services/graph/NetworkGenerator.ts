@@ -3087,7 +3087,7 @@ export class NetworkGenerator {
     // For Arrhenius rules: clear rateExpression so NET file writes numeric rate,
     // not the un-evaluatable "Arrhenius(phi, Eact)" string.
     let finalRateExpr = (rule as RxnRule & { isArrhenius?: boolean }).isArrhenius ? undefined : rule.rateExpression;
-    let exprScaleFactor = multiplicity;
+    const exprScaleFactor = multiplicity;
 
     if (hasRateExpression && finalRateExpr) {
       finalRateExpr = finalRateExpr.trim();
