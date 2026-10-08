@@ -11,7 +11,11 @@ export default defineConfig({
   },
   test: {
     globalSetup: ['./tests/global-setup.ts'],
-    include: ['tests/**/*.spec.ts', 'tests/**/*.spec.tsx'],
+    include: [
+      'tests/**/*.{test,spec}.{ts,tsx}',
+      'packages/engine/tests/**/*.{test,spec}.ts',
+      'packages/mcp-server/tests/**/*.{test,spec}.ts',
+    ],
     exclude: [
       '**/node_modules/**',
       'tests/debug-*.{test,spec}.ts',
