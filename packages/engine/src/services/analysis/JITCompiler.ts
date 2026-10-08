@@ -1400,7 +1400,7 @@ export class JITCompiler {
                 for (const speciesIndex of obs.indices) {
                     if (!Number.isInteger(speciesIndex) || speciesIndex < 0 || speciesIndex >= nSpecies) {
                         throw new Error(
-                            `[JITCompiler] observable "${obs.name}" (index ${observableIndex}) species index ${speciesIndex} is out of range [0, ${nSpecies})`,
+                            `[JITCompiler] observable "${obs.name}" (index ${observableIndex}) has invalid species index ${speciesIndex}; expected [0, ${nSpecies})`,
                         );
                     }
                 }
