@@ -75,6 +75,11 @@ export class SpatialSimulation {
 
   constructor(config?: Partial<SpatialSimulationConfig>) {
     this.config = { ...DEFAULT_SPATIAL_CONFIG, ...config };
+    if (!Number.isFinite(this.config.rxnRadius) || this.config.rxnRadius <= 0) {
+      throw new RangeError(
+        `Spatial reaction radius must be finite and positive; got ${this.config.rxnRadius}`,
+      );
+    }
     this.rng = new Xoshiro256StarStar(this.config.seed);
   }
 

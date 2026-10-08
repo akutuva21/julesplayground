@@ -115,6 +115,17 @@ const CERTAIN: Partial<SpatialSimulationConfig> = {
   partitionCellSize: 1e-6,
   rxnRadius: 0.01,
 };
+describe('spatial reaction radius configuration', () => {
+  it.each([0, -1, NaN, Infinity, -Infinity])(
+    'rejects invalid reaction radius %s',
+    (rxnRadius) => {
+      expect(() => new SpatialSimulation({ rxnRadius })).toThrow(
+        'Spatial reaction radius must be finite and positive',
+      );
+    },
+  );
+});
+
 
 describe('spatial collision solver', () => {
   beforeEach(() => {
@@ -184,8 +195,8 @@ describe('spatial collision solver', () => {
       // within reaction range; a same-cell-only search finds no partner.
       const sim = await simWithMolecules(
         [
-          { speciesId: A, x: 0.009, y: 0, z: 0 },
-          { speciesId: B, x: 0.005, y: 0, z: 0 },
+          { speciesId: A, x: 0.0075, y: 0, z: 0 },
+          { speciesId: B, x: 0.0125, y: 0, z: 0 },
         ],
         CERTAIN,
       );
@@ -218,8 +229,8 @@ describe('spatial collision solver', () => {
       // solver must fire it exactly once — one C out of one A and one B.
       const sim = await simWithMolecules(
         [
-          { speciesId: A, x: 0.009, y: 0, z: 0 },
-          { speciesId: B, x: 0.005, y: 0, z: 0 },
+          { speciesId: A, x: 0.0075, y: 0, z: 0 },
+          { speciesId: B, x: 0.0125, y: 0, z: 0 },
         ],
         CERTAIN,
       );
