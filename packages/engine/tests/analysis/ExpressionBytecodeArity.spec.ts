@@ -129,6 +129,10 @@ describe('expression bytecode VM malformed programs', () => {
     it('throws for unknown opcodes', () => {
         expect(() => makeEvaluator(new Uint8Array([0xFE]))({})).toThrow(/Unknown bytecode opcode 254/);
     });
+    it('throws for an out-of-range variable operand', () => {
+        const code = new Uint8Array([1, 0, 0, 0, 0, 0xFF]);
+        expect(() => makeEvaluator(code)({})).toThrow(/Bytecode variable index 0 out of range/);
+    });
 
     it('throws when bytecode produces an empty stack', () => {
         expect(() => makeEvaluator(new Uint8Array())({})).toThrow(/Bytecode program produced no value/);
