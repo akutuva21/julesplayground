@@ -2160,6 +2160,17 @@ export async function simulate(
     };
 
 
+    // Keep native rate scaling identical across initial bytecode construction and
+    // in-place CVODE updates. Functional-rate degeneracy is folded into its expression.
+    const nativeRateConstant = (reaction: ConcreteReaction): number | string => {
+      const degeneracy = reaction.degeneracy ?? 1;
+      if (reaction.isFunctionalRate) {
+        const expression = reaction.rateExpression || '0';
+        return degeneracy === 1 ? expression : `(${degeneracy})*(${expression})`;
+      }
+      return reaction.rateConstant * degeneracy;
+    };
+
     const applyParameterUpdates = (targetPhaseIdx: number): boolean => {
       let parametersUpdated = false;
 
@@ -2258,7 +2269,7 @@ export async function simulate(
         // rebuild path below.
         const nativeRatesUpdated = massActionRatesChanged
           && concreteReactions.every((reaction) => !reaction.isFunctionalRate)
-          && persistedSolver?.updateRateConstants?.(Float64Array.from(concreteReactions, (reaction) => reaction.rateConstant)) === true;
+          && persistedSolver?.updateRateConstants?.(Float64Array.from(concreteReactions, (reaction) => Number(nativeRateConstant(reaction)))) === true;
         if (!nativeRatesUpdated) rebuildNativeByteCode?.();
 
         // Keep the native network alive only when its complete mass-action rate
@@ -4146,6 +4157,11 @@ export async function simulate(
     const requestedSolverType: string = options.solver ?? 'cvode';
     let solverType: string = requestedSolverType;
     const allMassAction = functionalRateCount === 0 && !hasSpeciesConversionFactors;
+    const hasFunctionalRates = functionalRateCount > 0;
+    if (solverType === 'cvode_sparse' && hasFunctionalRates) {
+      console.warn('[SimulationLoop] solver "cvode_sparse" uses a mass-action analytical Jacobian and cannot handle functional-rate dependencies; falling back to dense "cvode" with a difference-quotient Jacobian.');
+      solverType = 'cvode';
+    }
 
     // Stiffness Analysis
     const methodRates = concreteReactions.map(r => r.rateConstant);
@@ -4204,7 +4220,7 @@ export async function simulate(
 
     if (solverType === 'auto') {
       if (useAdaptiveCvodeTuning) {
-        if (stiffConfig.useSparse) {
+        if (stiffConfig.useSparse && allMassAction) {
           solverType = 'cvode_sparse';
         } else if (stiffConfig.useAnalyticalJacobian || autoJacEligible) {
           solverType = autoJacEligible ? autoSolver : 'cvode_jac';
@@ -4226,7 +4242,7 @@ export async function simulate(
       }
       // Leave solverType as 'auto_detect' — createSolver will handle it
     } else if (solverType === 'cvode') {
-      if (usePresetCvodeTuning && stiffConfig.useSparse) {
+      if (usePresetCvodeTuning && stiffConfig.useSparse && allMassAction) {
         solverType = 'cvode_sparse';
       } else if (usePresetCvodeTuning && stiffConfig.useAnalyticalJacobian && allMassAction) {
         solverType = 'cvode_jac';
@@ -4565,27 +4581,19 @@ export async function simulate(
       }
 
       const byteCodeReactions = concreteReactions.map((r, i) => {
-        const multiplicativeFactor = r.degeneracy ?? 1;
-        const scaledRateConstant = r.isFunctionalRate
-          ? (
-            multiplicativeFactor !== 1
-              ? `(${multiplicativeFactor})*(${r.rateExpression || '0'})`
-              : (r.rateExpression || 0)
-          )
-          : (r.rateConstant * multiplicativeFactor);
-
         return {
           reactantIndices: Array.from(r.reactants),
           reactantStoich: Array.from({ length: r.reactants.length }, () => 1), // Each entry in reactants is 1 stoich
           productIndices: Array.from(r.products),
           productStoich: Array.from({ length: r.products.length }, (_, j) => r.productStoichiometries ? r.productStoichiometries[j] : 1),
-          rateConstant: scaledRateConstant,
+          rateConstant: nativeRateConstant(r),
           // Must match JS/JIT derivative path anchor volume semantics for parity.
           scalingVolume: reactionReactingVolumes[i] || r.scalingVolume || 1,
           // Keep native bytecode equivalent to JS RHS (which applies propensity/degeneracy explicitly).
           statisticalFactor: undefined
         };
       });
+
 
       // In BNG2, a reaction can have multiple Reactants/Products of same species listed separately
       // compileToByteCode handles this via duplication, but we should consolidate stoich for bytecode compactness

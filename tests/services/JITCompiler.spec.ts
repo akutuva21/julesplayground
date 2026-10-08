@@ -221,6 +221,30 @@ describe('JITCompiler Service', () => {
                expect(bytecode?.requiresParameterRebuild).toBe(true);
            });
 
+           it('omits the analytical Jacobian for functional rates but keeps it for mass action', () => {
+               const reaction = {
+                   reactantIndices: [0],
+                   reactantStoich: [1],
+                   productIndices: [1],
+                   productStoich: [1],
+               };
+               const functional = jitCompiler.compileToByteCode([
+                   { ...reaction, rateConstant: 'k * A_total' }
+               ], 2, { k: 1 }, undefined, undefined, [
+                   { name: 'A_total', indices: [0], coefficients: [1] }
+               ], ['A', 'B']);
+               const massAction = jitCompiler.compileToByteCode([
+                   { ...reaction, rateConstant: 1 }
+               ], 2);
+
+               expect(functional?.exprBytecode.length).toBeGreaterThan(0);
+               expect(functional?.jacRowPtr).toBeUndefined();
+               expect(functional?.jacColIdx).toBeUndefined();
+               expect(massAction?.jacRowPtr).toBeDefined();
+               expect(massAction?.jacRowPtr?.length).toBe(3);
+               expect(massAction?.jacColIdx?.length).toBeGreaterThan(0);
+           });
+
            it('keys functional bytecode cache entries by folded parameter values', () => {
                jitCompiler.clearCache();
                const reactions = [{
