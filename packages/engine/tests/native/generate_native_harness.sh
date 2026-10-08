@@ -9,7 +9,13 @@
 # Usage: generate_native_harness.sh [cc]
 set -euo pipefail
 
-CC="${1:-cc}"
+if [ -n "${1:-}" ]; then
+  CC="$1"
+elif command -v gcc &>/dev/null; then
+  CC="gcc"
+else
+  CC="cc"
+fi
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../../.." && pwd)"
 WRAPPER="$REPO/wasm-sundials/cvode_wrapper.c"
@@ -53,7 +59,7 @@ fi
 "$CC" -std=c11 -O1 -g \
   -fsanitize=address,undefined \
   -fno-omit-frame-pointer \
-  -Wall -Wno-macro-redefined \
+  -Wall \
   -o "$BIN" "$HERE/verify_bytecode_native.c" -lm
 
 echo "built $BIN against cvode_wrapper.c lines ${START}-$((END-1))"
