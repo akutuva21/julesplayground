@@ -57,7 +57,7 @@ const JS_FUNCTIONS: Record<string, (...args: number[]) => number> = {
  */
 function evalViaJsReference(expr: string, vars: Record<string, number>): number {
     const src = `return (${expr.replace(/\bif\(/g, 'IF(')});`;
-    // eslint-disable-next-line no-new-func
+     
     const fn = new Function('IF', ...Object.keys(JS_FUNCTIONS), ...Object.keys(vars), src);
     return fn(
         (c: number, a: number, b: number) => (c !== 0 ? a : b),
@@ -69,7 +69,7 @@ function evalViaJsReference(expr: string, vars: Record<string, number>): number 
 /** BNGL semantics for boolean-valued expressions: truthy -> 1, falsy -> 0. */
 function evalViaJsTruthy(expr: string, vars: Record<string, number>): number {
     const src = `return (${expr}) ? 1 : 0;`;
-    // eslint-disable-next-line no-new-func
+     
     const fn = new Function(...Object.keys(vars), src);
     return fn(...Object.values(vars)) as number;
 }
