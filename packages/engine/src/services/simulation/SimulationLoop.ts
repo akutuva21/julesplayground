@@ -47,6 +47,16 @@ interface ConcreteReaction {
   dynamicStoichiometries?: BNGLVariableStoichiometry[];
 }
 
+/** Native bytecode rates include reaction degeneracy for both initial loads and updates. */
+export function nativeRateConstant(reaction: Pick<ConcreteReaction, 'rateConstant' | 'rateExpression' | 'isFunctionalRate' | 'degeneracy'>): number | string {
+  const degeneracy = reaction.degeneracy ?? 1;
+  if (reaction.isFunctionalRate) {
+    const expression = reaction.rateExpression || '0';
+    return degeneracy === 1 ? expression : `(${degeneracy})*(${expression})`;
+  }
+  return reaction.rateConstant * degeneracy;
+}
+
 interface ConcreteObservable {
   name: string;
   indices: Int32Array | number[];
@@ -2160,16 +2170,6 @@ export async function simulate(
     };
 
 
-    // Keep native rate scaling identical across initial bytecode construction and
-    // in-place CVODE updates. Functional-rate degeneracy is folded into its expression.
-    const nativeRateConstant = (reaction: ConcreteReaction): number | string => {
-      const degeneracy = reaction.degeneracy ?? 1;
-      if (reaction.isFunctionalRate) {
-        const expression = reaction.rateExpression || '0';
-        return degeneracy === 1 ? expression : `(${degeneracy})*(${expression})`;
-      }
-      return reaction.rateConstant * degeneracy;
-    };
 
     const applyParameterUpdates = (targetPhaseIdx: number): boolean => {
       let parametersUpdated = false;

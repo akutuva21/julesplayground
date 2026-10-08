@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { getFeatureFlags, jitCompiler, setFeatureFlags } from '@bngplayground/engine';
 import { OpCode } from '../../packages/engine/src/services/simulation/ExpressionCompiler';
+import { nativeRateConstant } from '../../packages/engine/src/services/simulation/SimulationLoop';
 
 describe('JITCompiler Service', () => {
 
@@ -243,6 +244,24 @@ describe('JITCompiler Service', () => {
                expect(massAction?.jacRowPtr).toBeDefined();
                expect(massAction?.jacRowPtr?.length).toBe(3);
                expect(massAction?.jacColIdx?.length).toBeGreaterThan(0);
+           });
+
+           it('uses degeneracy in the shared native rate value for initial loads and in-place updates', () => {
+               const massActionRate = nativeRateConstant({
+                   rateConstant: 3,
+                   rateExpression: null,
+                   isFunctionalRate: false,
+                   degeneracy: 2,
+               });
+               const functionalRate = nativeRateConstant({
+                   rateConstant: 0,
+                   rateExpression: 'vmax * A_total',
+                   isFunctionalRate: true,
+                   degeneracy: 2,
+               });
+
+               expect(massActionRate).toBe(6);
+               expect(functionalRate).toBe('(2)*(vmax * A_total)');
            });
 
            it('keys functional bytecode cache entries by folded parameter values', () => {
