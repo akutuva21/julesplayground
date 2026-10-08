@@ -125,6 +125,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Checkout SUNDIALS v7.4.0
+        uses: actions/checkout@v7
+        with:
+          repository: LLNL/sundials
+          ref: v7.4.0
+          path: wasm-sundials/sundials
+
+
       - name: Set up Emscripten
         uses: mymindstorm/setup-emsdk@v14
 
