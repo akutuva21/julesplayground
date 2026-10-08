@@ -1,8 +1,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { getFeatureFlags, jitCompiler, setFeatureFlags } from '@bngplayground/engine';
-import { OpCode } from '../../packages/engine/src/services/simulation/ExpressionCompiler';
 import { nativeRateConstant } from '../../packages/engine/src/services/simulation/SimulationLoop';
+import { OpCode } from '../../packages/engine/src/services/simulation/ExpressionCompiler';
 
 describe('JITCompiler Service', () => {
 

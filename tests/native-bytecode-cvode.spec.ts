@@ -85,7 +85,7 @@ end model
     expect(model.reactions.some((reaction) => reaction.isFunctionalRate)).toBe(true);
 
     const callbacks = { checkCancelled() {}, postMessage() {} };
-    const options = { method: 'ode', t_end: 2, n_steps: 20, adaptiveCvodeTuning: false } as const;
+    const options = { method: 'ode', t_end: 2, n_steps: 20, adaptiveCvodeTuning: false, collectSolverStats: true } as const;
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const sparseRequest = await simulate(3, model, {
@@ -101,6 +101,12 @@ end model
 
       expect(warning.mock.calls.some(([message]) => String(message).includes('functional-rate dependencies') && String(message).includes('dense "cvode"'))).toBe(true);
       expect(sparseRequest.data).toHaveLength(dense.data.length);
+      const sparseSteps = sparseRequest.solverStats?.[0]?.nsteps;
+      const denseSteps = dense.solverStats?.[0]?.nsteps;
+      if (typeof sparseSteps !== 'number' || typeof denseSteps !== 'number' || sparseSteps <= 0 || denseSteps <= 0) {
+        throw new Error('Expected positive CVODE internal step counts for both sparse-request and dense trajectories.');
+      }
+      expect(Math.max(sparseSteps, denseSteps) / Math.min(sparseSteps, denseSteps)).toBeLessThanOrEqual(3);
       for (let i = 0; i < dense.data.length; i++) {
         const sparseRow = sparseRequest.data[i] as Record<string, number>;
         const denseRow = dense.data[i] as Record<string, number>;

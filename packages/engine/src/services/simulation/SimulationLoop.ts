@@ -11,6 +11,7 @@
  */
 
 import { BNGLFunction, BNGLModel, BNGLReaction, BNGLVariableStoichiometry, SimulationOptions, SimulationResults, SimulationPhase, SSAInfluenceData, SSAInfluenceTimeSeries, OdeSystemHandle } from '../../types';
+import type { CVODESolverStats } from '../../types';
 import type { SolverResult } from './ODESolver';
 
 import { BNGLParser } from '../graph/core/BNGLParser';
@@ -1962,6 +1963,7 @@ export async function simulate(
       destroy?: () => void;
       updateRateConstants?: (rates: Float64Array) => boolean;
     } | undefined = undefined;
+    const solverStats: CVODESolverStats[] | undefined = options.collectSolverStats ? [] : undefined;
 
     let persistedSolverKey = '';
 
@@ -5442,6 +5444,11 @@ export async function simulate(
             callbacks.postMessage({ type: 'progress', message: `Simulating: ${phaseProgress.toFixed(0)}%`, simulationProgress: phaseProgress, simulationTime: t });
           }
         }
+        if (options.collectSolverStats) {
+          const stats = solver.getSolverStats?.();
+          if (stats) solverStats?.push(stats);
+        }
+
       } finally {
         // Determine whether to persist the solver for the next continue phase.
         const nextPhase = phases[phaseIdx + 1];
@@ -5523,7 +5530,8 @@ export async function simulate(
       } : {}),
       denseOutput: denseOutputBuffer && denseOutputBuffer.length > 0 ? denseOutputBuffer : undefined,
       eventDiagnostics: eventRuntime ? Array.from(eventDiagnostics) : undefined,
-      eventFirings: eventRuntime ? eventRuntime.firedEvents : undefined
+      eventFirings: eventRuntime ? eventRuntime.firedEvents : undefined,
+      ...(solverStats ? { solverStats } : {}),
     } satisfies SimulationResults;
   }
 
