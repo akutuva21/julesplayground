@@ -54,6 +54,6 @@ fi
   -fsanitize=address,undefined \
   -fno-omit-frame-pointer \
   -Wall -Wno-macro-redefined \
-  -o "$BIN" "$HERE/verify_bytecode_native.c"
+  -o "$BIN" "$HERE/verify_bytecode_native.c" -lm
 
 echo "built $BIN against cvode_wrapper.c lines ${START}-$((END-1))"
