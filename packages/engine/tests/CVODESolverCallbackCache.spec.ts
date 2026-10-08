@@ -39,7 +39,7 @@ function makeMockModule(): CVodeModule {
 
 /** Install both callbacks via integrate(), then hand them back for direct driving. */
 function installCallbacks(
-  f: (y: Float64Array, dydt: Float64Array, t: number) => void,
+  f: (y: Float64Array, dydt: Float64Array, t?: number) => void,
   rootFunction: (t: number, y: Float64Array, gout: Float64Array) => void,
   module: CVodeModule,
 ): { derivative: NonNullable<CVodeModule['derivativeCallback']>; root: NonNullable<CVodeModule['rootCallback']> } {
@@ -65,7 +65,7 @@ describe('CVODESolver callback view caches', () => {
     CVODESolver.module = module;
 
     const seenOffsets: number[] = [];
-    const f = (y: Float64Array, dydt: Float64Array, _t: number) => {
+    const f = (y: Float64Array, dydt: Float64Array, _t?: number) => {
       seenOffsets.push(y.byteOffset);
       dydt.fill(0);
     };
@@ -83,7 +83,7 @@ describe('CVODESolver callback view caches', () => {
     CVODESolver.module = module;
 
     const seenOffsets: number[] = [];
-    const f = (_y: Float64Array, dydt: Float64Array, _t: number) => { dydt.fill(0); };
+    const f = (_y: Float64Array, dydt: Float64Array, _t?: number) => { dydt.fill(0); };
     const rootFunction = (_t: number, y: Float64Array, gout: Float64Array) => {
       seenOffsets.push(y.byteOffset);
       gout[0] = 1;
@@ -102,7 +102,7 @@ describe('CVODESolver callback view caches', () => {
     CVODESolver.module = module;
 
     let seenBuffer: ArrayBufferLike | null = null;
-    const f = (y: Float64Array, dydt: Float64Array, _t: number) => {
+    const f = (y: Float64Array, dydt: Float64Array, _t?: number) => {
       seenBuffer = y.buffer;
       dydt.fill(0);
     };
@@ -125,7 +125,7 @@ describe('CVODESolver callback view caches', () => {
     CVODESolver.module = module;
 
     let seenBuffer: ArrayBufferLike | null = null;
-    const f = (_y: Float64Array, dydt: Float64Array, _t: number) => { dydt.fill(0); };
+    const f = (_y: Float64Array, dydt: Float64Array, _t?: number) => { dydt.fill(0); };
     const rootFunction = (_t: number, y: Float64Array, gout: Float64Array) => {
       seenBuffer = y.buffer;
       gout[0] = 1;
