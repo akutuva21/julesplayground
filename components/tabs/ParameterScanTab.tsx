@@ -104,6 +104,25 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model, bnglT
   const scanAbortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
   const cachedModelIdRef = useRef<number | null>(null);
+  const previousModelRef = useRef<BNGLModel | null>(null);
+
+  useEffect(() => {
+    if (model && previousModelRef.current !== model) {
+      previousModelRef.current = model;
+      setParameter1('');
+      setParameter2('');
+      setParam1Start('');
+      setParam1End('');
+      setParam2Start('');
+      setParam2End('');
+      setSelectedObservable('');
+      setOneDResult(null);
+      setTwoDResult(null);
+      setScanModelSource(null);
+      setError(null);
+      setProgress({ current: 0, total: 0 });
+    }
+  }, [model]);
 
 
   // Each explicit seed species is a potential initial-amount scan, even when
@@ -167,29 +186,17 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model, bnglT
 
 
 
-  const effectiveParameter1 = (parameter1 && parameterNames.includes(parameter1))
+  const effectiveParameter1 = parameter1 && parameterNames.includes(parameter1)
     ? parameter1
     : (parameterNames[0] ?? '');
 
-  const effectiveParameter2 = (parameter2 && parameterNames.includes(parameter2) && parameter2 !== effectiveParameter1)
+  const effectiveParameter2 = parameter2 && parameterNames.includes(parameter2) && parameter2 !== effectiveParameter1
     ? parameter2
     : (parameterNames.find((name) => name !== effectiveParameter1) ?? parameterNames[0] ?? '');
 
-  // Reset state when model changes
-  const [prevModel, setPrevModel] = useState<BNGLModel | null>(null);
-  if (model !== prevModel) {
-    setPrevModel(model);
-    setParam1Start('');
-    setParam1End('');
-    setParam2Start('');
-    setParam2End('');
-    setParameter1('');
-    setParameter2('');
-    setSelectedObservable('');
-    setOneDResult(null);
-    setTwoDResult(null);
-    setScanModelSource(null);
-  }
+  const effectiveSelectedObservable = selectedObservable && observableNames.includes(selectedObservable)
+    ? selectedObservable
+    : (observableNames[0] ?? '');
 
   // Both 2D axes can target the same seed: one through the parameter that
   // defines it, the other through a direct amount. The direct amount wins, so
@@ -635,9 +642,9 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model, bnglT
 
 
   const canRunScan = () => {
-    if (!parameter1 || !effectiveParam1Start || !effectiveParam1End || !param1Steps) return false;
+    if (!effectiveParameter1 || !effectiveParam1Start || !effectiveParam1End || !param1Steps) return false;
     if (isLogScale && (Number(effectiveParam1Start) <= 0 || Number(effectiveParam1End) <= 0)) return false;
-    if (scanType === '2d' && (!parameter2 || parameter2 === parameter1 || !effectiveParam2Start || !effectiveParam2End || !param2Steps)) {
+    if (scanType === '2d' && (!effectiveParameter2 || effectiveParameter2 === effectiveParameter1 || !effectiveParam2Start || !effectiveParam2End || !param2Steps)) {
       return false;
     }
     if (scanType === '2d' && isLogScale && (Number(effectiveParam2Start) <= 0 || Number(effectiveParam2End) <= 0)) return false;
@@ -957,11 +964,31 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model, bnglT
         <div>
             <div className="flex flex-wrap gap-4 items-center" role="radiogroup" aria-label="Scan dimension">
             <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-              <input type="radio" value="1d" checked={scanType === '1d'} onChange={() => setScanType('1d')} aria-checked={scanType === '1d'} />
+              <input
+                type="radio"
+                value="1d"
+                checked={scanType === '1d'}
+                onChange={() => {
+                  setScanType('1d');
+                  setOneDResult(null);
+                  setTwoDResult(null);
+                }}
+                aria-checked={scanType === '1d'}
+              />
               1D Scan
             </label>
             <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-              <input type="radio" value="2d" checked={scanType === '2d'} onChange={() => setScanType('2d')} aria-checked={scanType === '2d'} />
+              <input
+                type="radio"
+                value="2d"
+                checked={scanType === '2d'}
+                onChange={() => {
+                  setScanType('2d');
+                  setOneDResult(null);
+                  setTwoDResult(null);
+                }}
+                aria-checked={scanType === '2d'}
+              />
               2D Scan
             </label>
             <label className="flex items-center gap-2 ml-2 text-sm text-slate-600 dark:text-slate-300">
@@ -1089,7 +1116,7 @@ export const ParameterScanTab: React.FC<ParameterScanTabProps> = ({ model, bnglT
             <label htmlFor="ps-observable" className="text-sm font-medium text-slate-600 dark:text-slate-300">Select an observable:</label>
             <Select
               id="ps-observable"
-              value={selectedObservable}
+              value={effectiveSelectedObservable}
               onChange={(event) => setSelectedObservable(event.target.value)}
               className="w-48"
             >

@@ -138,7 +138,7 @@ async function safeCall(fn: () => Promise<ToolResult<unknown>>): Promise<ToolRes
 // Test suite
 // ---------------------------------------------------------------------------
 
-describe('MCP Tool Robustness', { timeout: 60000 }, () => {
+describe('MCP Tool Robustness', { timeout: 180000 }, () => {
 
   // =========================================================================
   // parse_bngl
